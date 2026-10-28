@@ -39,12 +39,32 @@ export default function App() {
   const isDirectRegisterLink = searchParams.includes('registro=1')
   const isDirectLoginLink = searchParams.includes('login=1')
 
+  // Clean URL query parameters (?registro=1, ?login=1) so refreshes don't re-trigger registration
+  const cleanUrlAuthParams = () => {
+    if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+      try {
+        const url = new URL(window.location.href)
+        if (url.searchParams.has('registro') || url.searchParams.has('login')) {
+          url.searchParams.delete('registro')
+          url.searchParams.delete('login')
+          const cleanSearch = url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''
+          window.history.replaceState({}, document.title, url.pathname + cleanSearch)
+        }
+      } catch (e) {}
+    }
+  }
+
   // Global state
   const [currentNiche, setCurrentNiche] = useState('barberia')
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
   const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isAdminDomain)
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(isDirectRegisterLink || isDirectLoginLink)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('barber_logged_tenant_id')) {
+      return false
+    }
+    return Boolean(isDirectRegisterLink || isDirectLoginLink)
+  })
   const [authInitialTab, setAuthInitialTab] = useState(isDirectRegisterLink ? 'register' : 'login')
 
   // SaaS Multi-Tenant & Subscription State
@@ -73,12 +93,21 @@ export default function App() {
     return INITIAL_SAAS_TENANTS
   })
 
-  // Strictly null by default: no public demo access without logging in!
+  // Strictly persistent active tenant: never loses session on reload!
   const [activeTenantId, setActiveTenantId] = useState(() => {
     return localStorage.getItem('barber_logged_tenant_id') || null
   })
 
-  const activeTenant = tenants.find(t => t.id === activeTenantId) || null
+  const [cachedActiveTenant, setCachedActiveTenant] = useState(() => {
+    try {
+      const raw = localStorage.getItem('barber_logged_tenant')
+      return raw ? JSON.parse(raw) : null
+    } catch (e) {
+      return null
+    }
+  })
+
+  const activeTenant = tenants.find(t => t.id === activeTenantId) || (cachedActiveTenant && cachedActiveTenant.id === activeTenantId ? cachedActiveTenant : null)
 
   // Local-first persistent state
   const [exchangeRate, setExchangeRate] = useState(() => {
@@ -207,10 +236,18 @@ export default function App() {
   useEffect(() => {
     if (activeTenantId) {
       localStorage.setItem('barber_logged_tenant_id', activeTenantId)
+      cleanUrlAuthParams()
     } else {
       localStorage.removeItem('barber_logged_tenant_id')
+      localStorage.removeItem('barber_logged_tenant')
     }
   }, [activeTenantId])
+
+  useEffect(() => {
+    if (activeTenant) {
+      localStorage.setItem('barber_logged_tenant', JSON.stringify(activeTenant))
+    }
+  }, [activeTenant])
 
   // --- REAL-TIME MULTI-DEVICE SERVER SYNC (Phone <-> PC) ---
   const fetchServerBootstrap = async () => {
@@ -381,6 +418,12 @@ export default function App() {
   // Handlers for SaaS Tenants
   const handleSelectTenant = (tenant) => {
     setActiveTenantId(tenant.id)
+    setCachedActiveTenant(tenant)
+    localStorage.setItem('barber_logged_tenant_id', tenant.id)
+    localStorage.setItem('barber_logged_tenant', JSON.stringify(tenant))
+    setIsAuthModalOpen(false)
+    cleanUrlAuthParams()
+
     if (tenant.niche && NICHES[tenant.niche]) {
       setCurrentNiche(tenant.niche)
     }
@@ -399,12 +442,18 @@ export default function App() {
 
   const handleLogout = () => {
     setActiveTenantId(null)
+    setCachedActiveTenant(null)
+    localStorage.removeItem('barber_logged_tenant_id')
+    localStorage.removeItem('barber_logged_tenant')
     setAuthInitialTab('login')
+    setIsAuthModalOpen(true)
+    cleanUrlAuthParams()
   }
 
   const handleRegisterNewTenant = async (newTenant) => {
     setTenants(prev => [newTenant, ...prev])
     handleSelectTenant(newTenant)
+    cleanUrlAuthParams()
     await pushTenantUpsertToServer(newTenant)
 
     if (isSupabaseConfigured()) {
@@ -917,17 +966,6 @@ export default function App() {
         transactions={transactions}
         exchangeRate={exchangeRate}
         nicheData={nicheData}
-      />
-
-      <AuthPortalModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        tenants={tenants}
-        saasConfig={saasConfig}
-        onLoginSuccess={handleSelectTenant}
-        onRegisterTenant={handleRegisterNewTenant}
-        onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
-        initialTab={authInitialTab}
       />
 
     </div>
