@@ -145,22 +145,39 @@ export default function App() {
     }
   })
 
+  // Scoped workspace helper: reads isolated data for active tenant if available
+  const getInitialWorkspace = () => {
+    try {
+      const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+      if (loggedId) {
+        const scoped = localStorage.getItem(`barber_ws_${loggedId}`)
+        if (scoped) return JSON.parse(scoped)
+      }
+    } catch (e) {}
+    return null
+  }
+  const initWs = getInitialWorkspace()
+
   const [transactions, setTransactions] = useState(() => {
+    if (initWs && Array.isArray(initWs.transactions)) return initWs.transactions
     const saved = localStorage.getItem('barber_transactions')
     return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS
   })
 
   const [clients, setClients] = useState(() => {
+    if (initWs && Array.isArray(initWs.clients)) return initWs.clients
     const saved = localStorage.getItem('barber_clients_v2')
     return saved ? JSON.parse(saved) : INITIAL_CLIENTS
   })
 
   const [appointments, setAppointments] = useState(() => {
+    if (initWs && Array.isArray(initWs.appointments)) return initWs.appointments
     const saved = localStorage.getItem('barber_appointments')
     return saved ? JSON.parse(saved) : INITIAL_APPOINTMENTS
   })
 
   const [businessProfile, setBusinessProfile] = useState(() => {
+    if (initWs && initWs.businessProfile) return initWs.businessProfile
     const saved = localStorage.getItem('barber_profile')
     return saved ? JSON.parse(saved) : INITIAL_BUSINESS_PROFILE
   })
@@ -209,21 +226,41 @@ export default function App() {
     localStorage.setItem('barber_products_by_niche', JSON.stringify(productsByNiche))
   }, [productsByNiche])
 
+  // Automatic Scoped Workspace Persistence (LocalStorage + VPS Server)
   useEffect(() => {
+    if (!activeTenantId) return
+    const ws = {
+      transactions,
+      clients,
+      appointments,
+      businessProfile,
+      staffByNiche,
+      servicesByNiche,
+      productsByNiche
+    }
+    // 1. Save in local browser storage isolated for this tenant
+    localStorage.setItem(`barber_ws_${activeTenantId}`, JSON.stringify(ws))
+    // 2. Backward compatibility with legacy global keys
     localStorage.setItem('barber_transactions', JSON.stringify(transactions))
-  }, [transactions])
-
-  useEffect(() => {
     localStorage.setItem('barber_clients_v2', JSON.stringify(clients))
-  }, [clients])
-
-  useEffect(() => {
     localStorage.setItem('barber_appointments', JSON.stringify(appointments))
-  }, [appointments])
-
-  useEffect(() => {
     localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
-  }, [businessProfile])
+
+    // 3. Debounced sync to VPS backend
+    const timeout = setTimeout(async () => {
+      try {
+        await fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(ws)
+        })
+      } catch (err) {
+        // Offline
+      }
+    }, 1200)
+
+    return () => clearTimeout(timeout)
+  }, [activeTenantId, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche])
 
   useEffect(() => {
     localStorage.setItem('barber_retargeting_config', JSON.stringify(retargetingConfig))
@@ -419,6 +456,31 @@ export default function App() {
     }))
   }
 
+  const fetchTenantWorkspace = async (tid) => {
+    if (!tid) return
+    try {
+      const res = await fetch(`/api/workspace/${encodeURIComponent(tid)}`, { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.workspace) {
+          const ws = data.workspace
+          if (Array.isArray(ws.transactions)) setTransactions(ws.transactions)
+          if (Array.isArray(ws.clients)) setClients(ws.clients)
+          if (Array.isArray(ws.appointments)) setAppointments(ws.appointments)
+          if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
+          if (ws.staffByNiche) setStaffByNiche(ws.staffByNiche)
+          if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
+          if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
+          try {
+            localStorage.setItem(`barber_ws_${tid}`, JSON.stringify(ws))
+          } catch (e) {}
+        }
+      }
+    } catch (e) {
+      console.warn('Workspace server load offline')
+    }
+  }
+
   // Handlers for SaaS Tenants
   const handleSelectTenant = (tenant) => {
     setActiveTenantId(tenant.id)
@@ -431,16 +493,29 @@ export default function App() {
     if (tenant.niche && NICHES[tenant.niche]) {
       setCurrentNiche(tenant.niche)
     }
-    setBusinessProfile(prev => ({
-      ...prev,
-      businessName: tenant.businessName,
-      whatsapp: tenant.phone || prev.whatsapp
-    }))
-    // If this is a real customer account, clean out demo transactions/clients/appointments
-    if (tenant.isCleanAccount) {
-      handleClearAllWorkspaceData()
-    } else if (tenant.email === 'demo@ingenioos.online') {
-      handleLoadDemoWorkspaceData()
+
+    // Load tenant-scoped workspace from localStorage or server (NEVER wipe it!)
+    try {
+      const localScoped = localStorage.getItem(`barber_ws_${tenant.id}`)
+      if (localScoped) {
+        const parsed = JSON.parse(localScoped)
+        if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions)
+        if (Array.isArray(parsed.clients)) setClients(parsed.clients)
+        if (Array.isArray(parsed.appointments)) setAppointments(parsed.appointments)
+        if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
+        if (parsed.staffByNiche) setStaffByNiche(parsed.staffByNiche)
+        if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
+        if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
+      } else {
+        fetchTenantWorkspace(tenant.id)
+        setBusinessProfile(prev => ({
+          ...prev,
+          businessName: tenant.businessName,
+          whatsapp: tenant.phone || prev.whatsapp
+        }))
+      }
+    } catch (e) {
+      fetchTenantWorkspace(tenant.id)
     }
   }
 
@@ -455,10 +530,57 @@ export default function App() {
   }
 
   const handleRegisterNewTenant = async (newTenant) => {
+    // Brand new account starts clean for this tenantId
+    const freshWorkspace = {
+      transactions: [],
+      clients: [],
+      appointments: [],
+      businessProfile: {
+        ...INITIAL_BUSINESS_PROFILE,
+        businessName: newTenant.businessName,
+        whatsapp: newTenant.phone || ''
+      },
+      staffByNiche: {
+        barberia: NICHES.barberia.staff,
+        estetica: NICHES.estetica.staff,
+        mixto: NICHES.mixto.staff
+      },
+      servicesByNiche: {
+        barberia: NICHES.barberia.services,
+        estetica: NICHES.estetica.services,
+        mixto: NICHES.mixto.services
+      },
+      productsByNiche: {
+        barberia: NICHES.barberia.products,
+        estetica: NICHES.estetica.products,
+        mixto: NICHES.mixto.products
+      }
+    }
+
+    try {
+      localStorage.setItem(`barber_ws_${newTenant.id}`, JSON.stringify(freshWorkspace))
+    } catch (e) {}
+    setTransactions([])
+    setClients([])
+    setAppointments([])
+    setBusinessProfile(freshWorkspace.businessProfile)
+
     setTenants(prev => [newTenant, ...prev])
-    handleSelectTenant(newTenant)
+    setActiveTenantId(newTenant.id)
+    setCachedActiveTenant(newTenant)
+    localStorage.setItem('barber_logged_tenant_id', newTenant.id)
+    localStorage.setItem('barber_logged_tenant', JSON.stringify(newTenant))
+    setIsAuthModalOpen(false)
     cleanUrlAuthParams()
+
     await pushTenantUpsertToServer(newTenant)
+    try {
+      await fetch(`/api/workspace/${encodeURIComponent(newTenant.id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(freshWorkspace)
+      })
+    } catch (e) {}
 
     if (isSupabaseConfigured()) {
       try {

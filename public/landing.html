@@ -122,7 +122,7 @@
     /* Hero */
     .hero {
       text-align: center;
-      padding: 28px 0 16px;
+      padding: 28px 0 20px;
     }
     .badge-top {
       display: inline-flex;
@@ -131,7 +131,7 @@
       background: rgba(16, 185, 129, 0.12);
       border: 1px solid rgba(16, 185, 129, 0.3);
       color: #34d399;
-      padding: 6px 14px;
+      padding: 9px 14px;
       border-radius: 100px;
       font-size: 11px;
       font-weight: 800;
@@ -159,7 +159,7 @@
       margin-bottom: 20px;
     }
 
-    /* Horizontal Hero Image Under Title */
+    /* Horizontal Hero Image Under Title - Ajustado para mayor altura y visibilidad */
     .hero-banner-wrap {
       width: 100%;
       border-radius: 20px;
@@ -172,18 +172,26 @@
     }
     .hero-banner-img {
       width: 100%;
-      height: 220px;
+      height: 310px; /* Aumentado de 220px a 310px para mostrar el panel completo */
+      max-height: 420px;
       object-fit: cover;
+      object-position: top center;
       display: block;
-      filter: brightness(0.95) contrast(1.05);
+      filter: brightness(0.98) contrast(1.05);
+      transition: height 0.2s ease;
+    }
+    @media (min-width: 480px) {
+      .hero-banner-img {
+        height: 360px; /* Pantallas más anchas aprovechan aún más altura */
+      }
     }
     .hero-banner-overlay {
       position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
-      background: linear-gradient(180deg, transparent 0%, rgba(7, 8, 11, 0.85) 100%);
-      padding: 12px 14px;
+      background: linear-gradient(180deg, transparent 0%, rgba(7, 8, 11, 0.9) 100%);
+      padding: 14px 16px 12px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -261,13 +269,14 @@
       position: relative;
       aspect-ratio: 16/9;
       box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.9), 0 0 20px rgba(16, 185, 129, 0.15);
+      cursor: pointer;
     }
-    .video-thumbnail {
+    .hero-video-player {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
-      filter: brightness(0.75);
+      background: #000;
     }
     .video-play-btn {
       position: absolute;
@@ -286,7 +295,9 @@
       font-size: 24px;
       cursor: pointer;
       box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
-      transition: transform 0.2s, background 0.2s;
+      transition: transform 0.2s, background 0.2s, opacity 0.2s;
+      z-index: 3;
+      pointer-events: none;
     }
     .video-play-btn:hover {
       transform: translate(-50%, -50%) scale(1.08);
@@ -303,6 +314,8 @@
       font-size: 11px;
       font-weight: 700;
       color: #fff;
+      z-index: 2;
+      transition: opacity 0.2s;
     }
 
     /* Barbershop Logos Infinite Carousel */
@@ -391,7 +404,7 @@
     }
     .pain-outro {
       font-size: 13px;
-      color: var(--primary-light);
+      color: var(--gold-light);
       font-weight: 700;
       padding-top: 12px;
       border-top: 1px solid var(--card-border);
@@ -533,7 +546,7 @@
     }
     .feat-badge {
       font-size: 9px;
-      background: var(--primary);
+      background: var(--gold);
       color: #000;
       font-weight: 900;
       padding: 1px 6px;
@@ -610,7 +623,7 @@
     }
     .dep-handle {
       font-size: 11.5px;
-      color: var(--primary-light);
+      color: var(--gold-light);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -625,13 +638,14 @@
       background: #000;
       position: relative;
       overflow: hidden;
+      cursor: pointer;
     }
-    .dep-video-thumb {
+    .dep-video {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
-      filter: brightness(0.85);
+      background: #000;
     }
     .dep-play-icon {
       position: absolute;
@@ -649,17 +663,25 @@
       color: #fff;
       font-size: 20px;
       box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+      z-index: 3;
+      pointer-events: none;
+      transition: transform 0.2s, opacity 0.2s;
     }
     .dep-quote-overlay {
       position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
-      background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.9) 100%);
-      padding: 12px 10px 10px;
+      background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.92) 100%);
+      padding: 16px 10px 10px;
       font-size: 11px;
       color: #f1f5f9;
       line-height: 1.35;
+      font-style: italic;
+      z-index: 2;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
       font-style: italic;
     }
 
@@ -674,7 +696,7 @@
     .bonus-tag {
       font-size: 11px;
       font-weight: 800;
-      color: var(--primary);
+      color: var(--gold);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-bottom: 6px;
@@ -695,7 +717,7 @@
       height: 26px;
       background: rgba(245, 158, 11, 0.15);
       border-radius: 8px;
-      color: var(--primary-light);
+      color: var(--gold-light);
       font-size: 12px;
       font-weight: 900;
       display: flex;
@@ -718,7 +740,7 @@
     /* Pricing Section (EN BOLÍVARES COMO PIDIÓ EL USUARIO) */
     .pricing-card {
       background: linear-gradient(180deg, #181d29 0%, var(--card) 100%);
-      border: 2px solid var(--primary);
+      border: 2px solid var(--gold);
       border-radius: 24px;
       padding: 28px 22px;
       text-align: center;
@@ -727,7 +749,7 @@
     }
     .price-pill {
       display: inline-block;
-      background: var(--primary);
+      background: var(--gold);
       color: #000;
       font-size: 11px;
       font-weight: 900;
@@ -900,11 +922,10 @@
         El sistema todo-en-uno para barberías y salones en Venezuela: cobra en Bolívares y Dólares en 3 segundos, manda el cierre diario a WhatsApp y llena tus sillas vacías.
       </p>
 
-      <!-- Horizontal Image Under Title (User Request) -->
+      <!-- Horizontal Image Under Title (User Request: Aumentada la altura para visibilidad óptima) -->
       <div class="hero-banner-wrap">
-        <!-- Reemplaza el src con tu imagen horizontal de portada (16:9) -->
         <img 
-          src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1200&q=80" 
+          src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/images/barberos/1793217554032-bb40b9a7-Panel_de_Barber_a_en_Vivo__1_.png" 
           alt="BarberOS en acción" 
           class="hero-banner-img"
         >
@@ -922,7 +943,7 @@
       </div>
 
       <a 
-        href="https://wa.me/?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
+        href="https://wa.me/5491164827875?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
         target="_blank" 
         class="btn-cta"
       >
@@ -941,16 +962,17 @@
         <p>Registrar un corte y cerrar caja nunca fue tan rápido</p>
       </div>
 
-      <div class="video-box">
-        <!-- Reemplaza el src con la miniatura de tu video explicativo -->
-        <img 
-          src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=1200&q=80" 
-          alt="Video Demostración BarberOS" 
-          class="video-thumbnail"
-        >
-        <div class="video-play-btn" onclick="alert('Aquí se reproducirá tu video explicativo de 45 segundos.')">
-          ▶
-        </div>
+      <div class="video-box" onclick="handleHeroVideo(this)">
+        <!-- 👇 PEGA AQUÍ EL LINK .MP4 EXPLICATIVO (45s) EN src="" Y LA PORTADA EN poster="" -->
+        <video 
+          id="heroVideoEl"
+          class="hero-video-player" 
+          src="" 
+          poster="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=1200&q=80"
+          playsinline 
+          preload="metadata"
+        ></video>
+        <div class="video-play-btn">▶</div>
         <div class="video-time-badge">0:45 min</div>
       </div>
     </section>
@@ -1043,9 +1065,8 @@
           <!-- Slide 1: Caja Rápida -->
           <div class="vert-card active-glow">
             <div class="vert-screen-slot">
-              <!-- Reemplaza con tu captura vertical de la Caja Rápida -->
               <img 
-                src="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=720&q=80" 
+                src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/images/barberos/1793220084236-8d3c5eac-Registro_de_cobro_en_barber_a.png" 
                 alt="Caja Rápida BarberOS" 
                 class="vert-screen-img"
               >
@@ -1060,9 +1081,8 @@
           <!-- Slide 2: Cierre por WhatsApp -->
           <div class="vert-card">
             <div class="vert-screen-slot">
-              <!-- Reemplaza con tu captura vertical de Cierre WhatsApp -->
               <img 
-                src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=720&q=80" 
+                src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/images/barberos/1793220116241-c6d83003-Cierre_de_caja_en_barber_a.png" 
                 alt="Cierre por WhatsApp" 
                 class="vert-screen-img"
               >
@@ -1077,9 +1097,8 @@
           <!-- Slide 3: Web de Citas -->
           <div class="vert-card">
             <div class="vert-screen-slot">
-              <!-- Reemplaza con tu captura de la Web de Citas -->
               <img 
-                src="https://images.unsplash.com/photo-1512690459411-b9245aed614b?auto=format&fit=crop&w=720&q=80" 
+                src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/images/barberos/1793220150412-9ddb6096-Agenda_directa_para_tu_corte.png" 
                 alt="Web de Citas Pública" 
                 class="vert-screen-img"
               >
@@ -1094,9 +1113,8 @@
           <!-- Slide 4: Radar Clientes -->
           <div class="vert-card">
             <div class="vert-screen-slot">
-              <!-- Reemplaza con tu captura del Radar de Retargeting -->
               <img 
-                src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=720&q=80" 
+                src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/images/barberos/1793220150412-9ddb6096-Agenda_directa_para_tu_corte.png" 
                 alt="Radar de Clientes" 
                 class="vert-screen-img"
               >
@@ -1183,7 +1201,6 @@
         <div class="dep-card">
           <div class="dep-header">
             <div class="dep-avatar-ring">
-              <!-- Reemplaza con la foto de perfil -->
               <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="Carlos Rojas" class="dep-avatar">
             </div>
             <div class="dep-info">
@@ -1192,10 +1209,16 @@
               <span class="dep-city">Caracas · Dto. Capital</span>
             </div>
           </div>
-          <div class="dep-video-slot">
-            <!-- Reemplaza con la miniatura o video reel del testimonio -->
-            <img src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=720&q=80" alt="Video Carlos" class="dep-video-thumb">
-            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Carlos...')">▶</div>
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <!-- 👇 PEGA AQUÍ TU LINK .MP4 EN src="" Y TU PORTADA EN poster="" -->
+            <video 
+              class="dep-video" 
+              src="" 
+              poster="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=720&q=80"
+              playsinline 
+              preload="metadata"
+            ></video>
+            <div class="dep-play-icon">▶</div>
             <div class="dep-quote-overlay">
               "Al fin sé cuánta plata limpia me queda cada día y los muchachos no pelean por comisiones."
             </div>
@@ -1214,9 +1237,16 @@
               <span class="dep-city">Valencia · Carabobo</span>
             </div>
           </div>
-          <div class="dep-video-slot">
-            <img src="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=720&q=80" alt="Video Javier" class="dep-video-thumb">
-            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Javier...')">▶</div>
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <!-- 👇 PEGA AQUÍ TU LINK .MP4 EN src="" Y TU PORTADA EN poster="" -->
+            <video 
+              class="dep-video" 
+              src="" 
+              poster="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=720&q=80"
+              playsinline 
+              preload="metadata"
+            ></video>
+            <div class="dep-play-icon">▶</div>
             <div class="dep-quote-overlay">
               "El cierre por WhatsApp es una locura, se lo mando al dueño a las 8pm y la caja siempre cuadra."
             </div>
@@ -1235,9 +1265,16 @@
               <span class="dep-city">Maracaibo · Zulia</span>
             </div>
           </div>
-          <div class="dep-video-slot">
-            <img src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=720&q=80" alt="Video Marcos" class="dep-video-thumb">
-            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Marcos...')">▶</div>
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <!-- 👇 PEGA AQUÍ TU LINK .MP4 EN src="" Y TU PORTADA EN poster="" -->
+            <video 
+              class="dep-video" 
+              src="" 
+              poster="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=720&q=80"
+              playsinline 
+              preload="metadata"
+            ></video>
+            <div class="dep-play-icon">▶</div>
             <div class="dep-quote-overlay">
               "Con el Modo Día Muerto llené los martes y miércoles que antes pasaba sentado esperando."
             </div>
@@ -1256,9 +1293,16 @@
               <span class="dep-city">Barquisimeto · Lara</span>
             </div>
           </div>
-          <div class="dep-video-slot">
-            <img src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=720&q=80" alt="Video Alejandro" class="dep-video-thumb">
-            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Alejandro...')">▶</div>
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <!-- 👇 PEGA AQUÍ EL LINK .MP4 EN src="" Y TU PORTADA EN poster="" -->
+            <video 
+              class="dep-video" 
+              src="" 
+              poster="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=720&q=80"
+              playsinline 
+              preload="metadata"
+            ></video>
+            <div class="dep-play-icon">▶</div>
             <div class="dep-quote-overlay">
               "El link de citas en mi Instagram me ahorra 2 horas al día respondiendo mensajes."
             </div>
@@ -1342,7 +1386,7 @@
         </ul>
 
         <a 
-          href="https://wa.me/?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20de%20Bs.%20320%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
+          href="https://wa.me/5491164827875?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20de%20Bs.%20320%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
           target="_blank" 
           class="btn-cta"
         >
@@ -1408,7 +1452,7 @@
   <!-- Sticky Bottom Bar -->
   <div class="sticky-bar">
     <a 
-      href="https://wa.me/?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20de%20Bs.%20320%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
+      href="https://wa.me/5491164827875?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20de%20Bs.%20320%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
       target="_blank" 
       class="sticky-btn"
     >

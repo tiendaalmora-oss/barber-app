@@ -10,9 +10,13 @@ const PORT = process.env.PORT || 80
 const DIST_DIR = path.join(__dirname, 'dist')
 const DATA_DIR = path.join(__dirname, 'data')
 const DB_FILE = path.join(DATA_DIR, 'saas_db.json')
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups')
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true })
+}
+if (!fs.existsSync(BACKUPS_DIR)) {
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true })
 }
 
 const DEFAULT_SAAS_CONFIG = {
@@ -52,20 +56,66 @@ const DEFAULT_TENANTS = [
   }
 ]
 
+function createDailyBackupIfNeeded(data = db) {
+  try {
+    const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
+    const backupFile = path.join(BACKUPS_DIR, `saas_db_backup_${today}.json`)
+    // Write daily snapshot if not exists today
+    if (!fs.existsSync(backupFile)) {
+      fs.writeFileSync(backupFile, JSON.stringify(data, null, 2), 'utf8')
+    }
+    // Maintain a rolling latest backup
+    const latestBak = path.join(BACKUPS_DIR, 'saas_db_latest.bak')
+    fs.writeFileSync(latestBak, JSON.stringify(data, null, 2), 'utf8')
+
+    // Prune old backups, keep last 20
+    const allBackups = fs.readdirSync(BACKUPS_DIR)
+      .filter(f => f.startsWith('saas_db_backup_') && f.endsWith('.json'))
+      .sort()
+    while (allBackups.length > 20) {
+      const oldest = allBackups.shift()
+      try { fs.unlinkSync(path.join(BACKUPS_DIR, oldest)) } catch (e) {}
+    }
+  } catch (e) {
+    console.error('Backup error:', e)
+  }
+}
+
 function loadDb() {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf8')
-      const parsed = JSON.parse(raw)
-      return {
-        saasConfig: { ...DEFAULT_SAAS_CONFIG, ...(parsed.saasConfig || {}) },
-        tenants: Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS,
-        workspaces: parsed.workspaces || {}
+      if (raw && raw.trim().length > 10) {
+        const parsed = JSON.parse(raw)
+        return {
+          saasConfig: { ...DEFAULT_SAAS_CONFIG, ...(parsed.saasConfig || {}) },
+          tenants: Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS,
+          workspaces: parsed.workspaces || {}
+        }
       }
     }
   } catch (err) {
-    console.error('Error loading DB, using defaults:', err)
+    console.error('Error loading DB from primary DB_FILE, attempting backup recovery:', err)
   }
+
+  // Attempt recovery from backups directory if DB_FILE was corrupted or missing
+  try {
+    if (fs.existsSync(BACKUPS_DIR)) {
+      const latestBak = path.join(BACKUPS_DIR, 'saas_db_latest.bak')
+      if (fs.existsSync(latestBak)) {
+        const raw = fs.readFileSync(latestBak, 'utf8')
+        if (raw && raw.trim().length > 10) {
+          const parsed = JSON.parse(raw)
+          console.log('Successfully recovered database from saas_db_latest.bak!')
+          saveDb(parsed)
+          return parsed
+        }
+      }
+    }
+  } catch (bakErr) {
+    console.error('Backup recovery failed:', bakErr)
+  }
+
   const initial = {
     saasConfig: DEFAULT_SAAS_CONFIG,
     tenants: DEFAULT_TENANTS,
@@ -80,6 +130,7 @@ let db = loadDb()
 function saveDb(data = db) {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8')
+    createDailyBackupIfNeeded(data)
   } catch (err) {
     console.error('Error saving DB:', err)
   }
@@ -220,6 +271,32 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         workspace: db.workspaces[tenantId]
       })
+    }
+  }
+
+  // --- ADMIN BACKUP & RESTORE ROUTES ---
+  if (pathname === '/api/admin/backup-download' && req.method === 'GET') {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="saas_db_backup_${timestamp}.json"`,
+      'Access-Control-Allow-Origin': '*'
+    })
+    return res.end(JSON.stringify(db, null, 2))
+  }
+
+  if (pathname === '/api/admin/backup-restore' && req.method === 'POST') {
+    const body = await parseBody(req)
+    if (body && Array.isArray(body.tenants) && body.saasConfig) {
+      db = {
+        saasConfig: { ...DEFAULT_SAAS_CONFIG, ...body.saasConfig },
+        tenants: body.tenants,
+        workspaces: body.workspaces || {}
+      }
+      saveDb()
+      return sendJson(res, 200, { ok: true, message: 'Base de datos restaurada con éxito', tenantsCount: db.tenants.length })
+    } else {
+      return sendJson(res, 400, { error: 'Estructura de respaldo JSON inválida' })
     }
   }
 

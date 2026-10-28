@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint } from 'lucide-react'
+import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 
 const SAAS_PRODUCTS = [
@@ -406,6 +406,16 @@ export default function SuperAdminView({
                 <span>En Vivo (Actualizar)</span>
               </button>
             )}
+
+            <a
+              href="/api/admin/backup-download"
+              download
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-xs font-bold text-purple-300"
+              title="Descargar copia de seguridad completa de todos los clientes y negocios en archivo JSON"
+            >
+              <Download className="w-4 h-4 text-purple-400" />
+              <span>Respaldar BD (JSON)</span>
+            </a>
 
             <button
               onClick={() => setShowSettings(!showSettings)}
