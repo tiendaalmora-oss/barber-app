@@ -278,3 +278,77 @@ export const INITIAL_BUSINESS_PROFILE = {
   promoBanner: '🔥 Promo de la Semana: Combo Corte + Barba + Cejas por solo $10'
 }
 
+export const INITIAL_SAAS_CONFIG = {
+  monthlyPriceUsd: 10,
+  guaranteeDays: 7,
+  subscriptionDays: 30,
+  adminEmail: 'admin@ingenioos.online',
+  adminPin: '2026',
+  ownerWhatsapp: '+584121234567',
+  pagoMovilBank: '0102 - Banco de Venezuela',
+  pagoMovilId: 'V-12.345.678',
+  pagoMovilPhone: '0412-1234567',
+  binanceEmail: 'pagos@ingenioos.online',
+  zelleInfo: 'pagos@ingenioos.online (Ingenio OS)'
+}
+
+export const INITIAL_SAAS_TENANTS = [
+  {
+    id: 'ten_1',
+    businessName: 'Barbería & Studio El Fino',
+    ownerName: 'Carlos Rodríguez',
+    email: 'carlos@barberiaelfino.com',
+    password: '123',
+    phone: '+584121234567',
+    niche: 'barberia',
+    status: 'activo', // 'pendiente_pago' | 'activo' | 'vencido' | 'reembolsado'
+    activatedAt: getDateDaysAgo(3), // Paid 3 days ago -> Day 3 of 7 guarantee, 27 days left
+    daysRemaining: 27,
+    lastPaymentRef: 'PM-8492',
+    amountPaidUsd: 10
+  },
+  {
+    id: 'ten_2',
+    businessName: 'Salón & Uñas Glamour VIP',
+    ownerName: 'Daniela Mendoza',
+    email: 'daniela@glamourvip.com',
+    password: '123',
+    phone: '+584149876543',
+    niche: 'estetica',
+    status: 'activo',
+    activatedAt: getDateDaysAgo(14), // Paid 14 days ago -> Past 7d guarantee, 16 days left
+    daysRemaining: 16,
+    lastPaymentRef: 'BIN-3910',
+    amountPaidUsd: 10
+  },
+  {
+    id: 'ten_3',
+    businessName: 'Barbería Los Chamos',
+    ownerName: 'Marcos Pérez',
+    email: 'marcos@loschamos.com',
+    password: '123',
+    phone: '+584245551122',
+    niche: 'barberia',
+    status: 'pendiente_pago', // Registered email, must pay upfront to activate (7d guarantee)
+    activatedAt: null,
+    daysRemaining: 0,
+    lastPaymentRef: 'Esperando Capture',
+    amountPaidUsd: 0
+  },
+  {
+    id: 'ten_4',
+    businessName: 'Studio Urbano Mixto',
+    ownerName: 'José Gregorio Silva',
+    email: 'urbano@studiomix.com',
+    password: '123',
+    phone: '+584163334455',
+    niche: 'mixto',
+    status: 'vencido', // 30 days expired, needs renewal
+    activatedAt: getDateDaysAgo(32),
+    daysRemaining: 0,
+    lastPaymentRef: 'PM-1104',
+    amountPaidUsd: 10
+  }
+]
+
+

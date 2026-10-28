@@ -9,6 +9,9 @@ import MonthlyReportView from './components/MonthlyReportView'
 import CatalogConfigView from './components/CatalogConfigView'
 import PublicBookingView from './components/PublicBookingView'
 import RetargetingView from './components/RetargetingView'
+import SubscriptionLockView from './components/SubscriptionLockView'
+import AuthPortalModal from './components/AuthPortalModal'
+import SuperAdminView from './components/SuperAdminView'
 import QuickCashModal from './components/QuickCashModal'
 import QuickExpenseModal from './components/QuickExpenseModal'
 import ExchangeRateModal from './components/ExchangeRateModal'
@@ -19,20 +22,42 @@ import {
   INITIAL_APPOINTMENTS,
   INITIAL_TRANSACTIONS,
   INITIAL_BUSINESS_PROFILE,
-  INITIAL_RETARGETING_CONFIG
+  INITIAL_RETARGETING_CONFIG,
+  INITIAL_SAAS_CONFIG,
+  INITIAL_SAAS_TENANTS
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown } from 'lucide-react'
 
 export default function App() {
-  // Check if opened via public booking link (?reserva=1)
+  // Check URL parameters (?reserva=1 or ?admin=1)
   const isDirectClientLink = typeof window !== 'undefined' && window.location.search.includes('reserva=1')
+  const isDirectAdminLink = typeof window !== 'undefined' && window.location.search.includes('admin=1')
 
   // Global state
   const [currentNiche, setCurrentNiche] = useState('barberia')
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
-  
+  const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isDirectAdminLink)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+
+  // SaaS Multi-Tenant & Subscription State
+  const [saasConfig, setSaasConfig] = useState(() => {
+    const saved = localStorage.getItem('barber_saas_config')
+    return saved ? JSON.parse(saved) : INITIAL_SAAS_CONFIG
+  })
+
+  const [tenants, setTenants] = useState(() => {
+    const saved = localStorage.getItem('barber_saas_tenants')
+    return saved ? JSON.parse(saved) : INITIAL_SAAS_TENANTS
+  })
+
+  const [activeTenantId, setActiveTenantId] = useState(() => {
+    return localStorage.getItem('barber_active_tenant_id') || 'ten_1'
+  })
+
+  const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0]
+
   // Local-first persistent state
   const [exchangeRate, setExchangeRate] = useState(() => {
     const saved = localStorage.getItem('barber_rate')
@@ -108,6 +133,58 @@ export default function App() {
     localStorage.setItem('barber_retargeting_config', JSON.stringify(retargetingConfig))
   }, [retargetingConfig])
 
+  useEffect(() => {
+    localStorage.setItem('barber_saas_config', JSON.stringify(saasConfig))
+  }, [saasConfig])
+
+  useEffect(() => {
+    localStorage.setItem('barber_saas_tenants', JSON.stringify(tenants))
+  }, [tenants])
+
+  useEffect(() => {
+    localStorage.setItem('barber_active_tenant_id', activeTenantId)
+  }, [activeTenantId])
+
+  // Handlers for SaaS Tenants
+  const handleSelectTenant = (tenant) => {
+    setActiveTenantId(tenant.id)
+    if (tenant.niche && NICHES[tenant.niche]) {
+      setCurrentNiche(tenant.niche)
+    }
+    setBusinessProfile(prev => ({
+      ...prev,
+      businessName: tenant.businessName,
+      whatsapp: tenant.phone || prev.whatsapp
+    }))
+  }
+
+  const handleRegisterNewTenant = async (newTenant) => {
+    setTenants(prev => [newTenant, ...prev])
+    handleSelectTenant(newTenant)
+
+    // Sync new business to Supabase gestion_negocios.negocios
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from('negocios').insert([{
+          nombre: `${newTenant.businessName} (${newTenant.email})`,
+          tipo_nicho: newTenant.niche || 'barberia',
+          estado_suscripcion: newTenant.status === 'activo' ? 'activo' : 'vencido',
+          tasa_bcv_actual: exchangeRate
+        }])
+      } catch (e) {
+        console.warn('Tenant saved locally')
+      }
+    }
+  }
+
+  const handleUpdateTenant = (updated) => {
+    setTenants(prev => prev.map(t => t.id === updated.id ? updated : t))
+  }
+
+  const handleReportPaymentRef = (tenantId, refString) => {
+    setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, lastPaymentRef: refString } : t))
+  }
+
   // Calculate how many clients are due for retargeting (for sidebar badge)
   const overdueClientsCount = clients.filter(c => {
     if (!c.last_visit) return true
@@ -124,7 +201,6 @@ export default function App() {
   const handleAddAppointment = async (newApt) => {
     setAppointments(prev => [newApt, ...prev])
 
-    // If client booked from web or agenda with name, ensure they are in the Clients database
     if (newApt.client_name && newApt.client_name !== 'Cliente Mostrador') {
       setClients(prev => {
         const found = prev.find(c => c.name.toLowerCase() === newApt.client_name.toLowerCase())
@@ -179,7 +255,6 @@ export default function App() {
 
     const todayStr = new Date().toISOString().split('T')[0]
 
-    // Automatically update Client Retargeting history, Loyalty Stamps & Fiado Debt
     if (newTx.client_name && newTx.client_name !== 'Cliente Mostrador') {
       setClients(prev => {
         const found = prev.find(c => c.name.toLowerCase() === newTx.client_name.toLowerCase())
@@ -211,7 +286,6 @@ export default function App() {
       })
     }
 
-    // Try Supabase sync
     if (isSupabaseConfigured()) {
       try {
         setSyncStatus('syncing')
@@ -251,7 +325,26 @@ export default function App() {
     }
   }
 
-  // If in Public Landing Mode (either via ?reserva=1 or Owner Preview)
+  // 1. If in Super-Admin Mode (Owner SaaS Control Panel)
+  if (isSuperAdminOpen) {
+    return (
+      <SuperAdminView
+        tenants={tenants}
+        onUpdateTenant={handleUpdateTenant}
+        onAddTenant={handleRegisterNewTenant}
+        saasConfig={saasConfig}
+        onSaveSaasConfig={setSaasConfig}
+        exchangeRate={exchangeRate}
+        onSelectTenantAndExit={(t) => {
+          handleSelectTenant(t)
+          setIsSuperAdminOpen(false)
+        }}
+        onExitSuperAdmin={() => setIsSuperAdminOpen(false)}
+      />
+    )
+  }
+
+  // 2. If in Public Client Landing Mode (?reserva=1 or Owner Preview)
   if (isPublicPreview) {
     return (
       <PublicBookingView
@@ -267,6 +360,35 @@ export default function App() {
     )
   }
 
+  // 3. If Active Tenant has NOT paid upfront ('pendiente_pago') or is expired ('vencido') -> Lock Screen with 7-Day Guarantee
+  if (activeTenant && activeTenant.status !== 'activo') {
+    return (
+      <>
+        <SubscriptionLockView
+          tenant={activeTenant}
+          saasConfig={saasConfig}
+          exchangeRate={exchangeRate}
+          onReportPaymentRef={handleReportPaymentRef}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onSwitchToDemo={() => {
+            const firstActive = tenants.find(t => t.status === 'activo') || tenants[0]
+            handleSelectTenant(firstActive)
+          }}
+          onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
+        />
+        <AuthPortalModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          tenants={tenants}
+          saasConfig={saasConfig}
+          onLoginSuccess={handleSelectTenant}
+          onRegisterTenant={handleRegisterNewTenant}
+          onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
+        />
+      </>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col font-sans pb-16 md:pb-6">
       
@@ -279,6 +401,8 @@ export default function App() {
         onOpenCashModal={() => setIsCashModalOpen(true)}
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        activeTenant={activeTenant}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
       />
@@ -332,15 +456,33 @@ export default function App() {
             )
           })}
 
-          {/* Sync indicator footer in sidebar */}
-          <div className="pt-6 mt-auto">
-            <div className="p-3.5 rounded-xl bg-dark-900 border border-dark-800 text-[11px] text-slate-400 space-y-1.5 shadow-md">
+          {/* Owner SaaS Control Button */}
+          <div className="pt-4 mt-auto space-y-2">
+            <button
+              onClick={() => setIsSuperAdminOpen(true)}
+              className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/20 to-indigo-600/20 hover:from-purple-600/30 hover:to-indigo-600/30 border border-purple-500/40 text-left transition-all group"
+            >
+              <div className="flex items-center justify-between text-xs font-black text-purple-300 group-hover:text-white">
+                <span className="flex items-center gap-1.5">
+                  <Crown className="w-4 h-4 text-gold-400" />
+                  <span>Panel Super-Admin</span>
+                </span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/30 text-purple-200">
+                  SaaS
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Activar clientes (+30d), correos y control de pagos
+              </p>
+            </button>
+
+            <div className="p-3 rounded-xl bg-dark-900 border border-dark-800 text-[11px] text-slate-400 space-y-1 shadow-md">
               <div className="flex items-center gap-2 font-bold text-slate-200">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Guarda sin Internet</span>
               </div>
               <p className="text-[10px] text-slate-400 leading-relaxed">
-                Si se va la luz o los datos en el local, todo se guarda en la memoria del teléfono y se sincroniza después.
+                Respaldo automático en el teléfono y en la nube.
               </p>
             </div>
           </div>
@@ -453,6 +595,16 @@ export default function App() {
         transactions={transactions}
         exchangeRate={exchangeRate}
         nicheData={nicheData}
+      />
+
+      <AuthPortalModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        tenants={tenants}
+        saasConfig={saasConfig}
+        onLoginSuccess={handleSelectTenant}
+        onRegisterTenant={handleRegisterNewTenant}
+        onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
       />
 
     </div>

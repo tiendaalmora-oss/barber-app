@@ -1,5 +1,5 @@
 import React from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, Crown, UserCheck } from 'lucide-react'
 
 export default function Navbar({ 
   currentNiche, 
@@ -9,6 +9,8 @@ export default function Navbar({
   onOpenCashModal, 
   onOpenExpenseModal,
   onOpenWhatsAppModal,
+  onOpenAuthModal,
+  activeTenant,
   activeTab,
   onSelectTab
 }) {
@@ -19,9 +21,9 @@ export default function Navbar({
   }
 
   const nicheNames = {
-    barberia: 'Mi Barbería',
-    estetica: 'Mi Peluquería & Salón',
-    mixto: 'Barbería & Salón (Mixto)'
+    barberia: activeTenant?.businessName || 'Mi Barbería',
+    estetica: activeTenant?.businessName || 'Mi Peluquería & Salón',
+    mixto: activeTenant?.businessName || 'Barbería & Salón (Mixto)'
   }
 
   return (
@@ -35,15 +37,22 @@ export default function Navbar({
               {nicheIcons[currentNiche] || <Scissors className="w-5 h-5 text-gold-400" />}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="font-bold text-lg text-white tracking-tight flex items-center gap-1.5">
                   {nicheNames[currentNiche] || 'Mi Negocio'}
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
-                    PRUEBA GRATIS
-                  </span>
                 </h1>
+                <button
+                  onClick={onOpenAuthModal}
+                  className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1 transition-all"
+                  title="Ver estado de suscripción o cambiar de cuenta"
+                >
+                  <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 27}d)</span>
+                  <span className="text-gold-400">• Cuentas / Admin</span>
+                </button>
               </div>
-              <p className="text-xs text-slate-400">Control de Caja & Cuentas Claras</p>
+              <p className="text-xs text-slate-400">
+                {activeTenant?.email ? `Sesión: ${activeTenant.email}` : 'Control de Caja & Cuentas Claras'}
+              </p>
             </div>
           </div>
 
@@ -108,7 +117,17 @@ export default function Navbar({
         </div>
 
         {/* Right side: Tasa BCV + Action CTAs */}
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-2 justify-end flex-wrap">
+          {/* Botón Portal de Acceso / Super-Admin */}
+          <button
+            onClick={onOpenAuthModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all"
+            title="Entrar con otro Correo, Crear Cuenta o Abrir Panel Super-Admin"
+          >
+            <Crown className="w-3.5 h-3.5 text-gold-400" />
+            <span>Acceso / Admin</span>
+          </button>
+
           {/* Tasa BCV Pill */}
           <button 
             onClick={onOpenRateModal}
