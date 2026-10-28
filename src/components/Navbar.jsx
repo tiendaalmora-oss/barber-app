@@ -1,5 +1,5 @@
 import React from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe } from 'lucide-react'
 
 export default function Navbar({ 
   currentNiche, 
@@ -153,14 +153,15 @@ export default function Navbar({
       </div>
 
       {/* Mobile Navigation Tabs */}
-      <nav className="flex md:hidden items-center justify-around gap-1 mt-3 pt-2.5 border-t border-dark-800">
+      <nav className="flex md:hidden items-center justify-around gap-1 mt-3 pt-2.5 border-t border-dark-800 overflow-x-auto">
         {[
           { id: 'dashboard', label: 'Caja', icon: TrendingUp },
-          { id: 'commissions', label: 'Muchachos', icon: Users },
+          { id: 'catalogo', label: 'Mi Link', icon: Globe },
           { id: 'appointments', label: 'Turnos', icon: Calendar },
+          { id: 'commissions', label: 'Equipo', icon: Users },
           { id: 'debts', label: 'Fiados', icon: AlertCircle },
           { id: 'inventory', label: 'Pomadas', icon: Package },
-          { id: 'monthly', label: 'Mes a Mes', icon: BarChart3 },
+          { id: 'monthly', label: 'Mes', icon: BarChart3 },
         ].map(tab => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id

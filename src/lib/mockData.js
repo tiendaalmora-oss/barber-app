@@ -195,3 +195,15 @@ export const MONTHLY_HISTORY = [
   { mes: 'Septiembre', facturacion: 3200, gastos: 630, comisiones: 1550, lucro: 1020 },
   { mes: 'Octubre (Actual)', facturacion: 2850, gastos: 540, comisiones: 1390, lucro: 920 },
 ]
+
+export const INITIAL_BUSINESS_PROFILE = {
+  businessName: 'Barbería & Studio El Fino',
+  slogan: 'Cortes degradé de primera, barba con toalla caliente y atención VIP sin esperar de pie.',
+  address: 'Av. Principal, Centro Comercial Nivel 1, Local 4',
+  whatsapp: '+584121234567',
+  schedule: 'Lunes a Sábado: 9:00 AM a 7:00 PM',
+  instagram: '@barberiaelfino',
+  paymentMethods: ['Pago Móvil BCV', 'Efectivo ($)', 'Zelle', 'Punto de Venta'],
+  promoBanner: '🔥 Promo de la Semana: Combo Corte + Barba + Cejas por solo $10'
+}
+

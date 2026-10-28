@@ -6,18 +6,24 @@ import AppointmentsView from './components/AppointmentsView'
 import DebtsClientsView from './components/DebtsClientsView'
 import InventoryView from './components/InventoryView'
 import MonthlyReportView from './components/MonthlyReportView'
+import CatalogConfigView from './components/CatalogConfigView'
+import PublicBookingView from './components/PublicBookingView'
 import QuickCashModal from './components/QuickCashModal'
 import QuickExpenseModal from './components/QuickExpenseModal'
 import ExchangeRateModal from './components/ExchangeRateModal'
 import WhatsAppCloseModal from './components/WhatsAppCloseModal'
-import { NICHES, INITIAL_CLIENTS, INITIAL_APPOINTMENTS, INITIAL_TRANSACTIONS } from './lib/mockData'
+import { NICHES, INITIAL_CLIENTS, INITIAL_APPOINTMENTS, INITIAL_TRANSACTIONS, INITIAL_BUSINESS_PROFILE } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Wifi, WifiOff } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe } from 'lucide-react'
 
 export default function App() {
+  // Check if opened via public booking link (?reserva=1)
+  const isDirectClientLink = typeof window !== 'undefined' && window.location.search.includes('reserva=1')
+
   // Global state
   const [currentNiche, setCurrentNiche] = useState('barberia')
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
   
   // Local-first persistent state
   const [exchangeRate, setExchangeRate] = useState(() => {
@@ -40,6 +46,16 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_APPOINTMENTS
   })
 
+  const [businessProfile, setBusinessProfile] = useState(() => {
+    const saved = localStorage.getItem('barber_profile')
+    return saved ? JSON.parse(saved) : INITIAL_BUSINESS_PROFILE
+  })
+
+  const [customServices, setCustomServices] = useState(() => {
+    const saved = localStorage.getItem('barber_custom_services')
+    return saved ? JSON.parse(saved) : []
+  })
+
   // Modals
   const [isCashModalOpen, setIsCashModalOpen] = useState(false)
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false)
@@ -58,6 +74,45 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('barber_transactions', JSON.stringify(transactions))
   }, [transactions])
+
+  useEffect(() => {
+    localStorage.setItem('barber_appointments', JSON.stringify(appointments))
+  }, [appointments])
+
+  useEffect(() => {
+    localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
+  }, [businessProfile])
+
+  useEffect(() => {
+    localStorage.setItem('barber_custom_services', JSON.stringify(customServices))
+  }, [customServices])
+
+  const handleAddAppointment = async (newApt) => {
+    setAppointments(prev => [newApt, ...prev])
+
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.from('citas').insert([{
+          cliente_nombre: newApt.client_name,
+          servicio_nombre: newApt.service,
+          fecha_hora: `${newApt.date}T12:00:00Z`,
+          estado: newApt.status || 'pendiente'
+        }])
+      } catch (e) {
+        console.warn('Appointment saved locally')
+      }
+    }
+  }
+
+  const handleToggleAppointmentStatus = (id) => {
+    setAppointments(prev => prev.map(a => {
+      if (a.id === id) {
+        const nextStatus = a.status === 'pendiente' ? 'en_atencion' : a.status === 'en_atencion' ? 'completada' : 'pendiente'
+        return { ...a, status: nextStatus }
+      }
+      return a
+    }))
+  }
 
   const handleRegisterTransaction = async (newTx) => {
     setTransactions(prev => [newTx, ...prev])
@@ -120,6 +175,22 @@ export default function App() {
     }
   }
 
+  // If in Public Landing Mode (either via ?reserva=1 or Owner Preview)
+  if (isPublicPreview) {
+    return (
+      <PublicBookingView
+        businessProfile={businessProfile}
+        nicheData={nicheData}
+        customServices={customServices}
+        exchangeRate={exchangeRate}
+        appointments={appointments}
+        onBookAppointment={handleAddAppointment}
+        isOwnerPreview={!isDirectClientLink}
+        onExitPreview={() => setIsPublicPreview(false)}
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col font-sans pb-16 md:pb-6">
       
@@ -147,8 +218,9 @@ export default function App() {
 
           {[
             { id: 'dashboard', label: 'Caja del Día', icon: TrendingUp },
-            { id: 'commissions', label: `Comisiones (${nicheData.rolePlural})`, icon: Users },
+            { id: 'catalogo', label: 'Mi Link & Catálogo', icon: Globe, badge: 'NUEVO' },
             { id: 'appointments', label: 'Turnos y Citas', icon: Calendar },
+            { id: 'commissions', label: `Comisiones (${nicheData.rolePlural})`, icon: Users },
             { id: 'debts', label: 'Fiados & Membresías', icon: AlertCircle },
             { id: 'inventory', label: 'Pomadas & Insumos', icon: Package },
             { id: 'monthly', label: 'Cuentas Mes a Mes', icon: BarChart3 },
@@ -159,14 +231,21 @@ export default function App() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
                     ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30 shadow-sm'
                     : 'text-slate-400 hover:text-white hover:bg-dark-850'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {item.badge && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-gold-500 text-black font-black shrink-0">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -198,6 +277,19 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'catalogo' && (
+            <CatalogConfigView
+              businessProfile={businessProfile}
+              onSaveProfile={setBusinessProfile}
+              nicheData={nicheData}
+              customServices={customServices}
+              onAddCustomService={(svc) => setCustomServices(prev => [svc, ...prev])}
+              onRemoveCustomService={(id) => setCustomServices(prev => prev.filter(s => s.id !== id))}
+              exchangeRate={exchangeRate}
+              onOpenPublicPreview={() => setIsPublicPreview(true)}
+            />
+          )}
+
           {activeTab === 'commissions' && (
             <CommissionsView
               nicheData={nicheData}
@@ -210,7 +302,8 @@ export default function App() {
             <AppointmentsView
               appointments={appointments}
               nicheData={nicheData}
-              onAddAppointment={(item) => setAppointments(prev => [item, ...prev])}
+              onAddAppointment={handleAddAppointment}
+              onToggleAppointmentStatus={handleToggleAppointmentStatus}
             />
           )}
 

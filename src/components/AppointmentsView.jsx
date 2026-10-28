@@ -1,12 +1,11 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter } from 'lucide-react'
 
-export default function AppointmentsView({ appointments, nicheData, onAddAppointment }) {
+export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus }) {
   // Today's ISO date string (YYYY-MM-DD)
   const getTodayStr = () => new Date().toISOString().split('T')[0]
 
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
-  const [list, setList] = useState(appointments)
   const [showAddModal, setShowAddModal] = useState(false)
   
   // Form fields
@@ -17,19 +16,15 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
   const [newService, setNewService] = useState(nicheData.services[0]?.name || '')
 
   // Filter list by selected date
-  const filteredList = list.filter(a => {
+  const filteredList = appointments.filter(a => {
     if (!a.date) return true // legacy fallback
     return a.date === selectedDate
   })
 
   const toggleStatus = (id) => {
-    setList(prev => prev.map(a => {
-      if (a.id === id) {
-        const nextStatus = a.status === 'pendiente' ? 'en_atencion' : a.status === 'en_atencion' ? 'completada' : 'pendiente'
-        return { ...a, status: nextStatus }
-      }
-      return a
-    }))
+    if (onToggleAppointmentStatus) {
+      onToggleAppointmentStatus(id)
+    }
   }
 
   const handleCreate = (e) => {
@@ -46,7 +41,6 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
       status: 'pendiente'
     }
 
-    setList([newItem, ...list])
     if (onAddAppointment) onAddAppointment(newItem)
     
     // Reset form
@@ -185,7 +179,14 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                   </div>
 
                   <div>
-                    <h4 className="font-bold text-white text-sm">{apt.client_name}</h4>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-bold text-white text-sm">{apt.client_name}</h4>
+                      {apt.source === 'web' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-gold-500/15 text-gold-400 border border-gold-500/30 font-bold">
+                          🌐 Link Web
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-400 mt-0.5">{apt.service}</p>
                     <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400">
                       <span>{staffObj?.avatar || '✂️'}</span>
