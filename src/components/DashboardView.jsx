@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Sparkles } from 'lucide-react'
+import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Sparkles, Lock } from 'lucide-react'
 
 export default function DashboardView({ 
   transactions, 

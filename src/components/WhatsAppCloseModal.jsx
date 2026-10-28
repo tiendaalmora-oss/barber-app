@@ -58,8 +58,9 @@ export default function WhatsAppCloseModal({
   })
 
   // Build the formatted WhatsApp message text
+  const appTitleStr = (nicheData?.appTitle || 'BARBERÍA').toUpperCase()
   let messageLines = [
-    `💈 *CIERRE DE CAJA - ${nicheData.appTitle.toUpperCase()}*`,
+    `💈 *CIERRE DE CAJA - ${appTitleStr}*`,
     `📅 ${dateStr.toUpperCase()} · 🕒 ${timeStr}`,
     `💵 *Tasa del Día:* Bs. ${exchangeRate.toFixed(2)} / USD`,
     `────────────────────────`,
