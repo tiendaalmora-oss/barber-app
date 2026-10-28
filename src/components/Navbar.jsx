@@ -1,5 +1,5 @@
 import React from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing } from 'lucide-react'
 
 export default function Navbar({ 
   currentNiche, 
@@ -157,6 +157,7 @@ export default function Navbar({
         {[
           { id: 'dashboard', label: 'Caja', icon: TrendingUp },
           { id: 'catalogo', label: 'Mi Link', icon: Globe },
+          { id: 'retargeting', label: 'Radar', icon: BellRing },
           { id: 'appointments', label: 'Turnos', icon: Calendar },
           { id: 'commissions', label: 'Equipo', icon: Users },
           { id: 'debts', label: 'Fiados', icon: AlertCircle },

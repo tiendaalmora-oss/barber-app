@@ -6,13 +6,15 @@ export default function QuickCashModal({
   onClose,
   nicheData,
   exchangeRate,
-  onRegisterTransaction
+  onRegisterTransaction,
+  clients = []
 }) {
   const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || '')
   const [selectedItem, setSelectedItem] = useState(nicheData.services[0]?.id || '')
   const [customPrice, setCustomPrice] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('pago_movil')
   const [clientName, setClientName] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
 
   if (!isOpen) return null
 
@@ -46,6 +48,7 @@ export default function QuickCashModal({
       staff_name: staffObj?.name || 'Venta del Local',
       staff_id: staffObj?.id,
       client_name: clientName.trim() || 'Cliente Mostrador',
+      client_phone: clientPhone.trim() || '',
       monto_usd: finalPriceUSD,
       monto_bs: parseFloat(finalPriceBs),
       tasa_bcv: exchangeRate,
@@ -173,15 +176,37 @@ export default function QuickCashModal({
             </div>
           </div>
 
-          {/* Nombre del cliente */}
-          <div>
-            <input
-              type="text"
-              placeholder="Nombre del cliente (opcional, ej. Pedro)"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-dark-800 border border-dark-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-gold-500"
-            />
+          {/* Nombre y WhatsApp del cliente (para Retargeting y Fidelidad) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <input
+                type="text"
+                list="existing-clients-list"
+                placeholder="Nombre del cliente (suma sello VIP)"
+                value={clientName}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setClientName(val)
+                  const match = clients.find(c => c.name.toLowerCase() === val.toLowerCase())
+                  if (match && match.phone) setClientPhone(match.phone)
+                }}
+                className="w-full px-3 py-2 rounded-xl bg-dark-800 border border-dark-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-gold-500"
+              />
+              <datalist id="existing-clients-list">
+                {clients.map(c => (
+                  <option key={c.id} value={c.name} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <input
+                type="tel"
+                placeholder="WhatsApp (ej. +584121234567)"
+                value={clientPhone}
+                onChange={(e) => setClientPhone(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-dark-800 border border-dark-700 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-gold-500"
+              />
+            </div>
           </div>
 
           {/* Caja con la división de la plata */}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare } from 'lucide-react'
 
-export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus }) {
+export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, clients = [], businessProfile = {} }) {
   // Today's ISO date string (YYYY-MM-DD)
   const getTodayStr = () => new Date().toISOString().split('T')[0]
 
@@ -200,21 +200,42 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                   </div>
                 </div>
 
-                {/* Status Toggle Button */}
-                <button
-                  onClick={() => toggleStatus(apt.id)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                    apt.status === 'completada' 
-                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
-                      : apt.status === 'en_atencion' 
-                      ? 'bg-blue-500/15 text-blue-400 border-blue-500/30 animate-pulse' 
-                      : 'bg-dark-800 text-amber-400 border-dark-700 hover:border-amber-500/40'
-                  }`}
-                >
-                  {apt.status === 'completada' && '✓ Listo'}
-                  {apt.status === 'en_atencion' && 'En la Silla'}
-                  {apt.status === 'pendiente' && 'Esperando'}
-                </button>
+                {/* Actions: Anti-No-Show WhatsApp + Status Toggle Button */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const foundClient = clients.find(c => c.name.toLowerCase() === apt.client_name.toLowerCase())
+                      const rawPhone = apt.client_phone || foundClient?.phone || ''
+                      const cleanPhone = rawPhone.replace(/[^0-9]/g, '')
+                      const bizName = businessProfile?.businessName || 'nuestro local'
+                      const msg = `👋 ¡Activo *${apt.client_name.split(' ')[0]}*! 💈✂️ Te escribimos de *${bizName}* para confirmar tu turno de *${formatDateLabel(apt.date || selectedDate)}* a las *${apt.time}* (${apt.service} con ${staffObj?.name || 'el equipo'}).\n\n¿Me confirmas tu asistencia? ¡Te esperamos puntual!`
+                      const url = cleanPhone
+                        ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+                        : `https://wa.me/?text=${encodeURIComponent(msg)}`
+                      window.open(url, '_blank')
+                    }}
+                    className="p-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 transition-all"
+                    title="Enviar recordatorio de cita por WhatsApp (Anti-Embarques)"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
+
+                  <button
+                    onClick={() => toggleStatus(apt.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                      apt.status === 'completada' 
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
+                        : apt.status === 'en_atencion' 
+                        ? 'bg-blue-500/15 text-blue-400 border-blue-500/30 animate-pulse' 
+                        : 'bg-dark-800 text-amber-400 border-dark-700 hover:border-amber-500/40'
+                    }`}
+                  >
+                    {apt.status === 'completada' && '✓ Listo'}
+                    {apt.status === 'en_atencion' && 'En la Silla'}
+                    {apt.status === 'pendiente' && 'Esperando'}
+                  </button>
+                </div>
               </div>
             )
           })}

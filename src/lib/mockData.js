@@ -79,13 +79,84 @@ export const NICHES = {
   }
 }
 
+const getDateDaysAgo = (days) => {
+  const d = new Date()
+  d.setDate(d.getDate() - days)
+  return d.toISOString().split('T')[0]
+}
+
 export const INITIAL_CLIENTS = [
-  { id: 'c1', name: 'Miguel Ángel Rojas', phone: '+584121234567', debt_usd: 0, plan: 'Cliente Regular' },
-  { id: 'c2', name: 'Alejandro Peña', phone: '+584149876543', debt_usd: 5, plan: 'Cliente Regular' },
-  { id: 'c3', name: 'Roberto Gómez', phone: '+584245551122', debt_usd: 0, plan: 'Suscripción VIP (4 Cortes/Mes)', plan_renueva: '05 de Noviembre' },
-  { id: 'c4', name: 'José Gregorio Silva', phone: '+584163334455', debt_usd: 10, plan: 'Cliente Regular' },
-  { id: 'c5', name: 'Franklin Mendoza', phone: '+584128889900', debt_usd: 0, plan: 'Suscripción Barba Ilimitada', plan_renueva: '12 de Noviembre' },
+  {
+    id: 'c1',
+    name: 'Miguel Ángel Rojas',
+    phone: '+584121234567',
+    debt_usd: 0,
+    plan: 'Cliente Regular',
+    last_visit: getDateDaysAgo(18),
+    last_service: 'Corte Degradé + Cejas',
+    last_staff: 'Carlos "El Fino"',
+    cycle_days: 15,
+    visits_count: 4
+  },
+  {
+    id: 'c2',
+    name: 'Alejandro Peña',
+    phone: '+584149876543',
+    debt_usd: 5,
+    plan: 'Cliente Regular',
+    last_visit: getDateDaysAgo(22),
+    last_service: 'Combo Completo (Corte + Barba)',
+    last_staff: 'Javier Cortes',
+    cycle_days: 15,
+    visits_count: 2
+  },
+  {
+    id: 'c3',
+    name: 'Roberto Gómez',
+    phone: '+584245551122',
+    debt_usd: 0,
+    plan: 'Suscripción VIP (4 Cortes/Mes)',
+    plan_renueva: '05 de Noviembre',
+    last_visit: getDateDaysAgo(13),
+    last_service: 'Corte Clásico',
+    last_staff: 'Carlos "El Fino"',
+    cycle_days: 15,
+    visits_count: 4
+  },
+  {
+    id: 'c4',
+    name: 'José Gregorio Silva',
+    phone: '+584163334455',
+    debt_usd: 10,
+    plan: 'Cliente Regular',
+    last_visit: getDateDaysAgo(26),
+    last_service: 'Corte Clásico',
+    last_staff: 'Marcos Degradé',
+    cycle_days: 15,
+    visits_count: 3
+  },
+  {
+    id: 'c5',
+    name: 'Franklin Mendoza',
+    phone: '+584128889900',
+    debt_usd: 0,
+    plan: 'Suscripción Barba Ilimitada',
+    plan_renueva: '12 de Noviembre',
+    last_visit: getDateDaysAgo(4),
+    last_service: 'Arreglo de Barba con Toalla Caliente',
+    last_staff: 'Javier Cortes',
+    cycle_days: 12,
+    visits_count: 5
+  },
 ]
+
+export const INITIAL_RETARGETING_CONFIG = {
+  defaultCycleDays: 15,
+  loyaltyGoal: 5,
+  loyaltyReward: 'Arreglo de Barba o Cejas GRATIS',
+  normalTemplate: '¡Épale {cliente}! 💈✂️ Ya pasaron {dias} días desde tu último *{servicio}* aquí en *{negocio}*. Te escribo para preguntarte si te aparto tu turno antes de que se llene la agenda. Elige tu hora en 1 minuto aquí: {link}',
+  slowDayTemplate: '¡Épale {cliente}! 🔥 Hoy tenemos *Promo Especial de Día Suave* en *{negocio}*. Como ya pasaron {dias} días de tu último *{servicio}*, si te anotas hoy o mañana te damos prioridad y un detalle especial. Aparta tu hora aquí: {link}'
+}
 
 export const INITIAL_APPOINTMENTS = [
   { id: 'a1', client_name: 'Miguel Ángel Rojas', date: new Date().toISOString().split('T')[0], time: '10:00 AM', staff_id: 'e1', service: 'Corte Degradé + Cejas', status: 'completada' },

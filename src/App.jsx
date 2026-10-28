@@ -8,13 +8,21 @@ import InventoryView from './components/InventoryView'
 import MonthlyReportView from './components/MonthlyReportView'
 import CatalogConfigView from './components/CatalogConfigView'
 import PublicBookingView from './components/PublicBookingView'
+import RetargetingView from './components/RetargetingView'
 import QuickCashModal from './components/QuickCashModal'
 import QuickExpenseModal from './components/QuickExpenseModal'
 import ExchangeRateModal from './components/ExchangeRateModal'
 import WhatsAppCloseModal from './components/WhatsAppCloseModal'
-import { NICHES, INITIAL_CLIENTS, INITIAL_APPOINTMENTS, INITIAL_TRANSACTIONS, INITIAL_BUSINESS_PROFILE } from './lib/mockData'
+import {
+  NICHES,
+  INITIAL_CLIENTS,
+  INITIAL_APPOINTMENTS,
+  INITIAL_TRANSACTIONS,
+  INITIAL_BUSINESS_PROFILE,
+  INITIAL_RETARGETING_CONFIG
+} from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing } from 'lucide-react'
 
 export default function App() {
   // Check if opened via public booking link (?reserva=1)
@@ -37,7 +45,7 @@ export default function App() {
   })
 
   const [clients, setClients] = useState(() => {
-    const saved = localStorage.getItem('barber_clients')
+    const saved = localStorage.getItem('barber_clients_v2')
     return saved ? JSON.parse(saved) : INITIAL_CLIENTS
   })
 
@@ -54,6 +62,11 @@ export default function App() {
   const [customServices, setCustomServices] = useState(() => {
     const saved = localStorage.getItem('barber_custom_services')
     return saved ? JSON.parse(saved) : []
+  })
+
+  const [retargetingConfig, setRetargetingConfig] = useState(() => {
+    const saved = localStorage.getItem('barber_retargeting_config')
+    return saved ? JSON.parse(saved) : INITIAL_RETARGETING_CONFIG
   })
 
   // Modals
@@ -76,6 +89,10 @@ export default function App() {
   }, [transactions])
 
   useEffect(() => {
+    localStorage.setItem('barber_clients_v2', JSON.stringify(clients))
+  }, [clients])
+
+  useEffect(() => {
     localStorage.setItem('barber_appointments', JSON.stringify(appointments))
   }, [appointments])
 
@@ -87,8 +104,51 @@ export default function App() {
     localStorage.setItem('barber_custom_services', JSON.stringify(customServices))
   }, [customServices])
 
+  useEffect(() => {
+    localStorage.setItem('barber_retargeting_config', JSON.stringify(retargetingConfig))
+  }, [retargetingConfig])
+
+  // Calculate how many clients are due for retargeting (for sidebar badge)
+  const overdueClientsCount = clients.filter(c => {
+    if (!c.last_visit) return true
+    const last = new Date(c.last_visit + 'T00:00:00')
+    const days = Math.floor((Date.now() - last.getTime()) / (1000 * 60 * 60 * 24))
+    const cycle = c.cycle_days || retargetingConfig.defaultCycleDays || 15
+    return days >= cycle
+  }).length
+
+  const handleUpdateClient = (updatedClient) => {
+    setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c))
+  }
+
   const handleAddAppointment = async (newApt) => {
     setAppointments(prev => [newApt, ...prev])
+
+    // If client booked from web or agenda with name, ensure they are in the Clients database
+    if (newApt.client_name && newApt.client_name !== 'Cliente Mostrador') {
+      setClients(prev => {
+        const found = prev.find(c => c.name.toLowerCase() === newApt.client_name.toLowerCase())
+        if (found) {
+          return prev.map(c => c.id === found.id ? {
+            ...c,
+            phone: newApt.client_phone || c.phone
+          } : c)
+        } else {
+          return [{
+            id: 'c_' + Date.now(),
+            name: newApt.client_name,
+            phone: newApt.client_phone || '+584120000000',
+            debt_usd: 0,
+            plan: 'Cliente Regular',
+            last_visit: new Date().toISOString().split('T')[0],
+            last_service: newApt.service,
+            last_staff: 'Agenda Web',
+            cycle_days: retargetingConfig.defaultCycleDays || 15,
+            visits_count: 1
+          }, ...prev]
+        }
+      })
+    }
 
     if (isSupabaseConfigured()) {
       try {
@@ -117,20 +177,36 @@ export default function App() {
   const handleRegisterTransaction = async (newTx) => {
     setTransactions(prev => [newTx, ...prev])
 
-    // If fiado, update client debt
-    if (newTx.metodo_pago === 'fiado') {
+    const todayStr = new Date().toISOString().split('T')[0]
+
+    // Automatically update Client Retargeting history, Loyalty Stamps & Fiado Debt
+    if (newTx.client_name && newTx.client_name !== 'Cliente Mostrador') {
       setClients(prev => {
         const found = prev.find(c => c.name.toLowerCase() === newTx.client_name.toLowerCase())
+        const addedDebt = newTx.metodo_pago === 'fiado' ? newTx.monto_usd : 0
         if (found) {
-          return prev.map(c => c.id === found.id ? { ...c, debt_usd: c.debt_usd + newTx.monto_usd } : c)
+          return prev.map(c => c.id === found.id ? {
+            ...c,
+            phone: newTx.client_phone || c.phone,
+            debt_usd: (c.debt_usd || 0) + addedDebt,
+            last_visit: todayStr,
+            last_service: newTx.item_name,
+            last_staff: newTx.staff_name,
+            visits_count: (c.visits_count || 0) + 1
+          } : c)
         } else {
-          return [...prev, {
+          return [{
             id: 'c_' + Date.now(),
             name: newTx.client_name,
-            phone: '+584120000000',
-            debt_usd: newTx.monto_usd,
-            plan: 'Cliente Regular'
-          }]
+            phone: newTx.client_phone || '+584120000000',
+            debt_usd: addedDebt,
+            plan: 'Cliente Regular',
+            last_visit: todayStr,
+            last_service: newTx.item_name,
+            last_staff: newTx.staff_name,
+            cycle_days: retargetingConfig.defaultCycleDays || 15,
+            visits_count: 1
+          }, ...prev]
         }
       })
     }
@@ -218,7 +294,8 @@ export default function App() {
 
           {[
             { id: 'dashboard', label: 'Caja del Día', icon: TrendingUp },
-            { id: 'catalogo', label: 'Mi Link & Catálogo', icon: Globe, badge: 'NUEVO' },
+            { id: 'catalogo', label: 'Mi Link & Catálogo', icon: Globe, badge: 'WEB' },
+            { id: 'retargeting', label: 'Radar Clientes (Retoque)', icon: BellRing, alertCount: overdueClientsCount },
             { id: 'appointments', label: 'Turnos y Citas', icon: Calendar },
             { id: 'commissions', label: `Comisiones (${nicheData.rolePlural})`, icon: Users },
             { id: 'debts', label: 'Fiados & Membresías', icon: AlertCircle },
@@ -244,6 +321,11 @@ export default function App() {
                 {item.badge && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-gold-500 text-black font-black shrink-0">
                     {item.badge}
+                  </span>
+                )}
+                {item.alertCount > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500 text-white font-black shrink-0">
+                    {item.alertCount}
                   </span>
                 )}
               </button>
@@ -290,6 +372,16 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'retargeting' && (
+            <RetargetingView
+              clients={clients}
+              onUpdateClient={handleUpdateClient}
+              retargetingConfig={retargetingConfig}
+              onSaveRetargetingConfig={setRetargetingConfig}
+              businessProfile={businessProfile}
+            />
+          )}
+
           {activeTab === 'commissions' && (
             <CommissionsView
               nicheData={nicheData}
@@ -304,6 +396,8 @@ export default function App() {
               nicheData={nicheData}
               onAddAppointment={handleAddAppointment}
               onToggleAppointmentStatus={handleToggleAppointmentStatus}
+              clients={clients}
+              businessProfile={businessProfile}
             />
           )}
 
@@ -336,6 +430,7 @@ export default function App() {
         nicheData={nicheData}
         exchangeRate={exchangeRate}
         onRegisterTransaction={handleRegisterTransaction}
+        clients={clients}
       />
 
       <QuickExpenseModal
