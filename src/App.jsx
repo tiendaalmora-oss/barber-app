@@ -30,10 +30,12 @@ import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles } from 'lucide-react'
 
 export default function App() {
-  // Check URL parameters (?reserva=1, ?admin=1, ?registro=1, ?login=1)
+  // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
   const searchParams = typeof window !== 'undefined' ? window.location.search : ''
+  const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
   const isDirectClientLink = searchParams.includes('reserva=1')
-  const isDirectAdminLink = searchParams.includes('admin=1')
+  // Admin ONLY allowed on ingeniodigital.shop domain (or localhost during dev) — completely blocked on barber.ingenioos.online!
+  const isAdminDomain = hostname.includes('ingeniodigital.shop') || ((hostname === 'localhost' || hostname === '127.0.0.1') && searchParams.includes('admin=1'))
   const isDirectRegisterLink = searchParams.includes('registro=1')
   const isDirectLoginLink = searchParams.includes('login=1')
 
@@ -41,7 +43,7 @@ export default function App() {
   const [currentNiche, setCurrentNiche] = useState('barberia')
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
-  const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isDirectAdminLink)
+  const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isAdminDomain)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(isDirectRegisterLink || isDirectLoginLink)
   const [authInitialTab, setAuthInitialTab] = useState(isDirectRegisterLink ? 'register' : 'login')
 
@@ -678,7 +680,7 @@ export default function App() {
         saasConfig={saasConfig}
         onLoginSuccess={handleSelectTenant}
         onRegisterTenant={handleRegisterNewTenant}
-        onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
+        onOpenSuperAdmin={null}
         initialTab={isDirectRegisterLink ? 'register' : authInitialTab}
       />
     )

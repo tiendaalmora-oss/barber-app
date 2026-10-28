@@ -1,6 +1,15 @@
 import React, { useState } from 'react'
 import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X } from 'lucide-react'
 
+const SAAS_PRODUCTS = [
+  { id: 'all', label: '🌐 Todos los Productos', icon: '🌐', domain: 'ingeniodigital.shop', status: 'Hub Central' },
+  { id: 'barberia_saas', label: '💈 BarberOS & Salones', icon: '💈', domain: 'barber.ingenioos.online', status: 'En Vivo' },
+  { id: 'licoreria_saas', label: '🍾 Licorería & Bodegón', icon: '🍾', domain: 'licoreria.ingenioos.online', status: 'Próximo' },
+  { id: 'indumentaria_saas', label: '👕 Indumentaria & Ropa', icon: '👕', domain: 'tiendas.ingenioos.online', status: 'Próximo' },
+  { id: 'gastronomia_saas', label: '🍔 Gastronomía & Food', icon: '🍔', domain: 'food.ingenioos.online', status: 'Próximo' },
+  { id: 'autolavado_saas', label: '🔧 Autolavado & Taller', icon: '🔧', domain: 'autolavado.ingenioos.online', status: 'Próximo' }
+]
+
 export default function SuperAdminView({
   tenants,
   onUpdateTenant,
@@ -18,6 +27,7 @@ export default function SuperAdminView({
   const [isUnlocked, setIsUnlocked] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState('')
+  const [selectedProduct, setSelectedProduct] = useState('all')
   const [filter, setFilter] = useState('all')
   const [showSettings, setShowSettings] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -28,6 +38,7 @@ export default function SuperAdminView({
   const [copiedDemoCreds, setCopiedDemoCreds] = useState(false)
 
   // Manual tenant creation / edit form
+  const [newProduct, setNewProduct] = useState('barberia_saas')
   const [newBiz, setNewBiz] = useState('')
   const [newOwner, setNewOwner] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -37,7 +48,8 @@ export default function SuperAdminView({
   const [newStatus, setNewStatus] = useState('activo')
   const [newDays, setNewDays] = useState('30')
 
-  const registrationUrl = `${window.location.origin}/?registro=1`
+  const barberBaseUrl = 'https://barber.ingenioos.online'
+  const registrationUrl = `${barberBaseUrl}/?registro=1`
 
   const handleCopyRegistrationLink = () => {
     navigator.clipboard.writeText(registrationUrl)
@@ -53,6 +65,7 @@ export default function SuperAdminView({
 
   const openCreateModal = () => {
     setEditingTenant(null)
+    setNewProduct(selectedProduct === 'all' ? 'barberia_saas' : selectedProduct)
     setNewBiz('')
     setNewOwner('')
     setNewEmail('')
@@ -66,6 +79,7 @@ export default function SuperAdminView({
 
   const openEditModal = (t) => {
     setEditingTenant(t)
+    setNewProduct(t.saasProduct || 'barberia_saas')
     setNewBiz(t.businessName)
     setNewOwner(t.ownerName)
     setNewEmail(t.email)
@@ -84,15 +98,21 @@ export default function SuperAdminView({
     return Math.max(1, Math.floor(diff / (1000 * 60 * 60 * 24)) + 1)
   }
 
-  const enrichedTenants = tenants.map(t => {
+  const allEnrichedTenants = tenants.map(t => {
     const dayOfSub = getDaysSinceActivation(t.activatedAt)
     const inGuarantee = t.status === 'activo' && dayOfSub <= (saasConfig.guaranteeDays || 7)
+    const saasProduct = t.saasProduct || 'barberia_saas'
     return {
       ...t,
+      saasProduct,
       dayOfSub,
       inGuarantee
     }
   })
+
+  const enrichedTenants = selectedProduct === 'all'
+    ? allEnrichedTenants
+    : allEnrichedTenants.filter(t => t.saasProduct === selectedProduct)
 
   const activeTenants = enrichedTenants.filter(t => t.status === 'activo')
   const pendingTenants = enrichedTenants.filter(t => t.status === 'pendiente_pago')
@@ -149,7 +169,7 @@ export default function SuperAdminView({
         `Apenas me pases el capture por aquí te activo el acceso de inmediato.`
     } else if (tenant.status === 'activo') {
       msg = `✅ ¡Listo *${tenant.ownerName}*! Ya verificamos tu pago y activamos los *30 días* de *${tenant.businessName}*.\n\n` +
-        `👉 *Entra aquí:* ${window.location.origin}/?login=1\n` +
+        `👉 *Entra aquí:* ${barberBaseUrl}/?login=1\n` +
         `📧 *Correo:* ${tenant.email}\n` +
         `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
         `🛡️ Recuerda que cuentas con tus *${saasConfig.guaranteeDays} días de garantía total* y soporte directo por este WhatsApp. ¡A sacarle provecho!`
@@ -180,6 +200,7 @@ export default function SuperAdminView({
     if (editingTenant) {
       onUpdateTenant({
         ...editingTenant,
+        saasProduct: newProduct,
         businessName: newBiz.trim(),
         ownerName: newOwner.trim() || 'Dueño',
         email: newEmail.trim().toLowerCase(),
@@ -192,6 +213,7 @@ export default function SuperAdminView({
     } else {
       const created = {
         id: 'ten_' + Date.now(),
+        saasProduct: newProduct,
         businessName: newBiz.trim(),
         ownerName: newOwner.trim() || 'Dueño',
         email: newEmail.trim().toLowerCase(),
@@ -203,7 +225,7 @@ export default function SuperAdminView({
         activatedAt: newStatus === 'activo' ? todayStr : null,
         daysRemaining: newStatus === 'activo' ? (parseInt(newDays) || 30) : 0,
         lastPaymentRef: newStatus === 'activo' ? 'Pagado Directo' : 'Esperando Capture',
-        amountPaidUsd: newStatus === 'activo' ? (saasConfig.monthlyPriceUsd || 10) : 0
+        amountPaidUsd: newStatus === 'activo' ? (saasConfig.monthlyPriceUsd || 6) : 0
       }
       onAddTenant(created)
     }
@@ -226,7 +248,7 @@ export default function SuperAdminView({
   }
 
   const handleCopyDemoCredentials = () => {
-    const text = `💈 Acceso de Prueba (Ingenio OS):\n👉 Link: ${window.location.origin}/?login=1\n📧 Correo: ${demoTenant.email}\n🔑 Contraseña: ${demoTenant.password || 'demo2026'}`
+    const text = `💈 Acceso de Prueba (Ingenio OS):\n👉 Link: ${barberBaseUrl}/?login=1\n📧 Correo: ${demoTenant.email}\n🔑 Contraseña: ${demoTenant.password || 'demo2026'}`
     navigator.clipboard.writeText(text)
     setCopiedDemoCreds(true)
     setTimeout(() => setCopiedDemoCreds(false), 2500)
@@ -307,14 +329,14 @@ export default function SuperAdminView({
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="font-black text-lg text-white">
-                  Panel Maestro Super-Admin (Ingenio OS)
+                  Centro Maestro Multi-SaaS • Ingenio Digital
                 </h1>
                 <span className="px-2 py-0.5 rounded-full bg-gold-500 text-black text-[10px] font-black">
-                  DUEÑO SAAS
+                  HUB CENTRAL
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Control de Suscripciones, Correos Registrados, Pagos por Adelantado y Garantía de {saasConfig.guaranteeDays} Días
+                Administración unificada de BarberOS, Licorería, Indumentaria, Gastronomía y Talleres (admin.ingeniodigital.shop)
               </p>
             </div>
           </div>
@@ -344,21 +366,67 @@ export default function SuperAdminView({
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black shadow-lg shadow-emerald-500/20"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Crear Cuenta Limpia a Cliente</span>
+              <span>Crear Cuenta a Cliente</span>
             </button>
 
-            <button
-              onClick={onExitSuperAdmin}
+            <a
+              href={barberBaseUrl}
+              target="_blank"
+              rel="noreferrer"
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-xs font-bold text-slate-300"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Volver a la App</span>
-            </button>
+              <span>Ir a BarberOS</span>
+            </a>
           </div>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+
+        {/* Multi-Product SaaS Selector Hub */}
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-3 space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              🚀 Ecosistema de Productos SaaS (Selecciona un Sistema para filtrar accesos):
+            </span>
+            <span className="text-[10px] text-purple-400 font-bold">
+              1 Solo Panel Central • Todos Tus Sistemas
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {SAAS_PRODUCTS.map(prod => {
+              const count = prod.id === 'all'
+                ? allEnrichedTenants.length
+                : allEnrichedTenants.filter(t => t.saasProduct === prod.id).length
+              const isSelected = selectedProduct === prod.id
+              return (
+                <button
+                  key={prod.id}
+                  onClick={() => setSelectedProduct(prod.id)}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
+                    isSelected
+                      ? 'bg-purple-500/20 border-purple-400 text-white shadow-md'
+                      : 'bg-dark-950 border-dark-800 text-slate-400 hover:text-white hover:border-dark-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-black truncate">{prod.label}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-dark-800 text-[10px] font-mono text-gold-400 font-bold">
+                      {count}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mt-1.5 text-[9px]">
+                    <span className="text-slate-500 truncate">{prod.domain}</span>
+                    <span className={prod.status === 'En Vivo' || prod.status === 'Hub Central' ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {prod.status}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
         {/* Shareable Registration Link Banner for Real Clients */}
         <div className="bg-gradient-to-r from-purple-950/40 via-dark-900 to-dark-900 border border-purple-500/30 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -687,6 +755,10 @@ export default function SuperAdminView({
                 {/* Left info */}
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-black">
+                      {(SAAS_PRODUCTS.find(p => p.id === (tenant.saasProduct || 'barberia_saas')) || SAAS_PRODUCTS[1]).label}
+                    </span>
+
                     <h3 className="font-black text-white text-base">
                       {tenant.businessName}
                     </h3>
@@ -823,6 +895,20 @@ export default function SuperAdminView({
             </div>
 
             <form onSubmit={handleSaveTenantForm} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-purple-400 mb-1">Producto SaaS (Sistema)</label>
+                <select
+                  value={newProduct}
+                  onChange={(e) => setNewProduct(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-purple-500/40 text-xs text-white font-bold"
+                >
+                  {SAAS_PRODUCTS.filter(p => p.id !== 'all').map(prod => (
+                    <option key={prod.id} value={prod.id}>
+                      {prod.label} ({prod.domain})
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Nombre del Local</label>
                 <input

@@ -327,23 +327,11 @@ export default function AuthPortalModal({
           </form>
         )}
 
-        {/* Discreet Owner Admin Access Footer */}
-        {onOpenSuperAdmin && (
-          <div className="mt-5 pt-3 border-t border-dark-850 flex items-center justify-between text-[10px] text-slate-600">
-            <span>Ingenio OS © 2026</span>
-            <button
-              type="button"
-              onClick={() => {
-                if (onClose) onClose()
-                onOpenSuperAdmin()
-              }}
-              className="flex items-center gap-1 text-slate-500 hover:text-purple-400 transition-colors"
-            >
-              <Crown className="w-3 h-3" />
-              <span>Admin</span>
-            </button>
-          </div>
-        )}
+        {/* Clean Footer */}
+        <div className="mt-5 pt-3 border-t border-dark-850 flex items-center justify-between text-[10px] text-slate-600">
+          <span>Ingenio OS © 2026 • Todos los derechos reservados</span>
+          <span>Garantía {saasConfig?.guaranteeDays || 7} Días</span>
+        </div>
 
       </div>
     </div>
