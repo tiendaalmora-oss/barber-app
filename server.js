@@ -224,7 +224,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   // --- STATIC SPA SERVING ---
-  let filePath = path.join(DIST_DIR, pathname === '/' ? 'index.html' : pathname)
+  let targetPath = pathname
+  if (targetPath === '/landing' || targetPath === '/v4' || targetPath === '/ventas') {
+    targetPath = '/landing.html'
+  }
+  let filePath = path.join(DIST_DIR, targetPath === '/' ? 'index.html' : targetPath)
   if (!filePath.startsWith(DIST_DIR)) {
     res.writeHead(403)
     return res.end('Forbidden')

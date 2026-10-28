@@ -1,19 +1,77 @@
 import React from 'react'
-import { Calendar, DollarSign, TrendingUp, ArrowDownRight, Users, PieChart } from 'lucide-react'
-import { MONTHLY_HISTORY } from '../lib/mockData'
+import { Calendar, DollarSign, TrendingUp, ArrowDownRight, Users, PieChart, BarChart3 } from 'lucide-react'
 
-export default function MonthlyReportView({ exchangeRate }) {
-  // Category distribution
-  const categoriesData = [
-    { name: 'Cortes', pct: 55, color: '#f59e0b', stroke: 'stroke-amber-500' },
-    { name: 'Combos Completos', pct: 20, color: '#10b981', stroke: 'stroke-emerald-500' },
-    { name: 'Arreglo de Barba', pct: 15, color: '#3b82f6', stroke: 'stroke-blue-500' },
-    { name: 'Pomadas y Productos', pct: 10, color: '#a855f7', stroke: 'stroke-purple-500' },
-  ]
+const MONTH_NAMES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+]
 
-  const totalYearRevenue = MONTHLY_HISTORY.reduce((sum, m) => sum + m.facturacion, 0)
-  const totalYearProfit = MONTHLY_HISTORY.reduce((sum, m) => sum + m.lucro, 0)
-  const totalYearExpenses = MONTHLY_HISTORY.reduce((sum, m) => sum + m.gastos, 0)
+export default function MonthlyReportView({ transactions = [], exchangeRate = 53 }) {
+  const currentMonthIdx = new Date().getMonth()
+  const currentMonthName = MONTH_NAMES[currentMonthIdx]
+
+  // Group real transactions by month
+  const monthlyMap = {}
+  transactions.forEach(t => {
+    if (!t.fecha) return
+    const d = new Date(t.fecha)
+    const mIdx = isNaN(d.getTime()) ? currentMonthIdx : d.getMonth()
+    const mName = MONTH_NAMES[mIdx] || currentMonthName
+
+    if (!monthlyMap[mName]) {
+      monthlyMap[mName] = { facturacion: 0, gastos: 0, comisiones: 0, lucro: 0 }
+    }
+
+    if (t.monto_usd > 0) {
+      monthlyMap[mName].facturacion += t.monto_usd
+      monthlyMap[mName].comisiones += (t.comision_usd || 0)
+    } else {
+      monthlyMap[mName].gastos += Math.abs(t.monto_usd)
+    }
+  })
+
+  // Ensure at least the current month is present in the table
+  if (!monthlyMap[currentMonthName]) {
+    monthlyMap[currentMonthName] = { facturacion: 0, gastos: 0, comisiones: 0, lucro: 0 }
+  }
+
+  // Calculate net profit for each month
+  const monthlyHistory = Object.entries(monthlyMap).map(([mes, vals]) => {
+    const lucro = vals.facturacion - vals.gastos - vals.comisiones
+    return {
+      mes: mes === currentMonthName ? `${mes} (Actual)` : mes,
+      facturacion: vals.facturacion,
+      gastos: vals.gastos,
+      comisiones: vals.comisiones,
+      lucro: Math.max(0, lucro)
+    }
+  })
+
+  const totalYearRevenue = monthlyHistory.reduce((sum, m) => sum + m.facturacion, 0)
+  const totalYearProfit = monthlyHistory.reduce((sum, m) => sum + m.lucro, 0)
+  const totalYearExpenses = monthlyHistory.reduce((sum, m) => sum + m.gastos, 0)
+
+  // Real Category Distribution from Transactions
+  const categoryCounts = {}
+  let totalCategoryVolume = 0
+  transactions.filter(t => t.monto_usd > 0).forEach(t => {
+    const cat = t.category || (t.item_name ? t.item_name.split(' ')[0] : 'Servicios')
+    categoryCounts[cat] = (categoryCounts[cat] || 0) + t.monto_usd
+    totalCategoryVolume += t.monto_usd
+  })
+
+  const palette = ['#f59e0b', '#10b981', '#3b82f6', '#a855f7', '#ec4899', '#06b6d4']
+  const categoriesData = Object.entries(categoryCounts).map(([name, sum], idx) => {
+    const pct = totalCategoryVolume > 0 ? Math.round((sum / totalCategoryVolume) * 100) : 0
+    return {
+      name,
+      sum,
+      pct,
+      color: palette[idx % palette.length]
+    }
+  })
+
+  const hasSales = totalYearRevenue > 0
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -24,7 +82,7 @@ export default function MonthlyReportView({ exchangeRate }) {
           <h2 className="text-xl font-black text-white flex items-center gap-2">
             Reporte Mensual y del Año
             <span className="text-xs px-2 py-0.5 rounded-md bg-gold-500/10 text-gold-400 border border-gold-500/20 font-medium">
-              Cuentas Claras
+              Datos Reales
             </span>
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -38,10 +96,10 @@ export default function MonthlyReportView({ exchangeRate }) {
             Ganancia Limpia Acumulada:
           </span>
           <span className="text-lg font-black text-emerald-400">
-            ${totalYearProfit.toLocaleString()} <span className="text-xs text-slate-400">USD</span>
+            ${totalYearProfit.toFixed(2)} <span className="text-xs text-slate-400">USD</span>
           </span>
           <span className="text-xs text-gold-400 font-mono ml-2">
-            (Bs. {(totalYearProfit * exchangeRate).toLocaleString()})
+            (Bs. {(totalYearProfit * exchangeRate).toFixed(2)})
           </span>
         </div>
       </div>
@@ -50,9 +108,11 @@ export default function MonthlyReportView({ exchangeRate }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         {/* Table of Months (Col 1 & 2) */}
-        <div className="lg:col-span-2 bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl">
-          <h3 className="font-bold text-white text-base mb-1">Cuentas Mes a Mes (Año en Curso)</h3>
-          <p className="text-xs text-slate-400 mb-4">Detalle de facturación, gastos y lo que te queda en el bolsillo</p>
+        <div className="lg:col-span-2 bg-dark-900 border border-dark-800 rounded-2xl p-5 shadow-xl space-y-4">
+          <div>
+            <h3 className="font-bold text-white text-base mb-1">Cuentas Mes a Mes (Año en Curso)</h3>
+            <p className="text-xs text-slate-400">Detalle de facturación, gastos y lo que te queda en el bolsillo</p>
+          </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -66,20 +126,26 @@ export default function MonthlyReportView({ exchangeRate }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-800 font-mono">
-                {MONTHLY_HISTORY.map((row, idx) => (
+                {monthlyHistory.map((row, idx) => (
                   <tr key={idx} className="hover:bg-dark-850/50 transition-colors">
                     <td className="py-3 font-sans font-bold text-slate-200">{row.mes}</td>
-                    <td className="py-3 text-right text-white font-semibold">${row.facturacion.toLocaleString()}</td>
-                    <td className="py-3 text-right text-red-400">-${row.gastos.toLocaleString()}</td>
-                    <td className="py-3 text-right text-amber-400">${row.comisiones.toLocaleString()}</td>
+                    <td className="py-3 text-right text-white font-semibold">${row.facturacion.toFixed(2)}</td>
+                    <td className="py-3 text-right text-red-400">-${row.gastos.toFixed(2)}</td>
+                    <td className="py-3 text-right text-amber-400">${row.comisiones.toFixed(2)}</td>
                     <td className="py-3 text-right text-emerald-400 font-bold font-sans">
-                      ${row.lucro.toLocaleString()} USD
+                      ${row.lucro.toFixed(2)} USD
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {!hasSales && (
+            <div className="p-3.5 rounded-xl bg-dark-850 border border-dark-750 text-center text-xs text-slate-400">
+              💡 Tu historial mensual se irá consolidando automáticamente a medida que anotes ventas y cierres de caja.
+            </div>
+          )}
         </div>
 
         {/* Donut Chart / Categorías (Col 3) */}
@@ -89,64 +155,46 @@ export default function MonthlyReportView({ exchangeRate }) {
               <PieChart className="w-4 h-4 text-gold-400" />
               <h3 className="font-bold text-white text-base">¿De Dónde Entra la Plata?</h3>
             </div>
-            <p className="text-xs text-slate-400 mb-4">Distribución de ingresos por categoría</p>
+            <p className="text-xs text-slate-400 mb-4">Distribución de ingresos por servicio/producto</p>
 
-            {/* Circular SVG Donut */}
-            <div className="flex items-center justify-center my-4 relative">
-              <svg className="w-40 h-40 transform -rotate-90" viewBox="0 0 100 100">
-                {/* Background circle */}
-                <circle cx="50" cy="50" r="38" className="stroke-dark-800" strokeWidth="14" fill="none" />
-                
-                {/* Segments: Cortes 55%, Combos 20%, Barba 15%, Productos 10% */}
-                <circle 
-                  cx="50" cy="50" r="38" 
-                  stroke="#f59e0b" strokeWidth="14" fill="none"
-                  strokeDasharray="131 238" strokeDashoffset="0"
-                />
-                <circle 
-                  cx="50" cy="50" r="38" 
-                  stroke="#10b981" strokeWidth="14" fill="none"
-                  strokeDasharray="47 238" strokeDashoffset="-131"
-                />
-                <circle 
-                  cx="50" cy="50" r="38" 
-                  stroke="#3b82f6" strokeWidth="14" fill="none"
-                  strokeDasharray="35 238" strokeDashoffset="-178"
-                />
-                <circle 
-                  cx="50" cy="50" r="38" 
-                  stroke="#a855f7" strokeWidth="14" fill="none"
-                  strokeDasharray="25 238" strokeDashoffset="-213"
-                />
-              </svg>
-
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-xs text-slate-400">Mayor Ingreso</span>
-                <span className="text-base font-black text-gold-400">Cortes (55%)</span>
+            {categoriesData.length === 0 ? (
+              <div className="py-12 text-center space-y-2 bg-dark-850/50 rounded-2xl p-4 border border-dark-800">
+                <BarChart3 className="w-8 h-8 text-slate-600 mx-auto" />
+                <span className="text-xs font-bold text-slate-400 block">
+                  Sin ventas registradas este mes ($0.00)
+                </span>
+                <p className="text-[11px] text-slate-500">
+                  Cuando anotes cobros de cortes, barbas o pomadas, aquí verás qué servicio te da más dinero.
+                </p>
               </div>
-            </div>
-
-            {/* Legend breakdown */}
-            <div className="space-y-2 mt-2">
-              {categoriesData.map((cat, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }}></span>
-                    <span className="text-slate-300 font-medium">{cat.name}</span>
+            ) : (
+              <div className="space-y-3">
+                {categoriesData.map((cat, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span className="text-slate-300 flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.color }}></span>
+                        <span>{cat.name}</span>
+                      </span>
+                      <span className="text-white font-mono font-bold">${cat.sum.toFixed(2)} ({cat.pct}%)</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-dark-800 overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${cat.pct}%`, backgroundColor: cat.color }}></div>
+                    </div>
                   </div>
-                  <span className="font-bold text-white font-mono">{cat.pct}%</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="p-3 rounded-xl bg-dark-850 border border-dark-750 text-xs mt-4">
-            <span className="text-gold-400 font-bold block mb-0.5">📌 Consejo Criollo:</span>
+          <div className="mt-5 p-3 rounded-xl bg-dark-850 border border-dark-750 text-xs">
+            <span className="text-gold-400 font-bold block mb-0.5">Rentabilidad Real:</span>
             <span className="text-slate-400">
-              Las pomadas representan el 10% pero tienen un margen del 50%. Si le dices a cada cliente que se lleve una cera, subes tus ganancias sin cortar más pelo.
+              {hasSales
+                ? `Has generado $${totalYearRevenue.toFixed(2)} en total. Tus números reflejan únicamente las transacciones reales anotadas.`
+                : 'Tus gráficos están limpios en $0.00 listos para iniciar tus operaciones reales.'}
             </span>
           </div>
-
         </div>
 
       </div>

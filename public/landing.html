@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="es-VE">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BarberOS · Control de Caja, Comisiones & Web de Citas para Barberías</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #07080b;
+      --card: #0f121a;
+      --card-card: #151824;
+      --card-border: #1e2333;
+      --card-border-glow: rgba(245, 158, 11, 0.3);
+      --gold: #f59e0b;
+      --gold-light: #fbbf24;
+      --gold-glow: rgba(245, 158, 11, 0.2);
+      --green: #10b981;
+      --green-light: #34d399;
+      --green-glow: rgba(16, 185, 129, 0.25);
+      --red: #ef4444;
+      --purple: #8b5cf6;
+      --txt: #f8fafc;
+      --txt-muted: #94a3b8;
+      --txt-dim: #64748b;
+      --font: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 95px;
+      overflow-x: hidden;
+    }
+
+    /* Ambient lighting */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -150px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 650px;
+      height: 650px;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.12) 0%, rgba(16, 185, 129, 0.05) 45%, rgba(7, 8, 11, 0) 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 580px;
+      margin: 0 auto;
+      padding: 0 18px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Top Urgency Header */
+    .top-bar {
+      background: linear-gradient(90deg, #1f1404 0%, #3a2505 50%, #1f1404 100%);
+      border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--gold-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      letter-spacing: 0.3px;
+    }
+    .badge-pulse {
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.3; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 0.3; transform: scale(0.9); }
+    }
+
+    /* Nav */
+    .nav-header {
+      padding: 14px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 17px;
+      font-weight: 900;
+      color: #fff;
+    }
+    .nav-btn {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--gold-light);
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 6px 14px;
+      border-radius: 100px;
+      text-decoration: none;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 28px 0 16px;
+    }
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      padding: 6px 14px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-size: 29px;
+      font-weight: 900;
+      line-height: 1.18;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      margin-bottom: 14px;
+    }
+    .hero h1 span.gold {
+      background: linear-gradient(135deg, #f59e0b 20%, #fef08a 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 14.5px;
+      color: var(--txt-muted);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    /* Horizontal Hero Image Under Title */
+    .hero-banner-wrap {
+      width: 100%;
+      border-radius: 20px;
+      overflow: hidden;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.8), 0 0 25px var(--gold-glow);
+      margin-bottom: 22px;
+      background: var(--card);
+      position: relative;
+    }
+    .hero-banner-img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      display: block;
+      filter: brightness(0.95) contrast(1.05);
+    }
+    .hero-banner-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(7, 8, 11, 0.85) 100%);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .hero-banner-overlay span.tag {
+      background: var(--gold);
+      color: #000;
+      font-weight: 900;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+    }
+
+    /* Hero Pills */
+    .hero-pills {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 7px;
+      margin-bottom: 22px;
+    }
+    .hero-pill {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--txt);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Primary CTA */
+    .btn-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #022013;
+      font-size: 15px;
+      font-weight: 900;
+      padding: 16px;
+      border-radius: 16px;
+      text-decoration: none;
+      box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.45);
+      transition: transform 0.15s;
+    }
+    .btn-cta:active {
+      transform: scale(0.98);
+    }
+    .cta-sub {
+      font-size: 11px;
+      color: var(--txt-dim);
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    /* Video Player Showcase Section */
+    .video-section {
+      margin: 28px 0 34px;
+      text-align: center;
+    }
+    .video-box {
+      background: #000;
+      border: 2px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      aspect-ratio: 16/9;
+      box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.9), 0 0 20px rgba(16, 185, 129, 0.15);
+    }
+    .video-thumbnail {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: brightness(0.75);
+    }
+    .video-play-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 64px;
+      height: 64px;
+      background: rgba(16, 185, 129, 0.9);
+      border: 3px solid #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
+      transition: transform 0.2s, background 0.2s;
+    }
+    .video-play-btn:hover {
+      transform: translate(-50%, -50%) scale(1.08);
+      background: var(--green);
+    }
+    .video-time-badge {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Barbershop Logos Infinite Carousel */
+    .logos-section {
+      margin: 26px 0 32px;
+      text-align: center;
+    }
+    .logos-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--txt-dim);
+      margin-bottom: 12px;
+    }
+    .logos-track {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 6px 4px 10px;
+      scrollbar-width: none;
+    }
+    .logos-track::-webkit-scrollbar {
+      display: none;
+    }
+    .logo-badge {
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .logo-badge .badge-icon {
+      font-size: 16px;
+    }
+    .logo-badge span.city {
+      font-size: 10px;
+      color: var(--txt-dim);
+      font-weight: 600;
+      margin-left: 2px;
+    }
+
+    /* Pain Section */
+    .pain-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    .pain-intro {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+    .pain-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .pain-list li {
+      font-size: 13.5px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .pain-list li span.cross {
+      color: var(--red);
+      font-weight: 900;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .pain-outro {
+      font-size: 13px;
+      color: var(--primary-light);
+      font-weight: 700;
+      padding-top: 12px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    /* Product Showcase: Vertical Screenshots Carousel (9:16) */
+    .showcase-section {
+      margin: 36px 0 32px;
+    }
+    .section-header {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .section-header h2 {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.4px;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .section-header p {
+      font-size: 13.5px;
+      color: var(--txt-muted);
+    }
+
+    .carousel-wrap {
+      position: relative;
+    }
+    .vertical-carousel {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 10px 4px 16px;
+      scrollbar-width: none;
+    }
+    .vertical-carousel::-webkit-scrollbar {
+      display: none;
+    }
+    .vert-card {
+      flex: 0 0 74%;
+      max-width: 280px;
+      scroll-snap-align: center;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+    }
+    .vert-card.active-glow {
+      border-color: rgba(245, 158, 11, 0.4);
+      box-shadow: 0 10px 30px -5px var(--gold-glow);
+    }
+    .vert-screen-slot {
+      width: 100%;
+      aspect-ratio: 9/16;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+    .vert-screen-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .vert-pill-tag {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(6px);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .vert-body {
+      padding: 14px;
+      background: var(--card-card);
+      flex: 1;
+    }
+    .vert-body h4 {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 3px;
+    }
+    .vert-body p {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.4;
+    }
+
+    /* Features Grid */
+    .grid-features {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin: 24px 0 36px;
+    }
+    .feat-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .feat-card.special {
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, var(--card) 100%);
+    }
+    .feat-icon {
+      width: 42px;
+      height: 42px;
+      background: #090a0f;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .feat-body h3 {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .feat-badge {
+      font-size: 9px;
+      background: var(--primary);
+      color: #000;
+      font-weight: 900;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .feat-body p {
+      font-size: 12.5px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+    }
+
+    /* 4 Vertical Video Testimonials (Reels/TikTok Format like Vitinho) */
+    .testimonials-section {
+      margin: 36px 0 34px;
+    }
+    .testimonials-carousel {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 8px 4px 16px;
+      scrollbar-width: none;
+    }
+    .testimonials-carousel::-webkit-scrollbar {
+      display: none;
+    }
+    .dep-card {
+      flex: 0 0 74%;
+      max-width: 270px;
+      scroll-snap-align: center;
+      background: #11141d;
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7);
+    }
+    .dep-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: #171b26;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .dep-avatar-ring {
+      padding: 2px;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #f59e0b, #ec4899, #8b5cf6);
+      display: inline-flex;
+    }
+    .dep-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      object-fit: cover;
+      display: block;
+      border: 2px solid #11141d;
+      background: #2a2f40;
+    }
+    .dep-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      line-height: 1.25;
+    }
+    .dep-name {
+      font-weight: 800;
+      font-size: 13.5px;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .dep-handle {
+      font-size: 11.5px;
+      color: var(--primary-light);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .dep-city {
+      font-size: 10.5px;
+      color: var(--txt-dim);
+    }
+    .dep-video-slot {
+      width: 100%;
+      aspect-ratio: 9/16;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+    .dep-video-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      filter: brightness(0.85);
+    }
+    .dep-play-icon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px;
+      height: 50px;
+      background: rgba(16, 185, 129, 0.85);
+      border: 2px solid #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 20px;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+    }
+    .dep-quote-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.9) 100%);
+      padding: 12px 10px 10px;
+      font-size: 11px;
+      color: #f1f5f9;
+      line-height: 1.35;
+      font-style: italic;
+    }
+
+    /* 3 Bonuses */
+    .bonuses-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 22px 20px;
+      margin-bottom: 34px;
+    }
+    .bonus-tag {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .bonus-row {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .bonus-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .bonus-num {
+      width: 26px;
+      height: 26px;
+      background: rgba(245, 158, 11, 0.15);
+      border-radius: 8px;
+      color: var(--primary-light);
+      font-size: 12px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .bonus-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+    .bonus-desc {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.4;
+    }
+
+    /* Pricing Section (EN BOLÍVARES COMO PIDIÓ EL USUARIO) */
+    .pricing-card {
+      background: linear-gradient(180deg, #181d29 0%, var(--card) 100%);
+      border: 2px solid var(--primary);
+      border-radius: 24px;
+      padding: 28px 22px;
+      text-align: center;
+      margin-bottom: 34px;
+      box-shadow: 0 15px 35px -10px rgba(245, 158, 11, 0.25);
+    }
+    .price-pill {
+      display: inline-block;
+      background: var(--primary);
+      color: #000;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 4px 14px;
+      border-radius: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+    .price-amount {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .price-del {
+      font-size: 18px;
+      color: var(--txt-dim);
+      text-decoration: line-through;
+    }
+    .price-num {
+      font-size: 44px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -1px;
+    }
+    .price-period {
+      font-size: 14px;
+      color: var(--txt-muted);
+      font-weight: 700;
+    }
+    .price-note-usd {
+      font-size: 13px;
+      color: var(--gold-light);
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+
+    .price-features {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .price-features li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--txt);
+    }
+    .price-features li span.check {
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    /* Guarantee */
+    .guarantee-box {
+      background: var(--card);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 20px;
+      padding: 22px;
+      text-align: center;
+      margin-bottom: 34px;
+    }
+    .guarantee-badge {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .guarantee-box h3 {
+      font-size: 16px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .guarantee-box p {
+      font-size: 12.5px;
+      color: var(--txt-muted);
+      line-height: 1.5;
+    }
+
+    /* FAQ */
+    .faq-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 34px;
+    }
+    .faq-item {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .faq-q {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .faq-a {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+    }
+
+    /* Sticky Bottom Bar */
+    .sticky-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(7, 8, 11, 0.96);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--card-border);
+      padding: 12px 16px;
+      z-index: 999;
+      display: flex;
+      justify-content: center;
+    }
+    .sticky-btn {
+      width: 100%;
+      max-width: 500px;
+      background: var(--green);
+      color: #022013;
+      font-size: 14.5px;
+      font-weight: 900;
+      padding: 13px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Alert -->
+  <div class="top-bar">
+    <div class="badge-pulse"></div>
+    <span>OFERTA LANZAMIENTO VENEZUELA · 7 DÍAS DE GARANTÍA TOTAL</span>
+  </div>
+
+  <!-- Header -->
+  <header class="container nav-header">
+    <div class="nav-logo">
+      <span>💈</span>
+      <span>BarberOS</span>
+    </div>
+    <a href="#precios" class="nav-btn">Planes & Precios</a>
+  </header>
+
+  <main class="container">
+    
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="badge-top">
+        ⚡ AUMENTA EL LUCRO DE TU BARBERÍA
+      </div>
+      <h1>
+        Organiza tus Ganancias y Controla tus Gastos con <span class="gold">Caja Simple y Automática</span>
+      </h1>
+      <p>
+        El sistema todo-en-uno para barberías y salones en Venezuela: cobra en Bolívares y Dólares en 3 segundos, manda el cierre diario a WhatsApp y llena tus sillas vacías.
+      </p>
+
+      <!-- Horizontal Image Under Title (User Request) -->
+      <div class="hero-banner-wrap">
+        <!-- Reemplaza el src con tu imagen horizontal de portada (16:9) -->
+        <img 
+          src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1200&q=80" 
+          alt="BarberOS en acción" 
+          class="hero-banner-img"
+        >
+        <div class="hero-banner-overlay">
+          <span>💈 BarberOS · Control Total en Celular y PC</span>
+          <span class="tag">EN VIVO</span>
+        </div>
+      </div>
+
+      <div class="hero-pills">
+        <div class="hero-pill">⏱️ Caja en 3 Segundos</div>
+        <div class="hero-pill">🌐 Tu Web de Citas</div>
+        <div class="hero-pill">📲 Cierre a WhatsApp</div>
+        <div class="hero-pill">📴 Sin Internet</div>
+      </div>
+
+      <a 
+        href="https://wa.me/?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
+        target="_blank" 
+        class="btn-cta"
+      >
+        <span>💬</span>
+        <span>OBTENER ACCESO POR WHATSAPP</span>
+      </a>
+      <div class="cta-sub">
+        7 Días de Garantía Total de Devolución · Activación en 5 Minutos
+      </div>
+    </section>
+
+    <!-- Video Showcase Section (User Request: Just after hero) -->
+    <section class="video-section">
+      <div class="section-header">
+        <h2>Mira Cómo Funciona en 45 Segundos</h2>
+        <p>Registrar un corte y cerrar caja nunca fue tan rápido</p>
+      </div>
+
+      <div class="video-box">
+        <!-- Reemplaza el src con la miniatura de tu video explicativo -->
+        <img 
+          src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=1200&q=80" 
+          alt="Video Demostración BarberOS" 
+          class="video-thumbnail"
+        >
+        <div class="video-play-btn" onclick="alert('Aquí se reproducirá tu video explicativo de 45 segundos.')">
+          ▶
+        </div>
+        <div class="video-time-badge">0:45 min</div>
+      </div>
+    </section>
+
+    <!-- Carousel of Barbershop Logos using BarberOS (User Request) -->
+    <section class="logos-section">
+      <div class="logos-title">Barberías y salones que ya usan BarberOS en Venezuela:</div>
+      <div class="logos-track">
+        <div class="logo-badge">
+          <span class="badge-icon">💈</span>
+          <span>Barbería El Fino</span>
+          <span class="city">(Caracas)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">✂️</span>
+          <span>Studio Imperial</span>
+          <span class="city">(Valencia)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">👑</span>
+          <span>Fade Master CCS</span>
+          <span class="city">(Chacao)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">💈</span>
+          <span>Golden Scissors</span>
+          <span class="city">(Maracaibo)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">⚡</span>
+          <span>El Galpón Barber</span>
+          <span class="city">(Maracay)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">🏆</span>
+          <span>Viking Barber Club</span>
+          <span class="city">(Barquisimeto)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pain vs Reality (Cruces Rojas de Vitinho) -->
+    <section>
+      <div class="pain-card">
+        <div class="pain-intro">
+          Si eres barbero de verdad, seguramente ya pasaste por esto:
+        </div>
+        <ul class="pain-list">
+          <li>
+            <span class="cross">❌</span>
+            <span>Trabajas el mes entero parado y al final parece que no te quedó nada.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>El dinero entra... pero nunca sabes cuánto realmente ganaste limpio en el bolsillo.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Mezclas la plata personal con la del negocio y se vuelve un desastre.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Pierdes tiempo calculando el Pago Móvil a mano con calculadora a las 9pm.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Peleas con los barberos los sábados por cuántos cortes hizo cada uno.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Pierdes clientes que se olvidan de volver a cortarse y se van con otro.</span>
+          </li>
+        </ul>
+        <div class="pain-outro">
+          💡 Esto no es falta de talento con la tijera. Es falta de la herramienta correcta. Y hoy eso cambia.
+        </div>
+      </div>
+    </section>
+
+    <!-- Product Showcase: Vertical Screenshots Carousel (User Request: 9:16 carousel) -->
+    <section class="showcase-section">
+      <div class="section-header">
+        <h2>Mira la App por Dentro</h2>
+        <p>Desliza para ver los módulos en pantalla completa 📱👉</p>
+      </div>
+
+      <div class="carousel-wrap">
+        <div class="vertical-carousel">
+          
+          <!-- Slide 1: Caja Rápida -->
+          <div class="vert-card active-glow">
+            <div class="vert-screen-slot">
+              <!-- Reemplaza con tu captura vertical de la Caja Rápida -->
+              <img 
+                src="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=720&q=80" 
+                alt="Caja Rápida BarberOS" 
+                class="vert-screen-img"
+              >
+              <div class="vert-pill-tag">💵 CAJA RÁPIDA</div>
+            </div>
+            <div class="vert-body">
+              <h4>Cobro en 3 Segundos</h4>
+              <p>Elige el barbero y el corte. Calcula automáticamente el monto en Bolívares a la Tasa BCV del día.</p>
+            </div>
+          </div>
+
+          <!-- Slide 2: Cierre por WhatsApp -->
+          <div class="vert-card">
+            <div class="vert-screen-slot">
+              <!-- Reemplaza con tu captura vertical de Cierre WhatsApp -->
+              <img 
+                src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=720&q=80" 
+                alt="Cierre por WhatsApp" 
+                class="vert-screen-img"
+              >
+              <div class="vert-pill-tag">📲 WHATSAPP</div>
+            </div>
+            <div class="vert-body">
+              <h4>Cierre de Caja al Chat</h4>
+              <p>Envía en 1 toque el reporte detallado con facturación, comisiones y tu ganancia limpia del día.</p>
+            </div>
+          </div>
+
+          <!-- Slide 3: Web de Citas -->
+          <div class="vert-card">
+            <div class="vert-screen-slot">
+              <!-- Reemplaza con tu captura de la Web de Citas -->
+              <img 
+                src="https://images.unsplash.com/photo-1512690459411-b9245aed614b?auto=format&fit=crop&w=720&q=80" 
+                alt="Web de Citas Pública" 
+                class="vert-screen-img"
+              >
+              <div class="vert-pill-tag">🌐 RESERVA ONLINE</div>
+            </div>
+            <div class="vert-body">
+              <h4>Tu Propio Link de Citas</h4>
+              <p>Pégalo en tu Instagram y WhatsApp. Tus clientes eligen hora y barbero sin hacer colas.</p>
+            </div>
+          </div>
+
+          <!-- Slide 4: Radar Clientes -->
+          <div class="vert-card">
+            <div class="vert-screen-slot">
+              <!-- Reemplaza con tu captura del Radar de Retargeting -->
+              <img 
+                src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=720&q=80" 
+                alt="Radar de Clientes" 
+                class="vert-screen-img"
+              >
+              <div class="vert-pill-tag">🎯 RADAR RETARGETING</div>
+            </div>
+            <div class="vert-body">
+              <h4>Recupera Clientes Perdidos</h4>
+              <p>Detecta quién tiene más de 15 días sin cortarse y activa el "Modo Día Muerto" para llenar martes y miércoles.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Grid Features -->
+    <section>
+      <div class="section-header">
+        <h2>Todo lo que Hace BarberOS</h2>
+        <p>Pensado para la realidad de Venezuela</p>
+      </div>
+
+      <div class="grid-features">
+        <div class="feat-card">
+          <div class="feat-icon">💵</div>
+          <div class="feat-body">
+            <h3>Caja Rápida Bimoneda</h3>
+            <p>Cotiza en dólares y calcula el Pago Móvil en Bolívares en 3 segundos a la tasa oficial del día.</p>
+          </div>
+        </div>
+
+        <div class="feat-card special">
+          <div class="feat-icon">🌐</div>
+          <div class="feat-body">
+            <h3>Tu Propia Web de Citas <span class="feat-badge">NOVEDAD</span></h3>
+            <p>Tus clientes reservan solos por fecha y hora con detector anti-choque de horarios.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">📲</div>
+          <div class="feat-body">
+            <h3>Cierre Diario por WhatsApp</h3>
+            <p>Tocas un botón al terminar el día y recibes el resumen formal con ganancia neta en tu chat.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">✂️</div>
+          <div class="feat-body">
+            <h3>Comisiones Automáticas</h3>
+            <p>Configura porcentajes por barbero (50%, 60%, etc.) y el sistema liquida al centavo sin discusiones.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">📝</div>
+          <div class="feat-body">
+            <h3>Control de Fiados y Clientes</h3>
+            <p>Lleva la cuenta de quién te debe, anota abonos y nunca más regales tu trabajo.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">📴</div>
+          <div class="feat-body">
+            <h3>Modo Anti-Apagones (Sin Internet)</h3>
+            <p>Si se va la luz o los datos en el local, sigues cobrando en tu celular y todo se sincroniza solo.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 Vertical Video Testimonials (User Request: 4 in carousel right before pricing) -->
+    <section class="testimonials-section">
+      <div class="section-header">
+        <h2>Mira lo que Dicen los Barberos</h2>
+        <p>Testimonios reales usando BarberOS en Venezuela 🎥👇</p>
+      </div>
+
+      <div class="testimonials-carousel">
+        
+        <!-- Video 1 -->
+        <div class="dep-card">
+          <div class="dep-header">
+            <div class="dep-avatar-ring">
+              <!-- Reemplaza con la foto de perfil -->
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" alt="Carlos Rojas" class="dep-avatar">
+            </div>
+            <div class="dep-info">
+              <span class="dep-name">Carlos "El Fino"</span>
+              <span class="dep-handle">@elfinobarber</span>
+              <span class="dep-city">Caracas · Dto. Capital</span>
+            </div>
+          </div>
+          <div class="dep-video-slot">
+            <!-- Reemplaza con la miniatura o video reel del testimonio -->
+            <img src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=720&q=80" alt="Video Carlos" class="dep-video-thumb">
+            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Carlos...')">▶</div>
+            <div class="dep-quote-overlay">
+              "Al fin sé cuánta plata limpia me queda cada día y los muchachos no pelean por comisiones."
+            </div>
+          </div>
+        </div>
+
+        <!-- Video 2 -->
+        <div class="dep-card">
+          <div class="dep-header">
+            <div class="dep-avatar-ring">
+              <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" alt="Javier Mendoza" class="dep-avatar">
+            </div>
+            <div class="dep-info">
+              <span class="dep-name">Javier Mendoza</span>
+              <span class="dep-handle">@javi_cortes</span>
+              <span class="dep-city">Valencia · Carabobo</span>
+            </div>
+          </div>
+          <div class="dep-video-slot">
+            <img src="https://images.unsplash.com/photo-1622286342621-4bd786c2447c?auto=format&fit=crop&w=720&q=80" alt="Video Javier" class="dep-video-thumb">
+            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Javier...')">▶</div>
+            <div class="dep-quote-overlay">
+              "El cierre por WhatsApp es una locura, se lo mando al dueño a las 8pm y la caja siempre cuadra."
+            </div>
+          </div>
+        </div>
+
+        <!-- Video 3 -->
+        <div class="dep-card">
+          <div class="dep-header">
+            <div class="dep-avatar-ring">
+              <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80" alt="Marcos Silva" class="dep-avatar">
+            </div>
+            <div class="dep-info">
+              <span class="dep-name">Marcos Silva</span>
+              <span class="dep-handle">@marcos_degrade</span>
+              <span class="dep-city">Maracaibo · Zulia</span>
+            </div>
+          </div>
+          <div class="dep-video-slot">
+            <img src="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=720&q=80" alt="Video Marcos" class="dep-video-thumb">
+            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Marcos...')">▶</div>
+            <div class="dep-quote-overlay">
+              "Con el Modo Día Muerto llené los martes y miércoles que antes pasaba sentado esperando."
+            </div>
+          </div>
+        </div>
+
+        <!-- Video 4 -->
+        <div class="dep-card">
+          <div class="dep-header">
+            <div class="dep-avatar-ring">
+              <img src="https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=120&q=80" alt="Alejandro Peña" class="dep-avatar">
+            </div>
+            <div class="dep-info">
+              <span class="dep-name">Alejandro Peña</span>
+              <span class="dep-handle">@imperial_barber</span>
+              <span class="dep-city">Barquisimeto · Lara</span>
+            </div>
+          </div>
+          <div class="dep-video-slot">
+            <img src="https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=720&q=80" alt="Video Alejandro" class="dep-video-thumb">
+            <div class="dep-play-icon" onclick="alert('Reproduciendo testimonio de Alejandro...')">▶</div>
+            <div class="dep-quote-overlay">
+              "El link de citas en mi Instagram me ahorra 2 horas al día respondiendo mensajes."
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3 Clean Digital Bonuses -->
+    <section>
+      <div class="bonuses-card">
+        <div class="bonus-tag">🎁 Y ADEMÁS RECIBES 3 BONOS EXCLUSIVOS</div>
+        <h3 style="font-size: 17px; font-weight: 900; color: #fff; margin-bottom: 14px;">
+          Material de Apoyo Listo para tu Barbería:
+        </h3>
+
+        <div class="bonus-row">
+          <div class="bonus-num">1</div>
+          <div>
+            <div class="bonus-title">Guía "El Secreto del Corte Rentable"</div>
+            <div class="bonus-desc">
+              Las técnicas para subir el cobro de $5 a $10 vendiendo cejas, barba y combos sin sonar pesado.
+            </div>
+          </div>
+        </div>
+
+        <div class="bonus-row">
+          <div class="bonus-num">2</div>
+          <div>
+            <div class="bonus-title">Kit de Redes "Barbería Llena en Días Muertos"</div>
+            <div class="bonus-desc">
+              50 estados de WhatsApp y plantillas de Instagram listas para copiar y pegar los martes y miércoles.
+            </div>
+          </div>
+        </div>
+
+        <div class="bonus-row">
+          <div class="bonus-num">3</div>
+          <div>
+            <div class="bonus-title">Configuración VIP 1 a 1 por WhatsApp</div>
+            <div class="bonus-desc">
+              Te acompañamos paso a paso para cargar tus precios, tus barberos y tu tasa en menos de 5 minutos.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing Section (User Request: PRECIO EN BOLÍVARES) -->
+    <section id="precios">
+      <div class="pricing-card">
+        <div class="price-pill">PLAN ACCESO COMPLETO</div>
+        <h3 style="font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 4px;">
+          BarberOS + 3 Bonos Digitales
+        </h3>
+        <p style="font-size: 13px; color: var(--txt-muted); margin-bottom: 16px;">
+          Todo lo que necesitas para tu barbería o salón en tu celular y PC
+        </p>
+
+        <!-- Precio en Bolívares Principal -->
+        <div class="price-amount">
+          <span class="price-del">Bs. 650</span>
+          <span class="price-num">Bs. 320</span>
+          <span class="price-period">/ mes</span>
+        </div>
+        <div class="price-note-usd">
+          (Equivalente a solo $6 USD al cambio oficial BCV)
+        </div>
+
+        <ul class="price-features">
+          <li><span class="check">✓</span> Aplicación BarberOS completa en celular y PC</li>
+          <li><span class="check">✓</span> Tu propia web de reservas y catálogo para clientes</li>
+          <li><span class="check">✓</span> Radar de clientes ausentes + Modo Día Muerto</li>
+          <li><span class="check">✓</span> Tarjeta de fidelización VIP digital</li>
+          <li><span class="check">✓</span> Caja rápida bimoneda USD / Bolívares</li>
+          <li><span class="check">✓</span> Cálculo automático de comisiones de barberos</li>
+          <li><span class="check">✓</span> Cierre diario por WhatsApp en 1 toque</li>
+          <li><span class="check">✓</span> Modo Anti-Apagones (funciona sin internet)</li>
+          <li><span class="check">✓</span> Los 3 Bonos Digitales de regalo</li>
+        </ul>
+
+        <a 
+          href="https://wa.me/?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20de%20Bs.%20320%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
+          target="_blank" 
+          class="btn-cta"
+        >
+          <span>💬</span>
+          <span>ACTIVAR MI CUENTA POR WHATSAPP</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Guarantee Box -->
+    <section>
+      <div class="guarantee-box">
+        <div class="guarantee-badge">🛡️</div>
+        <h3>Garantía Total de 7 Días de Reembolso</h3>
+        <p>
+          Prueba BarberOS en tu negocio por 7 días completos. Si sientes que no te ahorra tiempo, no te ayuda a controlar tu plata o no cumple tus expectativas, te devolvemos el 100% de tu dinero por Pago Móvil o Binance. Sin preguntas y sin burocracia.
+        </p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+      <div class="section-header">
+        <h2>Preguntas Frecuentes</h2>
+      </div>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">¿Cómo pago la mensualidad en Bolívares?</div>
+          <div class="faq-a">Aceptamos Pago Móvil Banco de Venezuela al cambio oficial del día, o Binance Pay (USDT) si prefieres divisas.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Tengo que saber de computadoras o Excel?</div>
+          <div class="faq-a">No. El sistema fue creado para ser tan simple como WhatsApp. Tocas el barbero, tocas el corte y queda cobrado.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Puedo ver la caja desde mi casa si tengo barberos en el local?</div>
+          <div class="faq-a">Sí. BarberOS sincroniza en tiempo real. Puedes ver desde tu celular en casa lo que cobran en la tablet o PC del negocio.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Qué pasa si se va la luz o los datos en el local?</div>
+          <div class="faq-a">BarberOS tiene arquitectura Local-First: sigue funcionando en tu teléfono sin internet y cuando regresa la señal sincroniza solo.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Mis barberos van a ver mis ganancias?</div>
+          <div class="faq-a">No. El dueño tiene acceso exclusivo a la ganancia limpia. Los barberos solo ven sus propios cortes y comisiones.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer style="text-align: center; padding: 20px 0; font-size: 11px; color: var(--txt-dim);">
+      <p>BarberOS · Ecosistema IngenioOS · Venezuela</p>
+      <p style="margin-top: 4px;">Hecho para que los barberos vivan de su talento con cuentas claras.</p>
+    </footer>
+
+  </main>
+
+  <!-- Sticky Bottom Bar -->
+  <div class="sticky-bar">
+    <a 
+      href="https://wa.me/?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20de%20Bs.%20320%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
+      target="_blank" 
+      class="sticky-btn"
+    >
+      <span>💬</span>
+      <span>Activar mi Cuenta por WhatsApp</span>
+    </a>
+  </div>
+
+</body>
+</html>

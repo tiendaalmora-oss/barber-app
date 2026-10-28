@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check, Settings, Calculator } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
 
 export default function Navbar({ 
@@ -10,9 +10,12 @@ export default function Navbar({
   onOpenCashModal, 
   onOpenExpenseModal,
   onOpenWhatsAppModal,
+  onOpenDailyCloseModal,
+  onOpenSettingsModal,
   onLogout,
   onUpdateTenant,
   activeTenant,
+  businessProfile,
   activeTab,
   onSelectTab
 }) {
@@ -73,20 +76,32 @@ export default function Navbar({
         {/* Brand & Niche Switcher */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-dark-800 border border-dark-700 shadow-inner flex items-center justify-center">
-              {nicheIcons[currentNiche] || <Scissors className="w-5 h-5 text-gold-400" />}
-            </div>
+            <button
+              onClick={onOpenSettingsModal}
+              className="w-11 h-11 rounded-xl bg-dark-800 border border-dark-700 hover:border-gold-500/50 shadow-inner flex items-center justify-center overflow-hidden shrink-0 transition-all group"
+              title="Haz clic para cambiar el Logo y datos de tu Barbería"
+            >
+              {businessProfile?.logoUrl ? (
+                <img src={businessProfile.logoUrl} alt="Logo" className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform" />
+              ) : (
+                nicheIcons[currentNiche] || <Scissors className="w-5 h-5 text-gold-400 group-hover:rotate-12 transition-transform" />
+              )}
+            </button>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-bold text-lg text-white tracking-tight flex items-center gap-1.5">
-                  {nicheNames[currentNiche] || 'Mi Negocio'}
-                </h1>
+                <button
+                  onClick={onOpenSettingsModal}
+                  className="font-bold text-lg text-white hover:text-gold-400 tracking-tight flex items-center gap-1.5 text-left transition-colors"
+                  title="Configurar Negocio"
+                >
+                  {businessProfile?.businessName || nicheNames[currentNiche] || 'Mi Negocio'}
+                </button>
                 <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
                   <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 30}d)</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                {activeTenant?.email ? `Sesión: ${activeTenant.email}` : 'Control de Caja & Cuentas Claras'}
+              <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
+                {businessProfile?.slogan || (activeTenant?.email ? `Sesión: ${activeTenant.email}` : 'Control de Caja & Cuentas Claras')}
               </p>
             </div>
           </div>
@@ -188,6 +203,26 @@ export default function Navbar({
             <span className="text-slate-400">Tasa BCV:</span>
             <span className="text-white font-bold group-hover:text-gold-400">Bs. {exchangeRate.toFixed(2)}</span>
             <span className="text-[10px] text-slate-500 underline ml-0.5">Editar</span>
+          </button>
+
+          {/* Botón Cuadre y Arqueo Diario de Caja */}
+          <button
+            onClick={onOpenDailyCloseModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 text-xs font-bold transition-all shadow-sm"
+            title="Cuadre y Arqueo Diario de Caja (Efectivo, Pago Móvil, Gastos y Ganancias)"
+          >
+            <Calculator className="w-3.5 h-3.5 text-purple-400" />
+            <span>Cuadre Diario</span>
+          </button>
+
+          {/* Botón Configuración de Negocio (Logo, WhatsApp, Redes) */}
+          <button
+            onClick={onOpenSettingsModal}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-gold-400 border border-dark-700 hover:border-gold-500/40 text-xs font-bold transition-all"
+            title="Configurar Logo, Redes Sociales, WhatsApp y Datos del Negocio"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Configuración</span>
           </button>
 
           {/* Botón WhatsApp Cierre */}

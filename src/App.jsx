@@ -16,6 +16,8 @@ import QuickCashModal from './components/QuickCashModal'
 import QuickExpenseModal from './components/QuickExpenseModal'
 import ExchangeRateModal from './components/ExchangeRateModal'
 import WhatsAppCloseModal from './components/WhatsAppCloseModal'
+import BusinessSettingsModal from './components/BusinessSettingsModal'
+import DailyCloseModal from './components/DailyCloseModal'
 import {
   NICHES,
   INITIAL_CLIENTS,
@@ -27,7 +29,7 @@ import {
   INITIAL_SAAS_TENANTS
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator } from 'lucide-react'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -173,6 +175,8 @@ export default function App() {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false)
   const [isRateModalOpen, setIsRateModalOpen] = useState(false)
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [isDailyCloseModalOpen, setIsDailyCloseModalOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState('local')
 
   // Current dynamic niche data combining metadata + editable staff/services/products
@@ -761,9 +765,12 @@ export default function App() {
         onOpenCashModal={() => setIsCashModalOpen(true)}
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
+        onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
+        onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onLogout={handleLogout}
         onUpdateTenant={handleUpdateTenant}
         activeTenant={activeTenant}
+        businessProfile={businessProfile}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
       />
@@ -817,8 +824,29 @@ export default function App() {
             )
           })}
 
+          {/* Quick Access to Cuadre and Settings */}
+          <div className="pt-3 border-t border-dark-800 space-y-1.5">
+            <button
+              onClick={() => setIsDailyCloseModalOpen(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/25 text-xs font-bold transition-all text-left shadow-sm"
+              title="Realizar el Cuadre y Arqueo Físico de Caja"
+            >
+              <Calculator className="w-4 h-4 shrink-0 text-purple-400" />
+              <span>Cuadre Diario (Arqueo)</span>
+            </button>
+
+            <button
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-white border border-dark-750 text-xs font-semibold transition-all text-left"
+              title="Subir Logo, cambiar nombre, WhatsApp y redes"
+            >
+              <Settings className="w-4 h-4 shrink-0 text-gold-400" />
+              <span>Configurar Mi Logo</span>
+            </button>
+          </div>
+
           {/* Clean Workspace Button for Barber */}
-          <div className="pt-4 mt-auto">
+          <div className="pt-2 mt-auto">
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800 space-y-1.5">
               <div className="text-[10px] font-bold text-slate-400 uppercase px-1">
                 Limpieza de Datos:
@@ -848,6 +876,7 @@ export default function App() {
               onOpenCashModal={() => setIsCashModalOpen(true)}
               onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
+              onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
               onDeleteTransaction={handleDeleteTransaction}
               onClearAllData={() => {
                 if (confirm('¿Dejar toda la caja, clientes y turnos en CERO para empezar de verdad?')) {
@@ -930,6 +959,7 @@ export default function App() {
 
           {activeTab === 'monthly' && (
             <MonthlyReportView
+              transactions={transactions}
               exchangeRate={exchangeRate}
             />
           )}
@@ -966,6 +996,27 @@ export default function App() {
         transactions={transactions}
         exchangeRate={exchangeRate}
         nicheData={nicheData}
+      />
+
+      <BusinessSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        businessProfile={businessProfile}
+        onSaveProfile={setBusinessProfile}
+        activeTenant={activeTenant}
+      />
+
+      <DailyCloseModal
+        isOpen={isDailyCloseModalOpen}
+        onClose={() => setIsDailyCloseModalOpen(false)}
+        transactions={transactions}
+        exchangeRate={exchangeRate}
+        nicheData={nicheData}
+        businessProfile={businessProfile}
+        onResetDailyTransactions={() => {
+          setTransactions([])
+          localStorage.setItem('barber_transactions', JSON.stringify([]))
+        }}
       />
 
     </div>

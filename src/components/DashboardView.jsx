@@ -7,6 +7,7 @@ export default function DashboardView({
   onOpenCashModal,
   onOpenExpenseModal,
   onOpenWhatsAppModal,
+  onOpenDailyCloseModal,
   onDeleteTransaction,
   onClearAllData,
   onLoadDemoData,
@@ -31,17 +32,53 @@ export default function DashboardView({
   const totalBusinessNetUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
   const totalServicesCount = transactions.filter(t => t.monto_usd > 0).length
 
-  // Simulated 7-day revenue trend data for the chart
-  const weeklyData = [
-    { day: 'Lun', revenue: 45, profit: 24 },
-    { day: 'Mar', revenue: 60, profit: 32 },
-    { day: 'Mié', revenue: 55, profit: 30 },
-    { day: 'Jue', revenue: 75, profit: 42 },
-    { day: 'Vie', revenue: 110, profit: 60 },
-    { day: 'Sáb', revenue: 140, profit: 78 },
-    { day: 'Hoy', revenue: totalIncomeUSD, profit: Math.max(0, totalBusinessNetUSD) },
-  ]
+  // 1. DYNAMIC 7-day revenue trend based strictly on REAL transactions
+  const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const today = new Date()
+
+  const weeklyData = Array.from({ length: 7 }).map((_, idx) => {
+    // 6 days ago ... today (idx = 6 is today)
+    const d = new Date()
+    d.setDate(today.getDate() - (6 - idx))
+    const dateIso = d.toISOString().split('T')[0]
+    const dayLabel = idx === 6 ? 'Hoy' : dayNames[d.getDay()]
+
+    const dayTx = transactions.filter(t => {
+      const txDate = t.fecha ? t.fecha.split('T')[0] : ''
+      return txDate === dateIso
+    })
+
+    const dayIncome = dayTx.filter(t => t.monto_usd > 0).reduce((sum, t) => sum + t.monto_usd, 0)
+    const dayExpenses = Math.abs(dayTx.filter(t => t.monto_usd < 0).reduce((sum, t) => sum + t.monto_usd, 0))
+    const dayCommissions = dayTx.filter(t => t.comision_usd > 0).reduce((sum, t) => sum + t.comision_usd, 0)
+    const dayProfit = Math.max(0, dayIncome - dayExpenses - dayCommissions)
+
+    return {
+      date: dateIso,
+      day: dayLabel,
+      revenue: dayIncome,
+      profit: dayProfit
+    }
+  })
+
   const maxWeeklyRevenue = Math.max(...weeklyData.map(d => d.revenue), 1)
+  const hasWeeklySales = weeklyData.some(d => d.revenue > 0)
+  const bestDay = hasWeeklySales ? [...weeklyData].sort((a, b) => b.revenue - a.revenue)[0] : null
+
+  // 2. DYNAMIC real payment methods breakdown
+  const paymentMethodsList = [
+    { id: 'pago_movil', label: 'Pago Móvil (Bs)', color: 'bg-blue-500' },
+    { id: 'efectivo', label: 'Efectivo $ (Gaveta)', color: 'bg-emerald-500' },
+    { id: 'zelle', label: 'Zelle / Binance', color: 'bg-purple-500' },
+    { id: 'punto', label: 'Punto de Venta', color: 'bg-teal-500' },
+    { id: 'fiado', label: 'Fiados (Por Cobrar)', color: 'bg-amber-500' },
+  ].map(m => {
+    const sum = transactions
+      .filter(t => t.monto_usd > 0 && (t.metodo_pago === m.id || (m.id === 'zelle' && t.metodo_pago === 'binance')))
+      .reduce((acc, t) => acc + t.monto_usd, 0)
+    const pct = totalIncomeUSD > 0 ? Math.round((sum / totalIncomeUSD) * 100) : 0
+    return { ...m, sum, pct }
+  })
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -63,12 +100,12 @@ export default function DashboardView({
         {/* Quick Action Buttons */}
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
           <button
-            onClick={onOpenWhatsAppModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 text-xs font-bold transition-all shadow-sm"
-            title="Generar y enviar resumen del día por WhatsApp"
+            onClick={onOpenDailyCloseModal || onOpenWhatsAppModal}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 text-xs font-black transition-all shadow-sm"
+            title="Arqueo de gaveta en efectivo, comisiones y cierre diario"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span>Cierre WhatsApp</span>
+            <Lock className="w-3.5 h-3.5" />
+            <span>Cuadre de Caja</span>
           </button>
           <button
             onClick={onOpenExpenseModal}
@@ -169,7 +206,7 @@ export default function DashboardView({
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="font-bold text-white text-base">Rendimiento de los Últimos 7 Días</h3>
-                <p className="text-xs text-slate-400">Compara lo que entra contra lo que te queda limpio</p>
+                <p className="text-xs text-slate-400">Datos reales de lo que entra contra lo que te queda limpio</p>
               </div>
               <div className="flex items-center gap-3 text-xs">
                 <span className="flex items-center gap-1.5 text-slate-300">
@@ -181,25 +218,42 @@ export default function DashboardView({
               </div>
             </div>
 
-            {/* Pure CSS Bar Chart */}
-            <div className="h-44 flex items-end gap-3 sm:gap-6 pt-4 px-2 border-b border-dark-800">
+            {/* Pure CSS Bar Chart (100% Real Data) */}
+            <div className="h-44 flex items-end gap-3 sm:gap-6 pt-4 px-2 border-b border-dark-800 relative">
+              {!hasWeeklySales && (
+                <div className="absolute inset-0 flex items-center justify-center text-center p-4 bg-dark-900/60 backdrop-blur-[1px] rounded-xl">
+                  <div className="space-y-1">
+                    <span className="text-xs font-bold text-slate-300 block">
+                      📊 Barras en Cero (Cuenta Limpia)
+                    </span>
+                    <span className="text-[11px] text-slate-500 block max-w-xs">
+                      Apenas anotes tu primer cobro en caja, las barras crecerán automáticamente con tus números reales.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {weeklyData.map((d, i) => {
-                const heightPct = Math.min(Math.round((d.revenue / maxWeeklyRevenue) * 100), 100)
-                const profitPct = Math.min(Math.round((d.profit / maxWeeklyRevenue) * 100), 100)
+                const heightPct = hasWeeklySales && d.revenue > 0 ? Math.min(Math.round((d.revenue / maxWeeklyRevenue) * 100), 100) : 4
+                const profitPct = hasWeeklySales && d.profit > 0 ? Math.min(Math.round((d.profit / maxWeeklyRevenue) * 100), 100) : 4
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2 h-full justify-end group">
                     <div className="w-full max-w-[28px] flex items-end justify-center gap-1 h-full">
                       {/* Revenue Bar */}
                       <div 
                         style={{ height: `${heightPct}%` }}
-                        className="w-1/2 bg-gradient-to-t from-gold-600 to-gold-400 rounded-t-md group-hover:brightness-125 transition-all"
-                        title={`Entradas: $${d.revenue}`}
+                        className={`w-1/2 rounded-t-md transition-all ${
+                          d.revenue > 0 ? 'bg-gradient-to-t from-gold-600 to-gold-400 group-hover:brightness-125' : 'bg-dark-800'
+                        }`}
+                        title={`Entradas: $${d.revenue.toFixed(2)}`}
                       ></div>
                       {/* Profit Bar */}
                       <div 
                         style={{ height: `${profitPct}%` }}
-                        className="w-1/2 bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-t-md group-hover:brightness-125 transition-all"
-                        title={`Ganancia Limpia: $${d.profit}`}
+                        className={`w-1/2 rounded-t-md transition-all ${
+                          d.profit > 0 ? 'bg-gradient-to-t from-emerald-600 to-emerald-400 group-hover:brightness-125' : 'bg-dark-800'
+                        }`}
+                        title={`Ganancia Limpia: $${d.profit.toFixed(2)}`}
                       ></div>
                     </div>
                     <span className="text-[11px] font-semibold text-slate-400 group-hover:text-white">
@@ -212,71 +266,83 @@ export default function DashboardView({
           </div>
 
           <div className="flex items-center justify-between pt-3 text-xs text-slate-400">
-            <span>Día más movido: Sábado ($140.00)</span>
+            <span>
+              {bestDay && bestDay.revenue > 0
+                ? `Día más movido: ${bestDay.day} ($${bestDay.revenue.toFixed(2)})`
+                : 'Día más movido: Sin registros aún ($0.00)'}
+            </span>
             <span className="text-emerald-400 font-medium">{totalServicesCount} atenciones hoy</span>
           </div>
         </div>
 
-        {/* Payments breakdown */}
+        {/* Payments breakdown (100% Real Data) */}
         <div className="bg-dark-900 border border-dark-800 p-5 rounded-2xl shadow-xl flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-white text-base mb-1">¿Cómo Pagó la Gente?</h3>
             <p className="text-xs text-slate-400 mb-4">Efectivo vs. Pago Móvil y Digital</p>
 
-            <div className="space-y-3">
-              {[
-                { label: 'Pago Móvil (Bs)', pct: 60, color: 'bg-blue-500' },
-                { label: 'Efectivo $ (Gaveta)', pct: 25, color: 'bg-emerald-500' },
-                { label: 'Zelle / Binance', pct: 10, color: 'bg-purple-500' },
-                { label: 'Fiados (Por Cobrar)', pct: 5, color: 'bg-amber-500' },
-              ].map((m, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex justify-between text-xs font-medium">
-                    <span className="text-slate-300">{m.label}</span>
-                    <span className="text-white font-mono">{m.pct}%</span>
+            {totalIncomeUSD === 0 ? (
+              <div className="py-8 text-center space-y-2 bg-dark-850/50 rounded-2xl p-4 border border-dark-800">
+                <span className="text-xs font-bold text-slate-400 block">
+                  Sin cobros registrados hoy ($0.00)
+                </span>
+                <p className="text-[11px] text-slate-500">
+                  Al anotar cobros con Pago Móvil, Efectivo o Zelle, aquí verás la proporción exacta en tiempo real.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {paymentMethodsList.map((m, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-xs font-medium">
+                      <span className="text-slate-300">{m.label} (${m.sum.toFixed(2)})</span>
+                      <span className="text-white font-mono">{m.pct}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-dark-800 overflow-hidden">
+                      <div className={`h-full ${m.color} rounded-full transition-all`} style={{ width: `${m.pct}%` }}></div>
+                    </div>
                   </div>
-                  <div className="w-full h-2 rounded-full bg-dark-800 overflow-hidden">
-                    <div className={`h-full ${m.color} rounded-full`} style={{ width: `${m.pct}%` }}></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="mt-5 p-3 rounded-xl bg-dark-850 border border-dark-750 text-xs">
-            <span className="text-gold-400 font-bold block mb-0.5">💡 Consejo Criollo:</span>
+            <span className="text-gold-400 font-bold block mb-0.5">💡 Control de Caja Criollo:</span>
             <span className="text-slate-400">
-              El 60% de tus cobros entra por Pago Móvil. Trata de cambiar a dólares o pagar proveedores antes del viernes para protegerte de la devaluación.
+              {totalIncomeUSD === 0
+                ? 'Mantén tu caja al día anotando cada corte y gasto para tener tu arqueo perfecto al final del día.'
+                : `Tienes $${totalIncomeUSD.toFixed(2)} facturados hoy. Recuerda hacer tu arqueo de gaveta antes de cerrar.`}
             </span>
           </div>
         </div>
 
       </div>
 
-      {/* WhatsApp Quick Closing Banner */}
+      {/* Daily Cash Closing & Audit Banner */}
       <div className="bg-gradient-to-r from-emerald-950/40 via-dark-900 to-dark-900 border border-emerald-500/30 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner">
-            <MessageSquare className="w-5 h-5" />
+            <Lock className="w-5 h-5" />
           </div>
           <div>
             <h4 className="font-bold text-white text-sm flex items-center gap-2">
-              ¿Terminaste la jornada de hoy?
+              ¿Vas a cerrar la jornada de hoy?
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
-                Cierre Automático
+                Cuadre & Cierre Diario
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-0.5">
-              Genera en 1 clic el reporte completo con comisiones, gastos y ganancia neta listo para enviar a WhatsApp.
+              Haz el arqueo de efectivo en gaveta, calcula lo que toca pagar a cada barbero y genera el acta de cierre.
             </p>
           </div>
         </div>
         <button
-          onClick={onOpenWhatsAppModal}
+          onClick={onOpenDailyCloseModal || onOpenWhatsAppModal}
           className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black shadow-md shadow-emerald-500/20 transition-all shrink-0 active:scale-95"
         >
-          <Send className="w-3.5 h-3.5 stroke-[2.5]" />
-          <span>Enviar Cierre a WhatsApp</span>
+          <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>Hacer Cuadre y Cierre de Caja</span>
         </button>
       </div>
 

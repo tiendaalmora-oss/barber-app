@@ -138,8 +138,12 @@ export default function PublicBookingView({
         
         {/* Hero Business Presentation Card */}
         <div className="bg-gradient-to-b from-dark-900 to-dark-950 border border-dark-800 rounded-3xl p-6 text-center relative overflow-hidden shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-500/20 to-amber-500/5 border border-gold-500/40 mx-auto flex items-center justify-center mb-3 shadow-inner">
-            <Scissors className="w-8 h-8 text-gold-400" />
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gold-500/20 to-amber-500/5 border border-gold-500/40 mx-auto flex items-center justify-center mb-3 shadow-inner overflow-hidden">
+            {businessProfile?.logoUrl ? (
+              <img src={businessProfile.logoUrl} alt={businessProfile.businessName} className="w-full h-full object-cover" />
+            ) : (
+              <Scissors className="w-9 h-9 text-gold-400" />
+            )}
           </div>
 
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold mb-2">
