@@ -1,5 +1,5 @@
 import React from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, DollarSign, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, Crown, UserCheck } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut } from 'lucide-react'
 
 export default function Navbar({ 
   currentNiche, 
@@ -9,7 +9,7 @@ export default function Navbar({
   onOpenCashModal, 
   onOpenExpenseModal,
   onOpenWhatsAppModal,
-  onOpenAuthModal,
+  onLogout,
   activeTenant,
   activeTab,
   onSelectTab
@@ -41,14 +41,9 @@ export default function Navbar({
                 <h1 className="font-bold text-lg text-white tracking-tight flex items-center gap-1.5">
                   {nicheNames[currentNiche] || 'Mi Negocio'}
                 </h1>
-                <button
-                  onClick={onOpenAuthModal}
-                  className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1 transition-all"
-                  title="Ver estado de suscripción o cambiar de cuenta"
-                >
-                  <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 27}d)</span>
-                  <span className="text-gold-400">• Cuentas / Admin</span>
-                </button>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
+                  <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 30}d)</span>
+                </span>
               </div>
               <p className="text-xs text-slate-400">
                 {activeTenant?.email ? `Sesión: ${activeTenant.email}` : 'Control de Caja & Cuentas Claras'}
@@ -118,14 +113,14 @@ export default function Navbar({
 
         {/* Right side: Tasa BCV + Action CTAs */}
         <div className="flex items-center gap-2 justify-end flex-wrap">
-          {/* Botón Portal de Acceso / Super-Admin */}
+          {/* Botón Cerrar Sesión */}
           <button
-            onClick={onOpenAuthModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all"
-            title="Entrar con otro Correo, Crear Cuenta o Abrir Panel Super-Admin"
+            onClick={onLogout}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-red-500/15 text-slate-300 hover:text-red-400 border border-dark-700 hover:border-red-500/30 text-xs font-bold transition-all"
+            title="Cerrar sesión de tu cuenta"
           >
-            <Crown className="w-3.5 h-3.5 text-gold-400" />
-            <span>Acceso / Admin</span>
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Salir</span>
           </button>
 
           {/* Tasa BCV Pill */}

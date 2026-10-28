@@ -6,9 +6,7 @@ export default function SubscriptionLockView({
   saasConfig,
   exchangeRate,
   onReportPaymentRef,
-  onOpenAuthModal,
-  onSwitchToDemo,
-  onOpenSuperAdmin
+  onLogout
 }) {
   const [paymentRef, setPaymentRef] = useState('')
   const [selectedMethod, setSelectedMethod] = useState('Pago Móvil BDV')
@@ -60,29 +58,18 @@ export default function SubscriptionLockView({
       
       {/* Top Bar */}
       <div className="max-w-3xl w-full mx-auto flex items-center justify-between gap-2 pb-4 border-b border-dark-800">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <Lock className="w-3.5 h-3.5 text-gold-400" />
+          <span>Cuenta: <strong className="text-white">{tenant?.email}</strong></span>
+        </div>
+
         <button
-          onClick={onSwitchToDemo}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-800 border border-dark-700 text-xs font-bold text-slate-300 transition-all"
+          onClick={onLogout}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-800 border border-dark-700 text-xs font-bold text-gold-400 transition-all"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Volver a Barbería Demo</span>
+          <span>Cerrar Sesión / Cambiar Correo</span>
         </button>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpenAuthModal}
-            className="px-3 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-800 border border-dark-700 text-xs font-bold text-gold-400"
-          >
-            Cambiar Correo
-          </button>
-          <button
-            onClick={onOpenSuperAdmin}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gold-500/15 hover:bg-gold-500/25 border border-gold-500/30 text-xs font-black text-gold-400"
-          >
-            <Crown className="w-3.5 h-3.5" />
-            <span>Super-Admin</span>
-          </button>
-        </div>
       </div>
 
       {/* Center Lock / Activation Card */}

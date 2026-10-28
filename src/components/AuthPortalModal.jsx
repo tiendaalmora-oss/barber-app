@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { X, Mail, Lock, Store, Phone, User, ShieldCheck, Crown, LogIn, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react'
+import { X, Mail, Lock, Scissors, ShieldCheck, Crown, LogIn, UserPlus, AlertCircle } from 'lucide-react'
 
 export default function AuthPortalModal({
   isOpen,
+  isFullScreenGate = false,
   onClose,
   tenants,
   saasConfig,
@@ -11,14 +12,14 @@ export default function AuthPortalModal({
   onOpenSuperAdmin,
   initialTab = 'login'
 }) {
-  const [tab, setTab] = useState(initialTab) // 'login' | 'register' | 'admin'
+  const [tab, setTab] = useState(initialTab) // 'login' | 'register'
   const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
-    if (isOpen && initialTab) {
+    if ((isOpen || isFullScreenGate) && initialTab) {
       setTab(initialTab)
     }
-  }, [isOpen, initialTab])
+  }, [isOpen, isFullScreenGate, initialTab])
 
   // Login form
   const [loginEmail, setLoginEmail] = useState('')
@@ -32,33 +33,50 @@ export default function AuthPortalModal({
   const [regPhone, setRegPhone] = useState('')
   const [regNiche, setRegNiche] = useState('barberia')
 
-  // Admin form
-  const [adminPin, setAdminPin] = useState('')
+  if (!isOpen && !isFullScreenGate) return null
 
-  if (!isOpen) return null
+  const priceUsd = saasConfig?.monthlyPriceUsd || 6
+  const priceBs = saasConfig?.monthlyPriceBsFixed || '6.024'
 
   const handleLogin = (e) => {
     e.preventDefault()
     setErrorMsg('')
+    const cleanEmail = loginEmail.trim().toLowerCase()
+    const cleanPass = loginPass.trim()
+
     const found = tenants.find(
-      t => t.email.toLowerCase() === loginEmail.trim().toLowerCase()
+      t => t.email.toLowerCase() === cleanEmail
     )
     if (!found) {
-      setErrorMsg('No encontramos ese correo registrado. Regístrate en la pestaña "Crear Cuenta".')
+      setErrorMsg('No encontramos ese correo registrado. Si eres nuevo, toca la pestaña "Crear Cuenta".')
       return
     }
+
+    // Strict password validation
+    if ((found.password || '') !== cleanPass) {
+      setErrorMsg('Contraseña incorrecta. Verifica tu clave e intenta de nuevo.')
+      return
+    }
+
     onLoginSuccess(found)
-    onClose()
+    if (onClose) onClose()
   }
 
   const handleRegister = (e) => {
     e.preventDefault()
     setErrorMsg('')
+    const cleanEmail = regEmail.trim().toLowerCase()
+
     const exists = tenants.find(
-      t => t.email.toLowerCase() === regEmail.trim().toLowerCase()
+      t => t.email.toLowerCase() === cleanEmail
     )
     if (exists) {
-      setErrorMsg('Ese correo electrónico ya está registrado. Usa "Entrar con Correo".')
+      setErrorMsg('Ese correo electrónico ya está registrado. Usa la pestaña "Iniciar Sesión".')
+      return
+    }
+
+    if (regPass.trim().length < 4) {
+      setErrorMsg('La contraseña debe tener al menos 4 caracteres.')
       return
     }
 
@@ -66,11 +84,11 @@ export default function AuthPortalModal({
       id: 'ten_' + Date.now(),
       businessName: regBusiness.trim(),
       ownerName: regOwner.trim(),
-      email: regEmail.trim().toLowerCase(),
+      email: cleanEmail,
       password: regPass.trim(),
       phone: regPhone.trim(),
       niche: regNiche,
-      isCleanAccount: true, // Starts 100% clean for real customers
+      isCleanAccount: true, // Starts 100% clean in $0.00 for real customers
       status: 'pendiente_pago', // Must pay upfront to activate (7-day guarantee)
       activatedAt: null,
       daysRemaining: 0,
@@ -79,75 +97,60 @@ export default function AuthPortalModal({
     }
 
     onRegisterTenant(newTenant)
-    onClose()
-  }
-
-  const handleAdminAccess = (e) => {
-    e.preventDefault()
-    setErrorMsg('')
-    if (adminPin.trim() === (saasConfig.adminPin || '2026')) {
-      onOpenSuperAdmin()
-      onClose()
-    } else {
-      setErrorMsg('PIN Maestro incorrecto (Por defecto es: 2026)')
-    }
+    if (onClose) onClose()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fadeIn overflow-y-auto">
-      <div className="bg-dark-900 border border-dark-700 w-full max-w-md rounded-3xl shadow-2xl p-5 my-auto">
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 bg-dark-950/95 backdrop-blur-md animate-fadeIn overflow-y-auto">
+      <div className="bg-dark-900 border border-dark-700 w-full max-w-md rounded-3xl shadow-2xl p-6 my-auto">
         
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-dark-800">
-          <div>
-            <h3 className="font-black text-white text-base">
-              Acceso por Correo Electrónico
-            </h3>
-            <p className="text-xs text-slate-400">
-              Sistema de Suscripciones • Garantía de {saasConfig.guaranteeDays} Días
-            </p>
+        {/* Brand Header */}
+        <div className="flex items-center justify-between pb-4 border-b border-dark-800">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gold-500/15 border border-gold-500/30 flex items-center justify-center text-gold-400">
+              <Scissors className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-black text-white text-base tracking-tight">
+                Ingenio OS • Barberías & Salones
+              </h3>
+              <p className="text-[11px] text-slate-400">
+                Caja Dual (USD/Bs), Agenda Web y Retargeting
+              </p>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl bg-dark-800 text-slate-400 hover:text-white"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!isFullScreenGate && onClose && (
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl bg-dark-800 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="grid grid-cols-3 gap-1.5 bg-dark-950 p-1.5 rounded-2xl border border-dark-800 mt-4">
+        {/* Mode Switcher Tabs (Only Login & Register for Customers) */}
+        <div className="grid grid-cols-2 gap-1.5 bg-dark-950 p-1.5 rounded-2xl border border-dark-800 mt-4">
           <button
             type="button"
             onClick={() => { setTab('login'); setErrorMsg('') }}
-            className={`py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 transition-all ${
-              tab === 'login' ? 'bg-gold-500 text-black' : 'text-slate-400 hover:text-white'
+            className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+              tab === 'login' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             <LogIn className="w-3.5 h-3.5" />
-            <span>Entrar</span>
+            <span>Iniciar Sesión</span>
           </button>
 
           <button
             type="button"
             onClick={() => { setTab('register'); setErrorMsg('') }}
-            className={`py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 transition-all ${
-              tab === 'register' ? 'bg-gold-500 text-black' : 'text-slate-400 hover:text-white'
+            className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+              tab === 'register' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>Crear Cuenta</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => { setTab('admin'); setErrorMsg('') }}
-            className={`py-2 rounded-xl text-[11px] font-black flex items-center justify-center gap-1 transition-all ${
-              tab === 'admin' ? 'bg-purple-600 text-white' : 'text-purple-400 hover:text-white'
-            }`}
-          >
-            <Crown className="w-3.5 h-3.5" />
-            <span>Super-Admin</span>
+            <span>Crear Cuenta Nueva</span>
           </button>
         </div>
 
@@ -158,19 +161,19 @@ export default function AuthPortalModal({
           </div>
         )}
 
-        {/* TAB 1: LOGIN CON CORREO */}
+        {/* TAB 1: INICIAR SESIÓN CON CORREO Y CONTRASEÑA */}
         {tab === 'login' && (
-          <form onSubmit={handleLogin} className="mt-4 space-y-3.5">
+          <form onSubmit={handleLogin} className="mt-4 space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">
-                Correo Electrónico de tu Barbería / Salón
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                Correo Electrónico Registrado
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                 <input
                   type="email"
                   required
-                  placeholder="ejemplo@tubarberia.com"
+                  placeholder="tucorreo@ejemplo.com"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
@@ -179,8 +182,8 @@ export default function AuthPortalModal({
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">
-                Contraseña
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                Contraseña de tu Cuenta
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -197,43 +200,22 @@ export default function AuthPortalModal({
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20"
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 transition-all"
             >
-              Entrar a Mi Negocio
+              Entrar a Mi Sistema
             </button>
 
-            {/* Quick Test Accounts for Owner Demo */}
-            <div className="pt-3 border-t border-dark-800 space-y-1.5">
-              <span className="text-[10px] font-bold uppercase text-slate-500 block">
-                Prueba rápida de estados (Toca uno para ver cómo funciona):
-              </span>
-              <div className="grid grid-cols-1 gap-1.5">
-                {tenants.slice(0, 3).map(t => (
-                  <button
-                    type="button"
-                    key={t.id}
-                    onClick={() => {
-                      onLoginSuccess(t)
-                      onClose()
-                    }}
-                    className="p-2 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 flex items-center justify-between text-left text-[11px]"
-                  >
-                    <div>
-                      <span className="font-bold text-white block">{t.businessName}</span>
-                      <span className="text-slate-400 font-mono text-[10px]">{t.email}</span>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                      t.status === 'activo'
-                        ? 'bg-emerald-500/15 text-emerald-400'
-                        : t.status === 'pendiente_pago'
-                        ? 'bg-amber-500/15 text-amber-400'
-                        : 'bg-red-500/15 text-red-400'
-                    }`}>
-                      {t.status === 'activo' ? `🟢 Activo (${t.daysRemaining}d)` : t.status === 'pendiente_pago' ? '⏳ Por Pagar' : '🔴 Vencido'}
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <div className="pt-3 border-t border-dark-800 text-center">
+              <p className="text-[11px] text-slate-400">
+                ¿Aún no tienes cuenta para tu Barbería o Salón?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setTab('register'); setErrorMsg('') }}
+                  className="text-gold-400 font-bold underline hover:text-gold-300"
+                >
+                  Regístrate aquí
+                </button>
+              </p>
             </div>
           </form>
         )}
@@ -244,7 +226,7 @@ export default function AuthPortalModal({
             <div className="p-3 rounded-xl bg-gold-500/10 border border-gold-500/30 text-[11px] text-gold-300 flex items-start gap-2">
               <ShieldCheck className="w-4 h-4 text-gold-400 shrink-0 mt-0.5" />
               <span>
-                <strong>Garantía de {saasConfig.guaranteeDays} Días:</strong> Creas tu correo, activas tu mes (${saasConfig.monthlyPriceUsd}) y tienes {saasConfig.guaranteeDays} días de prueba con devolución garantizada si no te convence.
+                <strong>Garantía de {saasConfig.guaranteeDays} Días:</strong> Registra tu negocio, activa tu mes (<strong>${priceUsd} USD / {priceBs} Bs</strong>) y pruébalo por {saasConfig.guaranteeDays} días con devolución 100% garantizada.
               </span>
             </div>
 
@@ -293,7 +275,7 @@ export default function AuthPortalModal({
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Crea una Contraseña
+                  Crea tu Contraseña
                 </label>
                 <input
                   type="password"
@@ -338,48 +320,29 @@ export default function AuthPortalModal({
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs shadow-lg shadow-emerald-500/20"
+              className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs shadow-lg shadow-emerald-500/20 transition-all"
             >
-              Crear Mi Cuenta y Ver Datos de Pago (${saasConfig.monthlyPriceUsd})
+              Crear Mi Cuenta y Ver Datos de Pago (${priceUsd} / {priceBs} Bs)
             </button>
           </form>
         )}
 
-        {/* TAB 3: SUPER-ADMIN (DUEÑO DEL SAAS) */}
-        {tab === 'admin' && (
-          <form onSubmit={handleAdminAccess} className="mt-4 space-y-4">
-            <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-xs text-purple-200 space-y-1">
-              <div className="font-black text-purple-400 flex items-center gap-1.5">
-                <Crown className="w-4 h-4" />
-                <span>Panel Maestro de Suscripciones (Dueño SaaS)</span>
-              </div>
-              <p className="text-[11px] text-slate-300">
-                Desde aquí controlas todas las barberías registradas, activas +30 días al recibir el pago, controlas los 7 días de garantía y configuras tu Pago Móvil / Binance.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">
-                PIN Maestro de Administrador (Por defecto: <code className="text-gold-400">2026</code>)
-              </label>
-              <input
-                type="password"
-                required
-                placeholder="Escribe tu PIN (ej. 2026)"
-                value={adminPin}
-                onChange={(e) => setAdminPin(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl bg-dark-850 border border-purple-500/40 text-sm text-white font-mono text-center tracking-widest focus:outline-none focus:border-purple-400"
-                autoFocus
-              />
-            </div>
-
+        {/* Discreet Owner Admin Access Footer */}
+        {onOpenSuperAdmin && (
+          <div className="mt-5 pt-3 border-t border-dark-850 flex items-center justify-between text-[10px] text-slate-600">
+            <span>Ingenio OS © 2026</span>
             <button
-              type="submit"
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-purple-600/25"
+              type="button"
+              onClick={() => {
+                if (onClose) onClose()
+                onOpenSuperAdmin()
+              }}
+              className="flex items-center gap-1 text-slate-500 hover:text-purple-400 transition-colors"
             >
-              Entrar al Panel Maestro Super-Admin
+              <Crown className="w-3 h-3" />
+              <span>Admin</span>
             </button>
-          </form>
+          </div>
         )}
 
       </div>

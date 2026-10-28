@@ -14,6 +14,9 @@ export default function SuperAdminView({
   onSelectTenantAndExit,
   onExitSuperAdmin
 }) {
+  const [isUnlocked, setIsUnlocked] = useState(false)
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
   const [filter, setFilter] = useState('all')
   const [showSettings, setShowSettings] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -21,6 +24,7 @@ export default function SuperAdminView({
   const [configForm, setConfigForm] = useState(saasConfig)
   const [savedToast, setSavedToast] = useState(false)
   const [copiedRegLink, setCopiedRegLink] = useState(false)
+  const [copiedDemoCreds, setCopiedDemoCreds] = useState(false)
 
   // Manual tenant creation / edit form
   const [newBiz, setNewBiz] = useState('')
@@ -205,6 +209,90 @@ export default function SuperAdminView({
     setShowAddModal(false)
   }
 
+  const handleUnlockPin = (e) => {
+    e.preventDefault()
+    if (pinInput.trim() === (saasConfig.adminPin || '2026')) {
+      setIsUnlocked(true)
+      setPinError('')
+    } else {
+      setPinError('Contraseña / PIN Maestro incorrecto.')
+    }
+  }
+
+  const demoTenant = tenants.find(t => !t.isCleanAccount) || {
+    email: 'demo@ingenioos.online',
+    password: 'demo2026'
+  }
+
+  const handleCopyDemoCredentials = () => {
+    const text = `💈 Acceso de Prueba (Ingenio OS):\n👉 Link: ${window.location.origin}/?login=1\n📧 Correo: ${demoTenant.email}\n🔑 Contraseña: ${demoTenant.password || 'demo2026'}`
+    navigator.clipboard.writeText(text)
+    setCopiedDemoCreds(true)
+    setTimeout(() => setCopiedDemoCreds(false), 2500)
+  }
+
+  // Mandatory PIN Gate before entering Super-Admin
+  if (!isUnlocked) {
+    return (
+      <div className="min-h-screen bg-dark-950 text-slate-100 flex items-center justify-center p-4 font-sans">
+        <div className="bg-dark-900 border-2 border-purple-500/40 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-purple-500/15 border border-purple-500/40 text-purple-400">
+              <Lock className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-white">
+                Bóveda Super-Admin • Ingenio OS
+              </h2>
+              <p className="text-xs text-slate-400">
+                Acceso exclusivo para el dueño del SaaS
+              </p>
+            </div>
+          </div>
+
+          {pinError && (
+            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold">
+              {pinError}
+            </div>
+          )}
+
+          <form onSubmit={handleUnlockPin} className="space-y-3.5">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                Ingresa tu Contraseña / PIN Maestro:
+              </label>
+              <input
+                type="password"
+                required
+                autoFocus
+                placeholder="••••••••"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-dark-850 border border-purple-500/40 text-center text-white font-mono text-base tracking-widest focus:outline-none focus:border-purple-400"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={onExitSuperAdmin}
+                className="flex-1 py-3 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 text-xs font-bold"
+              >
+                Salir
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black shadow-lg shadow-purple-600/25"
+              >
+                Desbloquear Panel
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-dark-950 text-slate-100 pb-16 font-sans">
       
@@ -288,6 +376,31 @@ export default function SuperAdminView({
             >
               <Share2 className="w-4 h-4" />
               <span>Enviar por WhatsApp</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Private Registered Demo Credentials Banner (For Videos or High-Intent Prospects) */}
+        <div className="bg-dark-900 border border-gold-500/30 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-gold-400">
+              🎬 Cuenta Demo Privada (Para tus Videos o Prospectos Muy Interesados)
+            </span>
+            <p className="text-xs text-slate-300 mt-0.5">
+              El acceso público está 100% bloqueado. Si necesitas grabar publicidad o pasarle acceso temporal a un cliente muy interesado, usa esta cuenta:
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="px-3 py-1.5 rounded-xl bg-dark-950 border border-dark-800 text-xs font-mono text-slate-300">
+              Correo: <strong className="text-gold-400">{demoTenant.email}</strong> • Clave: <strong className="text-emerald-400">{demoTenant.password || 'demo2026'}</strong>
+            </div>
+            <button
+              onClick={handleCopyDemoCredentials}
+              className="px-3.5 py-2 rounded-xl bg-gold-500/15 hover:bg-gold-500/25 text-gold-400 border border-gold-500/30 text-xs font-black flex items-center gap-1.5"
+            >
+              {copiedDemoCreds ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedDemoCreds ? '¡Credenciales Copiadas!' : 'Copiar Acceso Demo'}</span>
             </button>
           </div>
         </div>

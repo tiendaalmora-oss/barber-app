@@ -52,15 +52,31 @@ export default function App() {
   })
 
   const [tenants, setTenants] = useState(() => {
-    const saved = localStorage.getItem('barber_saas_tenants')
-    return saved ? JSON.parse(saved) : INITIAL_SAAS_TENANTS
+    const savedV2 = localStorage.getItem('barber_saas_tenants_v2')
+    if (savedV2) return JSON.parse(savedV2)
+
+    // Migrate any real accounts created by user in v1 while removing fake demo accounts
+    const oldSaved = localStorage.getItem('barber_saas_tenants')
+    if (oldSaved) {
+      try {
+        const parsed = JSON.parse(oldSaved)
+        const realUserAccounts = parsed.filter(
+          t => !['ten_1', 'ten_2', 'ten_3', 'ten_4'].includes(t.id)
+        )
+        return [...realUserAccounts, ...INITIAL_SAAS_TENANTS]
+      } catch (e) {
+        return INITIAL_SAAS_TENANTS
+      }
+    }
+    return INITIAL_SAAS_TENANTS
   })
 
+  // Strictly null by default: no public demo access without logging in!
   const [activeTenantId, setActiveTenantId] = useState(() => {
-    return localStorage.getItem('barber_active_tenant_id') || 'ten_1'
+    return localStorage.getItem('barber_logged_tenant_id') || null
   })
 
-  const activeTenant = tenants.find(t => t.id === activeTenantId) || tenants[0]
+  const activeTenant = tenants.find(t => t.id === activeTenantId) || null
 
   // Local-first persistent state
   const [exchangeRate, setExchangeRate] = useState(() => {
@@ -183,11 +199,15 @@ export default function App() {
   }, [saasConfig])
 
   useEffect(() => {
-    localStorage.setItem('barber_saas_tenants', JSON.stringify(tenants))
+    localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(tenants))
   }, [tenants])
 
   useEffect(() => {
-    localStorage.setItem('barber_active_tenant_id', activeTenantId)
+    if (activeTenantId) {
+      localStorage.setItem('barber_logged_tenant_id', activeTenantId)
+    } else {
+      localStorage.removeItem('barber_logged_tenant_id')
+    }
   }, [activeTenantId])
 
   // Clean workspace vs Load Demo workspace
@@ -295,10 +315,17 @@ export default function App() {
       businessName: tenant.businessName,
       whatsapp: tenant.phone || prev.whatsapp
     }))
-    // If this is a newly created real customer account, clean out demo transactions/clients/appointments
+    // If this is a real customer account, clean out demo transactions/clients/appointments
     if (tenant.isCleanAccount) {
       handleClearAllWorkspaceData()
+    } else if (tenant.email === 'demo@ingenioos.online') {
+      handleLoadDemoWorkspaceData()
     }
+  }
+
+  const handleLogout = () => {
+    setActiveTenantId(null)
+    setAuthInitialTab('login')
   }
 
   const handleRegisterNewTenant = async (newTenant) => {
@@ -548,36 +575,33 @@ export default function App() {
     )
   }
 
-  // 3. If Active Tenant has NOT paid upfront ('pendiente_pago') or is expired ('vencido') -> Lock Screen with 7-Day Guarantee
-  if (activeTenant && activeTenant.status !== 'activo') {
+  // 3. If NOT Logged In (!activeTenant) -> Mandatory Full-Screen Login / Register Gate (NO public demo!)
+  if (!activeTenant) {
     return (
-      <>
-        <SubscriptionLockView
-          tenant={activeTenant}
-          saasConfig={saasConfig}
-          exchangeRate={exchangeRate}
-          onReportPaymentRef={handleReportPaymentRef}
-          onOpenAuthModal={() => {
-            setAuthInitialTab('login')
-            setIsAuthModalOpen(true)
-          }}
-          onSwitchToDemo={() => {
-            const firstActive = tenants.find(t => t.status === 'activo') || tenants[0]
-            if (firstActive) handleSelectTenant(firstActive)
-          }}
-          onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
-        />
-        <AuthPortalModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          tenants={tenants}
-          saasConfig={saasConfig}
-          onLoginSuccess={handleSelectTenant}
-          onRegisterTenant={handleRegisterNewTenant}
-          onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
-          initialTab={authInitialTab}
-        />
-      </>
+      <AuthPortalModal
+        isOpen={true}
+        isFullScreenGate={true}
+        onClose={null}
+        tenants={tenants}
+        saasConfig={saasConfig}
+        onLoginSuccess={handleSelectTenant}
+        onRegisterTenant={handleRegisterNewTenant}
+        onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
+        initialTab={isDirectRegisterLink ? 'register' : authInitialTab}
+      />
+    )
+  }
+
+  // 4. If Active Tenant has NOT paid upfront ('pendiente_pago') or is expired ('vencido') -> Lock Screen with 7-Day Guarantee
+  if (activeTenant.status !== 'activo') {
+    return (
+      <SubscriptionLockView
+        tenant={activeTenant}
+        saasConfig={saasConfig}
+        exchangeRate={exchangeRate}
+        onReportPaymentRef={handleReportPaymentRef}
+        onLogout={handleLogout}
+      />
     )
   }
 
@@ -593,10 +617,7 @@ export default function App() {
         onOpenCashModal={() => setIsCashModalOpen(true)}
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
-        onOpenAuthModal={() => {
-          setAuthInitialTab('login')
-          setIsAuthModalOpen(true)
-        }}
+        onLogout={handleLogout}
         activeTenant={activeTenant}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -651,52 +672,24 @@ export default function App() {
             )
           })}
 
-          {/* Owner SaaS Control + Clean/Demo Switcher */}
-          <div className="pt-4 mt-auto space-y-2">
-            <button
-              onClick={() => setIsSuperAdminOpen(true)}
-              className="w-full p-3 rounded-xl bg-gradient-to-r from-purple-600/20 to-indigo-600/20 hover:from-purple-600/30 hover:to-indigo-600/30 border border-purple-500/40 text-left transition-all group"
-            >
-              <div className="flex items-center justify-between text-xs font-black text-purple-300 group-hover:text-white">
-                <span className="flex items-center gap-1.5">
-                  <Crown className="w-4 h-4 text-gold-400" />
-                  <span>Panel Super-Admin</span>
-                </span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/30 text-purple-200">
-                  SaaS
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Activar clientes (+30d), correos y link de venta
-              </p>
-            </button>
-
+          {/* Clean Workspace Button for Barber */}
+          <div className="pt-4 mt-auto">
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800 space-y-1.5">
               <div className="text-[10px] font-bold text-slate-400 uppercase px-1">
-                Modo de Datos:
+                Limpieza de Datos:
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={() => {
-                    if (confirm('¿Quieres dejar Caja, Clientes y Turnos en CERO listo para uso real?')) {
-                      handleClearAllWorkspaceData()
-                    }
-                  }}
-                  className="py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-red-500/20 text-[10px] font-bold text-slate-300 hover:text-red-400 border border-dark-750 flex items-center justify-center gap-1"
-                  title="Dejar en cero para entregar al cliente"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  <span>Dejar en 0</span>
-                </button>
-                <button
-                  onClick={handleLoadDemoWorkspaceData}
-                  className="py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-purple-500/20 text-[10px] font-bold text-purple-300 border border-dark-750 flex items-center justify-center gap-1"
-                  title="Cargar datos llenos para grabar videos de publicidad"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Modo Video</span>
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  if (confirm('¿Quieres dejar Caja, Clientes y Turnos en CERO?')) {
+                    handleClearAllWorkspaceData()
+                  }
+                }}
+                className="w-full py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-red-500/20 text-[10px] font-bold text-slate-300 hover:text-red-400 border border-dark-750 flex items-center justify-center gap-1"
+                title="Reiniciar caja y turnos a cero"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Reiniciar Caja a 0</span>
+              </button>
             </div>
           </div>
         </aside>

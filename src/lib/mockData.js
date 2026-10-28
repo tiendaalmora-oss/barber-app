@@ -300,59 +300,18 @@ export const INITIAL_SAAS_CONFIG = {
 export const INITIAL_SAAS_TENANTS = [
   {
     id: 'ten_1',
-    businessName: 'Barbería & Studio El Fino',
-    ownerName: 'Carlos Rodríguez',
-    email: 'carlos@barberiaelfino.com',
-    password: '123',
-    phone: '+584121234567',
+    businessName: 'Barbería & Studio Imperial (Cuenta Demo Oficial)',
+    ownerName: 'Cuenta Demo IngenioOS',
+    email: 'demo@ingenioos.online',
+    password: 'demo2026',
+    phone: '+5491164827875',
     niche: 'barberia',
+    isCleanAccount: false,
     status: 'activo', // 'pendiente_pago' | 'activo' | 'vencido' | 'reembolsado'
-    activatedAt: getDateDaysAgo(3), // Paid 3 days ago -> Day 3 of 7 guarantee, 27 days left
-    daysRemaining: 27,
-    lastPaymentRef: 'PM-8492',
-    amountPaidUsd: 10
-  },
-  {
-    id: 'ten_2',
-    businessName: 'Salón & Uñas Glamour VIP',
-    ownerName: 'Daniela Mendoza',
-    email: 'daniela@glamourvip.com',
-    password: '123',
-    phone: '+584149876543',
-    niche: 'estetica',
-    status: 'activo',
-    activatedAt: getDateDaysAgo(14), // Paid 14 days ago -> Past 7d guarantee, 16 days left
-    daysRemaining: 16,
-    lastPaymentRef: 'BIN-3910',
-    amountPaidUsd: 10
-  },
-  {
-    id: 'ten_3',
-    businessName: 'Barbería Los Chamos',
-    ownerName: 'Marcos Pérez',
-    email: 'marcos@loschamos.com',
-    password: '123',
-    phone: '+584245551122',
-    niche: 'barberia',
-    status: 'pendiente_pago', // Registered email, must pay upfront to activate (7d guarantee)
-    activatedAt: null,
-    daysRemaining: 0,
-    lastPaymentRef: 'Esperando Capture',
-    amountPaidUsd: 0
-  },
-  {
-    id: 'ten_4',
-    businessName: 'Studio Urbano Mixto',
-    ownerName: 'José Gregorio Silva',
-    email: 'urbano@studiomix.com',
-    password: '123',
-    phone: '+584163334455',
-    niche: 'mixto',
-    status: 'vencido', // 30 days expired, needs renewal
-    activatedAt: getDateDaysAgo(32),
-    daysRemaining: 0,
-    lastPaymentRef: 'PM-1104',
-    amountPaidUsd: 10
+    activatedAt: getDateDaysAgo(1),
+    daysRemaining: 30,
+    lastPaymentRef: 'CUENTA-DEMO-INTERNA',
+    amountPaidUsd: 6
   }
 ]
 
