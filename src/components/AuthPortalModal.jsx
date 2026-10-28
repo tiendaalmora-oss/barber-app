@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { X, Mail, Lock, Scissors, ShieldCheck, Crown, LogIn, UserPlus, AlertCircle } from 'lucide-react'
+import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2 } from 'lucide-react'
+import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 export default function AuthPortalModal({
   isOpen,
@@ -9,11 +11,26 @@ export default function AuthPortalModal({
   saasConfig,
   onLoginSuccess,
   onRegisterTenant,
-  onOpenSuperAdmin,
+  onUpdateTenant,
   initialTab = 'login'
 }) {
-  const [tab, setTab] = useState(initialTab) // 'login' | 'register'
+  const [tab, setTab] = useState(initialTab) // 'login' | 'register' | 'recover'
   const [errorMsg, setErrorMsg] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [bioSupported, setBioSupported] = useState(false)
+  const [enrollBiometricOnLogin, setEnrollBiometricOnLogin] = useState(false)
+  const [savedBioBinding, setSavedBioBinding] = useState(() => {
+    try {
+      const raw = localStorage.getItem('barber_biometric_binding')
+      return raw ? JSON.parse(raw) : null
+    } catch (e) {
+      return null
+    }
+  })
+
+  useEffect(() => {
+    isBiometricSupported().then(setBioSupported)
+  }, [])
 
   useEffect(() => {
     if ((isOpen || isFullScreenGate) && initialTab) {
@@ -22,7 +39,7 @@ export default function AuthPortalModal({
   }, [isOpen, isFullScreenGate, initialTab])
 
   // Login form
-  const [loginEmail, setLoginEmail] = useState('')
+  const [loginEmail, setLoginEmail] = useState(savedBioBinding?.email || '')
   const [loginPass, setLoginPass] = useState('')
 
   // Register form
@@ -31,16 +48,59 @@ export default function AuthPortalModal({
   const [regEmail, setRegEmail] = useState('')
   const [regPass, setRegPass] = useState('')
   const [regPhone, setRegPhone] = useState('')
+  const [regPin, setRegPin] = useState('')
   const [regNiche, setRegNiche] = useState('barberia')
+  const [enrollBioOnRegister, setEnrollBioOnRegister] = useState(true)
+
+  // Recover password form
+  const [recEmail, setRecEmail] = useState('')
+  const [recPinOrPhone, setRecPinOrPhone] = useState('')
+  const [recNewPass, setRecNewPass] = useState('')
 
   if (!isOpen && !isFullScreenGate) return null
 
   const priceUsd = saasConfig?.monthlyPriceUsd || 6
   const priceBs = saasConfig?.monthlyPriceBsFixed || '6.024'
 
-  const handleLogin = (e) => {
+  // 1. Login with Fingerprint / FaceID (WebAuthn)
+  const handleBiometricLogin = async () => {
+    setErrorMsg('')
+    setSuccessMsg('')
+    try {
+      // Find target account by saved binding on this phone or typed email
+      const targetEmail = (loginEmail.trim() || savedBioBinding?.email || '').toLowerCase()
+      const targetTenant = tenants.find(t =>
+        (targetEmail && t.email.toLowerCase() === targetEmail) ||
+        (savedBioBinding?.tenantId && t.id === savedBioBinding.tenantId) ||
+        (savedBioBinding?.credentialId && t.biometricCredentialId === savedBioBinding.credentialId)
+      )
+
+      const credToVerify = savedBioBinding?.credentialId || targetTenant?.biometricCredentialId || null
+      if (!credToVerify && !targetTenant) {
+        setErrorMsg('Primero inicia sesión una vez con tu correo y contraseña y activa la casilla "Vincular mi Huella en este teléfono".')
+        return
+      }
+
+      const verifiedCredId = await verifyBiometricCredential(credToVerify)
+      const matchedTenant = targetTenant || tenants.find(t => t.biometricCredentialId === verifiedCredId)
+
+      if (!matchedTenant) {
+        setErrorMsg('Huella verificada, pero no encontramos la cuenta asociada. Entra con tu correo y clave para revincularla.')
+        return
+      }
+
+      onLoginSuccess(matchedTenant)
+      if (onClose) onClose()
+    } catch (err) {
+      setErrorMsg('No se pudo verificar la huella o cancelaste el lector. Puedes entrar con tu contraseña.')
+    }
+  }
+
+  // 2. Standard Login with Email + Password (+ optional Fingerprint enrollment)
+  const handleLogin = async (e) => {
     e.preventDefault()
     setErrorMsg('')
+    setSuccessMsg('')
     const cleanEmail = loginEmail.trim().toLowerCase()
     const cleanPass = loginPass.trim()
 
@@ -48,23 +108,51 @@ export default function AuthPortalModal({
       t => t.email.toLowerCase() === cleanEmail
     )
     if (!found) {
-      setErrorMsg('No encontramos ese correo registrado. Si eres nuevo, toca la pestaña "Crear Cuenta".')
+      setErrorMsg('No encontramos ese correo registrado. Si eres nuevo, toca la pestaña "Crear Cuenta Nueva".')
       return
     }
 
-    // Strict password validation
     if ((found.password || '') !== cleanPass) {
-      setErrorMsg('Contraseña incorrecta. Verifica tu clave e intenta de nuevo.')
+      setErrorMsg('Contraseña incorrecta. Verifica tu clave o toca "¿Olvidaste tu contraseña?".')
       return
     }
 
-    onLoginSuccess(found)
+    let updatedTenant = found
+
+    // If user checked "Vincular mi Huella en este teléfono", register WebAuthn credential now
+    if (enrollBiometricOnLogin && bioSupported) {
+      try {
+        const credId = await registerBiometricCredential({
+          userId: found.id,
+          email: found.email,
+          displayName: found.businessName
+        })
+        const binding = {
+          tenantId: found.id,
+          email: found.email,
+          businessName: found.businessName,
+          credentialId: credId
+        }
+        localStorage.setItem('barber_biometric_binding', JSON.stringify(binding))
+        setSavedBioBinding(binding)
+        updatedTenant = { ...found, biometricCredentialId: credId, biometricEnabled: true }
+        if (onUpdateTenant) {
+          await onUpdateTenant(updatedTenant)
+        }
+      } catch (bioErr) {
+        console.warn('Biometric enrollment skipped:', bioErr)
+      }
+    }
+
+    onLoginSuccess(updatedTenant)
     if (onClose) onClose()
   }
 
-  const handleRegister = (e) => {
+  // 3. Register New Account (+ Security PIN + Optional Fingerprint + Supabase Auth Mirror)
+  const handleRegister = async (e) => {
     e.preventDefault()
     setErrorMsg('')
+    setSuccessMsg('')
     const cleanEmail = regEmail.trim().toLowerCase()
 
     const exists = tenants.find(
@@ -80,16 +168,63 @@ export default function AuthPortalModal({
       return
     }
 
+    const cleanPin = regPin.replace(/[^0-9]/g, '').slice(0, 4) || '0000'
+    const tenantId = 'ten_' + Date.now()
+    let bioCredId = null
+
+    if (enrollBioOnRegister && bioSupported) {
+      try {
+        bioCredId = await registerBiometricCredential({
+          userId: tenantId,
+          email: cleanEmail,
+          displayName: regBusiness.trim()
+        })
+        const binding = {
+          tenantId,
+          email: cleanEmail,
+          businessName: regBusiness.trim(),
+          credentialId: bioCredId
+        }
+        localStorage.setItem('barber_biometric_binding', JSON.stringify(binding))
+        setSavedBioBinding(binding)
+      } catch (e) {
+        console.warn('Biometric registration skipped by user')
+      }
+    }
+
+    // Mirror registration to Supabase Auth if configured for email verification
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signUp({
+          email: cleanEmail,
+          password: regPass.trim().length >= 6 ? regPass.trim() : regPass.trim() + '00',
+          options: {
+            data: {
+              business_name: regBusiness.trim(),
+              owner_name: regOwner.trim(),
+              phone: regPhone.trim()
+            }
+          }
+        })
+      } catch (e) {
+        // Non-blocking
+      }
+    }
+
     const newTenant = {
-      id: 'ten_' + Date.now(),
+      id: tenantId,
+      saasProduct: 'barberia_saas',
       businessName: regBusiness.trim(),
       ownerName: regOwner.trim(),
       email: cleanEmail,
       password: regPass.trim(),
+      securityPin: cleanPin,
+      biometricCredentialId: bioCredId,
+      biometricEnabled: Boolean(bioCredId),
       phone: regPhone.trim(),
       niche: regNiche,
-      isCleanAccount: true, // Starts 100% clean in $0.00 for real customers
-      status: 'pendiente_pago', // Must pay upfront to activate (7-day guarantee)
+      isCleanAccount: true,
+      status: 'pendiente_pago',
       activatedAt: null,
       daysRemaining: 0,
       lastPaymentRef: 'Esperando Pago Inicial',
@@ -98,6 +233,54 @@ export default function AuthPortalModal({
 
     onRegisterTenant(newTenant)
     if (onClose) onClose()
+  }
+
+  // 4. Password Recovery via Security PIN or Last 4 digits of registered WhatsApp
+  const handleRecoverPassword = async (e) => {
+    e.preventDefault()
+    setErrorMsg('')
+    setSuccessMsg('')
+
+    const cleanEmail = recEmail.trim().toLowerCase()
+    const found = tenants.find(t => t.email.toLowerCase() === cleanEmail)
+    if (!found) {
+      setErrorMsg('No encontramos ninguna cuenta con ese correo electrónico.')
+      return
+    }
+
+    const inputDigits = recPinOrPhone.replace(/[^0-9]/g, '')
+    const phoneDigits = (found.phone || '').replace(/[^0-9]/g, '')
+    const last4Phone = phoneDigits.slice(-4)
+    const savedPin = found.securityPin || ''
+
+    const isMatch =
+      (savedPin && inputDigits === savedPin) ||
+      (last4Phone && last4Phone.length === 4 && inputDigits === last4Phone)
+
+    if (!isMatch) {
+      setErrorMsg('El PIN de Seguridad o los últimos 4 dígitos de tu WhatsApp no coinciden con los registrados.')
+      return
+    }
+
+    if (recNewPass.trim().length < 4) {
+      setErrorMsg('La nueva contraseña debe tener al menos 4 caracteres.')
+      return
+    }
+
+    const updated = {
+      ...found,
+      password: recNewPass.trim()
+    }
+
+    if (onUpdateTenant) {
+      await onUpdateTenant(updated)
+    }
+
+    setSuccessMsg('¡Contraseña actualizada con éxito! Entrando a tu cuenta...')
+    setTimeout(() => {
+      onLoginSuccess(updated)
+      if (onClose) onClose()
+    }, 1000)
   }
 
   return (
@@ -115,7 +298,7 @@ export default function AuthPortalModal({
                 Ingenio OS • Barberías & Salones
               </h3>
               <p className="text-[11px] text-slate-400">
-                Caja Dual (USD/Bs), Agenda Web y Retargeting
+                Acceso Seguro con Correo o Huella Digital
               </p>
             </div>
           </div>
@@ -129,13 +312,13 @@ export default function AuthPortalModal({
           )}
         </div>
 
-        {/* Mode Switcher Tabs (Only Login & Register for Customers) */}
+        {/* Mode Switcher Tabs */}
         <div className="grid grid-cols-2 gap-1.5 bg-dark-950 p-1.5 rounded-2xl border border-dark-800 mt-4">
           <button
             type="button"
-            onClick={() => { setTab('login'); setErrorMsg('') }}
+            onClick={() => { setTab('login'); setErrorMsg(''); setSuccessMsg('') }}
             className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
-              tab === 'login' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
+              tab === 'login' || tab === 'recover' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
             <LogIn className="w-3.5 h-3.5" />
@@ -144,7 +327,7 @@ export default function AuthPortalModal({
 
           <button
             type="button"
-            onClick={() => { setTab('register'); setErrorMsg('') }}
+            onClick={() => { setTab('register'); setErrorMsg(''); setSuccessMsg('') }}
             className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
               tab === 'register' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
             }`}
@@ -161,66 +344,133 @@ export default function AuthPortalModal({
           </div>
         )}
 
-        {/* TAB 1: INICIAR SESIÓN CON CORREO Y CONTRASEÑA */}
-        {tab === 'login' && (
-          <form onSubmit={handleLogin} className="mt-4 space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Correo Electrónico Registrado
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-                <input
-                  type="email"
-                  required
-                  placeholder="tucorreo@ejemplo.com"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                Contraseña de tu Cuenta
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  value={loginPass}
-                  onChange={(e) => setLoginPass(e.target.value)}
-                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 transition-all"
-            >
-              Entrar a Mi Sistema
-            </button>
-
-            <div className="pt-3 border-t border-dark-800 text-center">
-              <p className="text-[11px] text-slate-400">
-                ¿Aún no tienes cuenta para tu Barbería o Salón?{' '}
-                <button
-                  type="button"
-                  onClick={() => { setTab('register'); setErrorMsg('') }}
-                  className="text-gold-400 font-bold underline hover:text-gold-300"
-                >
-                  Regístrate aquí
-                </button>
-              </p>
-            </div>
-          </form>
+        {successMsg && (
+          <div className="mt-3 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{successMsg}</span>
+          </div>
         )}
 
-        {/* TAB 2: REGISTRO NUEVO CLIENTE (PAGO ADELANTADO + 7 DÍAS DE GARANTÍA) */}
+        {/* TAB 1: INICIAR SESIÓN (HUELLA DIGITAL O CORREO + CLAVE) */}
+        {tab === 'login' && (
+          <div className="mt-4 space-y-4">
+            {/* Instant Fingerprint / FaceID Button if supported */}
+            {bioSupported && (
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-dark-850 border border-emerald-500/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-black text-emerald-400 flex items-center gap-1.5">
+                    <Fingerprint className="w-4 h-4" />
+                    <span>Acceso Biométrico Rápido</span>
+                  </span>
+                  {savedBioBinding?.businessName && (
+                    <span className="text-[10px] text-slate-300 font-bold truncate max-w-[160px]">
+                      {savedBioBinding.businessName}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBiometricLogin}
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+                >
+                  <Fingerprint className="w-5 h-5 stroke-[2.5]" />
+                  <span>
+                    {savedBioBinding?.email
+                      ? `Entrar con Huella / FaceID (${savedBioBinding.email})`
+                      : 'Entrar con Huella del Teléfono / FaceID'}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Correo Electrónico Registrado
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="tucorreo@ejemplo.com"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    Contraseña de tu Cuenta
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRecEmail(loginEmail)
+                      setErrorMsg('')
+                      setTab('recover')
+                    }}
+                    className="text-[11px] font-bold text-gold-400 hover:underline"
+                  >
+                    ¿Olvidaste tu clave?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••"
+                    value={loginPass}
+                    onChange={(e) => setLoginPass(e.target.value)}
+                    className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                  />
+                </div>
+              </div>
+
+              {bioSupported && (
+                <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-dark-850 border border-dark-750 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={enrollBiometricOnLogin}
+                    onChange={(e) => setEnrollBiometricOnLogin(e.target.checked)}
+                    className="rounded accent-emerald-500 w-4 h-4"
+                  />
+                  <Fingerprint className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-[11px]">
+                    Vincular mi <strong>Huella / FaceID</strong> en este teléfono al entrar
+                  </span>
+                </label>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 transition-all"
+              >
+                Entrar a Mi Sistema
+              </button>
+
+              <div className="pt-3 border-t border-dark-800 text-center">
+                <p className="text-[11px] text-slate-400">
+                  ¿Aún no tienes cuenta para tu Barbería o Salón?{' '}
+                  <button
+                    type="button"
+                    onClick={() => { setTab('register'); setErrorMsg('') }}
+                    className="text-gold-400 font-bold underline hover:text-gold-300"
+                  >
+                    Regístrate aquí
+                  </button>
+                </p>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 2: REGISTRO NUEVO CLIENTE (+ PIN DE SEGURIDAD + HUELLA) */}
         {tab === 'register' && (
           <form onSubmit={handleRegister} className="mt-4 space-y-3">
             <div className="p-3 rounded-xl bg-gold-500/10 border border-gold-500/30 text-[11px] text-gold-300 flex items-start gap-2">
@@ -288,7 +538,7 @@ export default function AuthPortalModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
                   Tu WhatsApp
@@ -296,27 +546,56 @@ export default function AuthPortalModal({
                 <input
                   type="tel"
                   required
-                  placeholder="Ej. +584121234567"
+                  placeholder="+584121234567"
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
                 />
               </div>
               <div>
+                <label className="block text-[11px] font-bold text-gold-400 mb-1" title="Para recuperar tu clave si la olvidas">
+                  PIN Seguridad (4 díg)
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={4}
+                  placeholder="Ej. 1990"
+                  value={regPin}
+                  onChange={(e) => setRegPin(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-gold-500/40 text-xs text-white font-mono text-center focus:outline-none focus:border-gold-500"
+                />
+              </div>
+              <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Tipo de Negocio
+                  Tipo de Local
                 </label>
                 <select
                   value={regNiche}
                   onChange={(e) => setRegNiche(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                  className="w-full px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
                 >
-                  <option value="barberia">💈 Solo Barbería</option>
-                  <option value="estetica">💅 Salón & Uñas</option>
-                  <option value="mixto">🏬 Mixto (Ambos)</option>
+                  <option value="barberia">💈 Barbería</option>
+                  <option value="estetica">💅 Salón</option>
+                  <option value="mixto">🏬 Mixto</option>
                 </select>
               </div>
             </div>
+
+            {bioSupported && (
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 cursor-pointer text-xs text-emerald-300">
+                <input
+                  type="checkbox"
+                  checked={enrollBioOnRegister}
+                  onChange={(e) => setEnrollBioOnRegister(e.target.checked)}
+                  className="rounded accent-emerald-500 w-4 h-4"
+                />
+                <Fingerprint className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="text-[11px]">
+                  Activar ingreso con <strong>Huella del Teléfono / FaceID</strong>
+                </span>
+              </label>
+            )}
 
             <button
               type="submit"
@@ -327,9 +606,80 @@ export default function AuthPortalModal({
           </form>
         )}
 
+        {/* TAB 3: RECUPERAR CONTRASEÑA CON PIN O ÚLTIMOS 4 DÍGITOS DE WHATSAPP */}
+        {tab === 'recover' && (
+          <form onSubmit={handleRecoverPassword} className="mt-4 space-y-3.5">
+            <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-[11px] text-purple-200 flex items-start gap-2">
+              <KeyRound className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>Recuperación Rápida:</strong> Verifica tu correo junto con tu <strong>PIN de Seguridad de 4 dígitos</strong> (o los últimos 4 números de tu WhatsApp registrado) para crear una clave nueva.
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Tu Correo Electrónico Registrado
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="tucorreo@gmail.com"
+                value={recEmail}
+                onChange={(e) => setRecEmail(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gold-400 mb-1">
+                Tu PIN de Seguridad (4 dígitos) o Últimos 4 números de tu WhatsApp
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={4}
+                placeholder="Ej. 1990"
+                value={recPinOrPhone}
+                onChange={(e) => setRecPinOrPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-gold-500/40 text-xs text-white font-mono tracking-widest text-center"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-emerald-400 mb-1">
+                Escribe tu Nueva Contraseña
+              </label>
+              <input
+                type="password"
+                required
+                placeholder="Nueva contraseña (mín. 4 caracteres)"
+                value={recNewPass}
+                onChange={(e) => setRecNewPass(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-emerald-500/40 text-xs text-white"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setTab('login'); setErrorMsg('') }}
+                className="flex-1 py-3 rounded-xl bg-dark-800 text-slate-300 text-xs font-bold"
+              >
+                Volver
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black"
+              >
+                Guardar Nueva Clave
+              </button>
+            </div>
+          </form>
+        )}
+
         {/* Clean Footer */}
         <div className="mt-5 pt-3 border-t border-dark-850 flex items-center justify-between text-[10px] text-slate-600">
-          <span>Ingenio OS © 2026 • Todos los derechos reservados</span>
+          <span>Ingenio OS © 2026 • Seguridad Biométrica WebAuthn</span>
           <span>Garantía {saasConfig?.guaranteeDays || 7} Días</span>
         </div>
 

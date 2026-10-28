@@ -680,6 +680,7 @@ export default function App() {
         saasConfig={saasConfig}
         onLoginSuccess={handleSelectTenant}
         onRegisterTenant={handleRegisterNewTenant}
+        onUpdateTenant={handleUpdateTenant}
         onOpenSuperAdmin={null}
         initialTab={isDirectRegisterLink ? 'register' : authInitialTab}
       />
@@ -712,6 +713,7 @@ export default function App() {
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
         onLogout={handleLogout}
+        onUpdateTenant={handleUpdateTenant}
         activeTenant={activeTenant}
         activeTab={activeTab}
         onSelectTab={setActiveTab}

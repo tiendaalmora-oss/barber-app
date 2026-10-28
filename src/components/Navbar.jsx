@@ -1,5 +1,6 @@
-import React from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check } from 'lucide-react'
+import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
 
 export default function Navbar({ 
   currentNiche, 
@@ -10,10 +11,49 @@ export default function Navbar({
   onOpenExpenseModal,
   onOpenWhatsAppModal,
   onLogout,
+  onUpdateTenant,
   activeTenant,
   activeTab,
   onSelectTab
 }) {
+  const [bioSupported, setBioSupported] = useState(false)
+  const [bioLinked, setBioLinked] = useState(Boolean(activeTenant?.biometricEnabled))
+
+  useEffect(() => {
+    isBiometricSupported().then(setBioSupported)
+    try {
+      const saved = localStorage.getItem('barber_biometric_binding')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed.tenantId === activeTenant?.id) setBioLinked(true)
+      }
+    } catch (e) {}
+  }, [activeTenant])
+
+  const handleLinkFingerprint = async () => {
+    if (!activeTenant) return
+    try {
+      const credId = await registerBiometricCredential({
+        userId: activeTenant.id,
+        email: activeTenant.email,
+        displayName: activeTenant.businessName
+      })
+      const binding = {
+        tenantId: activeTenant.id,
+        email: activeTenant.email,
+        businessName: activeTenant.businessName,
+        credentialId: credId
+      }
+      localStorage.setItem('barber_biometric_binding', JSON.stringify(binding))
+      setBioLinked(true)
+      if (onUpdateTenant) {
+        onUpdateTenant({ ...activeTenant, biometricCredentialId: credId, biometricEnabled: true })
+      }
+      alert('✅ ¡Huella / FaceID vinculada con éxito en este teléfono! La próxima vez podrás entrar tocando el botón de Huella.')
+    } catch (e) {
+      alert('No se completó el registro de huella en este dispositivo.')
+    }
+  }
   const nicheIcons = {
     barberia: <Scissors className="w-5 h-5 text-gold-400" />,
     estetica: <Sparkles className="w-5 h-5 text-pink-400" />,
@@ -113,6 +153,22 @@ export default function Navbar({
 
         {/* Right side: Tasa BCV + Action CTAs */}
         <div className="flex items-center gap-2 justify-end flex-wrap">
+          {/* Botón Vincular Huella Digital / FaceID */}
+          {bioSupported && (
+            <button
+              onClick={handleLinkFingerprint}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                bioLinked
+                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                  : 'bg-dark-800 hover:bg-emerald-500/15 text-gold-400 border-gold-500/30'
+              }`}
+              title="Vincular tu Huella Digital o FaceID en este teléfono para entrar en 1 toque"
+            >
+              <Fingerprint className="w-3.5 h-3.5" />
+              <span>{bioLinked ? 'Huella Activa ✓' : 'Activar Huella'}</span>
+            </button>
+          )}
+
           {/* Botón Cerrar Sesión */}
           <button
             onClick={onLogout}

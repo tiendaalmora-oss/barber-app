@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint } from 'lucide-react'
+import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 
 const SAAS_PRODUCTS = [
   { id: 'all', label: '🌐 Todos los Productos', icon: '🌐', domain: 'ingeniodigital.shop', status: 'Hub Central' },
@@ -27,6 +28,12 @@ export default function SuperAdminView({
   const [isUnlocked, setIsUnlocked] = useState(false)
   const [pinInput, setPinInput] = useState('')
   const [pinError, setPinError] = useState('')
+  const [bioSupported, setBioSupported] = useState(false)
+  const [adminBioCred, setAdminBioCred] = useState(() => localStorage.getItem('ingenio_admin_bio_cred') || '')
+
+  useEffect(() => {
+    isBiometricSupported().then(setBioSupported)
+  }, [])
   const [selectedProduct, setSelectedProduct] = useState('all')
   const [filter, setFilter] = useState('all')
   const [showSettings, setShowSettings] = useState(false)
@@ -242,6 +249,31 @@ export default function SuperAdminView({
     }
   }
 
+  const handleAdminBiometricUnlock = async () => {
+    setPinError('')
+    try {
+      await verifyBiometricCredential(adminBioCred || null)
+      setIsUnlocked(true)
+    } catch (e) {
+      setPinError('No se pudo verificar la huella. Usa tu PIN Maestro.')
+    }
+  }
+
+  const handleEnrollAdminBiometric = async () => {
+    try {
+      const credId = await registerBiometricCredential({
+        userId: 'super_admin_ingenio',
+        email: saasConfig.adminEmail || 'admin@ingeniodigital.shop',
+        displayName: 'Dueño Ingenio Digital'
+      })
+      localStorage.setItem('ingenio_admin_bio_cred', credId)
+      setAdminBioCred(credId)
+      alert('✅ ¡Huella / FaceID vinculada a tu Panel Maestro!')
+    } catch (e) {
+      alert('No se pudo vincular la huella en este dispositivo.')
+    }
+  }
+
   const demoTenant = tenants.find(t => !t.isCleanAccount) || {
     email: 'demo@ingenioos.online',
     password: 'demo2026'
@@ -277,6 +309,17 @@ export default function SuperAdminView({
             <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold">
               {pinError}
             </div>
+          )}
+
+          {bioSupported && adminBioCred && (
+            <button
+              type="button"
+              onClick={handleAdminBiometricUnlock}
+              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+            >
+              <Fingerprint className="w-5 h-5 stroke-[2.5]" />
+              <span>Desbloquear con Huella / FaceID</span>
+            </button>
           )}
 
           <form onSubmit={handleUnlockPin} className="space-y-3.5">
@@ -342,6 +385,17 @@ export default function SuperAdminView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {bioSupported && (
+              <button
+                onClick={handleEnrollAdminBiometric}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-dark-800 hover:bg-purple-500/20 border border-purple-500/40 text-xs font-bold text-purple-300"
+                title="Vincular tu huella dactilar o FaceID para entrar al panel"
+              >
+                <Fingerprint className="w-4 h-4 text-emerald-400" />
+                <span>{adminBioCred ? 'Huella Admin ✓' : 'Activar Huella'}</span>
+              </button>
+            )}
+
             {onRefreshServer && (
               <button
                 onClick={onRefreshServer}
@@ -798,6 +852,12 @@ export default function SuperAdminView({
                     <span>👤 Dueño: <strong className="text-slate-200">{tenant.ownerName}</strong></span>
                     <span className="font-mono">📧 Correo: <strong className="text-gold-400">{tenant.email}</strong></span>
                     <span className="font-mono">🔑 Clave: <strong className="text-slate-300">{tenant.password || '123'}</strong></span>
+                    {tenant.securityPin && (
+                      <span className="font-mono">🛡️ PIN: <strong className="text-purple-300">{tenant.securityPin}</strong></span>
+                    )}
+                    {tenant.biometricEnabled && (
+                      <span className="text-emerald-400 font-bold">👆 Huella Activa</span>
+                    )}
                     <span className="font-mono">📱 {tenant.phone}</span>
                     <span>🧾 Ref: <strong className="text-emerald-400">{tenant.lastPaymentRef}</strong></span>
                   </div>
