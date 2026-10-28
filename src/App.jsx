@@ -47,7 +47,7 @@ export default function App() {
 
   // SaaS Multi-Tenant & Subscription State
   const [saasConfig, setSaasConfig] = useState(() => {
-    const saved = localStorage.getItem('barber_saas_config')
+    const saved = localStorage.getItem('barber_saas_config_v3')
     return saved ? JSON.parse(saved) : INITIAL_SAAS_CONFIG
   })
 
@@ -179,7 +179,7 @@ export default function App() {
   }, [retargetingConfig])
 
   useEffect(() => {
-    localStorage.setItem('barber_saas_config', JSON.stringify(saasConfig))
+    localStorage.setItem('barber_saas_config_v3', JSON.stringify(saasConfig))
   }, [saasConfig])
 
   useEffect(() => {

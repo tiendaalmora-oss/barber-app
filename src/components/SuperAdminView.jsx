@@ -127,15 +127,20 @@ export default function SuperAdminView({
 
   const handleWhatsAppOwner = (tenant) => {
     const cleanPhone = (tenant.phone || '').replace(/[^0-9]/g, '')
-    const price = saasConfig.monthlyPriceUsd || 10
-    const priceBs = (price * exchangeRate).toFixed(2)
+    const price = saasConfig.monthlyPriceUsd || 6
+    const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
     let msg = ''
 
     if (tenant.status === 'pendiente_pago') {
       msg = `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* con el correo *${tenant.email}*.\n\n` +
-        `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${price} USD* (Bs. ${priceBs} a tasa BCV).\n\n` +
-        `📲 *Pago Móvil:* ${saasConfig.pagoMovilBank} | CI: ${saasConfig.pagoMovilId} | Tel: ${saasConfig.pagoMovilPhone}\n` +
-        `🟡 *Binance:* ${saasConfig.binanceEmail}\n\n` +
+        `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${price} USDT* (${priceBs} Bs).\n\n` +
+        `🏦 *Banco:* ${saasConfig.pagoMovilBank || 'Banco de Venezuela (0102)'}\n` +
+        `👤 *Titular:* ${saasConfig.pagoMovilHolder || 'Carlos Rojas'}\n` +
+        `🪪 *Cédula:* ${saasConfig.pagoMovilId || '17.907.078'}\n` +
+        `📱 *Teléfono:* ${saasConfig.pagoMovilPhone || '04242061590'}\n` +
+        `💳 *Cuenta:* ${saasConfig.pagoMovilAccount || '01020213260000172378'}\n\n` +
+        `🟡 *Binance ID:* ${saasConfig.binanceIdOnly || '92423494'} (IngenioOS)\n` +
+        `⛓️ *BNB Smart Chain (BEP20):* ${saasConfig.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa'}\n\n` +
         `Apenas me pases el capture por aquí te activo el acceso de inmediato.`
     } else if (tenant.status === 'activo') {
       msg = `✅ ¡Listo *${tenant.ownerName}*! Ya verificamos tu pago y activamos los *30 días* de *${tenant.businessName}*.\n\n` +
@@ -145,7 +150,7 @@ export default function SuperAdminView({
         `🛡️ Recuerda que cuentas con tus *${saasConfig.guaranteeDays} días de garantía total* y soporte directo por este WhatsApp. ¡A sacarle provecho!`
     } else {
       msg = `👋 ¡Épale *${tenant.ownerName}*! Te escribo para avisarte que se cumplieron los 30 días de suscripción del sistema de *${tenant.businessName}*.\n\n` +
-        `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*$${price} USD / Bs. ${priceBs}*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
+        `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*$${price} USDT / ${priceBs} Bs*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
     }
 
     const url = cleanPhone
@@ -307,25 +312,25 @@ export default function SuperAdminView({
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3.5">
               <div>
                 <label className="block text-xs font-bold text-gold-400 mb-1">
-                  Precio Mensual ($ USD)
+                  Precio Mensual ($ USDT)
                 </label>
                 <input
                   type="number"
                   value={configForm.monthlyPriceUsd}
-                  onChange={(e) => setConfigForm({ ...configForm, monthlyPriceUsd: parseFloat(e.target.value) || 10 })}
+                  onChange={(e) => setConfigForm({ ...configForm, monthlyPriceUsd: parseFloat(e.target.value) || 6 })}
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-gold-500/40 text-xs text-white font-mono font-bold"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-emerald-400 mb-1">
-                  Días de Garantía Reembolso
+                  Monto Fijo en Bs (Ej. 6.024)
                 </label>
                 <input
-                  type="number"
-                  value={configForm.guaranteeDays}
-                  onChange={(e) => setConfigForm({ ...configForm, guaranteeDays: parseInt(e.target.value) || 7 })}
-                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
+                  type="text"
+                  value={configForm.monthlyPriceBsFixed || '6.024'}
+                  onChange={(e) => setConfigForm({ ...configForm, monthlyPriceBsFixed: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-emerald-500/40 text-xs text-white font-mono font-bold"
                 />
               </div>
 
@@ -354,10 +359,10 @@ export default function SuperAdminView({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Tu Banco Pago Móvil
+                  Banco Pago Móvil
                 </label>
                 <input
                   type="text"
@@ -368,7 +373,18 @@ export default function SuperAdminView({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Tu Cédula / RIF Pago Móvil
+                  Titular
+                </label>
+                <input
+                  type="text"
+                  value={configForm.pagoMovilHolder || 'Carlos Rojas'}
+                  onChange={(e) => setConfigForm({ ...configForm, pagoMovilHolder: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Cédula / RIF
                 </label>
                 <input
                   type="text"
@@ -379,7 +395,7 @@ export default function SuperAdminView({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Tu Teléfono Pago Móvil
+                  Teléfono Pago Móvil
                 </label>
                 <input
                   type="text"
@@ -388,28 +404,39 @@ export default function SuperAdminView({
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Nro de Cuenta (20 díg)
+                </label>
+                <input
+                  type="text"
+                  value={configForm.pagoMovilAccount || '01020213260000172378'}
+                  onChange={(e) => setConfigForm({ ...configForm, pagoMovilAccount: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-bold text-amber-400 mb-1">
-                  Tu Correo / ID de Binance Pay
+                  Binance Pay ID (IngenioOS)
                 </label>
                 <input
                   type="text"
-                  value={configForm.binanceEmail}
-                  onChange={(e) => setConfigForm({ ...configForm, binanceEmail: e.target.value })}
+                  value={configForm.binanceIdOnly || '92423494'}
+                  onChange={(e) => setConfigForm({ ...configForm, binanceIdOnly: e.target.value, binanceEmail: `ID: ${e.target.value} (IngenioOS)` })}
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-purple-400 mb-1">
-                  Tu Correo y Nombre de Zelle
+                <label className="block text-xs font-bold text-emerald-400 mb-1">
+                  Wallet USDT — BNB Smart Chain (BEP20)
                 </label>
                 <input
                   type="text"
-                  value={configForm.zelleInfo}
-                  onChange={(e) => setConfigForm({ ...configForm, zelleInfo: e.target.value })}
+                  value={configForm.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa'}
+                  onChange={(e) => setConfigForm({ ...configForm, bep20Address: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
                 />
               </div>

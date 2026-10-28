@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, Smartphone, DollarSign, ArrowLeft, Crown, Sparkles, CheckCircle2 } from 'lucide-react'
+import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2 } from 'lucide-react'
 
 export default function SubscriptionLockView({
   tenant,
@@ -11,12 +11,12 @@ export default function SubscriptionLockView({
   onOpenSuperAdmin
 }) {
   const [paymentRef, setPaymentRef] = useState('')
-  const [selectedMethod, setSelectedMethod] = useState('Pago Móvil BCV')
+  const [selectedMethod, setSelectedMethod] = useState('Pago Móvil BDV')
   const [copiedField, setCopiedField] = useState('')
   const [reported, setReported] = useState(false)
 
-  const priceUsd = saasConfig.monthlyPriceUsd || 10
-  const priceBs = (priceUsd * exchangeRate).toFixed(2)
+  const priceUsd = saasConfig.monthlyPriceUsd || 6
+  const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
   const isNewAccount = tenant?.status === 'pendiente_pago'
 
   const copyText = (label, text) => {
@@ -33,19 +33,19 @@ export default function SubscriptionLockView({
     }
     setReported(true)
 
-    const cleanPhone = (saasConfig.ownerWhatsapp || '').replace(/[^0-9]/g, '')
+    const cleanPhone = (saasConfig.ownerWhatsapp || '+5491164827875').replace(/[^0-9]/g, '')
     const msg = isNewAccount
       ? `🚀 *¡Hola equipo de IngenioOS!* Acabo de registrar mi negocio y realicé el pago para activar mi cuenta (con la Garantía de ${saasConfig.guaranteeDays} días):\n\n` +
         `💈 *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName}\n` +
         `📧 *Correo de Acceso:* ${tenant?.email}\n` +
-        `💳 *Método:* ${selectedMethod} ($${priceUsd} / Bs. ${priceBs})\n` +
+        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
         `🧾 *Referencia:* ${refText}\n\n` +
         `Aquí envío mi capture para que me activen los 30 días de acceso. ¡Gracias!`
       : `⚡ *¡Hola equipo de IngenioOS!* Realicé el pago de renovación mensual (+30 días) de mi sistema:\n\n` +
         `💈 *Negocio:* ${tenant?.businessName}\n` +
         `📧 *Correo:* ${tenant?.email}\n` +
-        `💳 *Método:* ${selectedMethod} ($${priceUsd} / Bs. ${priceBs})\n` +
+        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
         `🧾 *Referencia:* ${refText}\n\n` +
         `Adjunto el comprobante para reactivar mi acceso.`
 
@@ -59,7 +59,7 @@ export default function SubscriptionLockView({
     <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col justify-between p-4 sm:p-6 font-sans">
       
       {/* Top Bar */}
-      <div className="max-w-2xl w-full mx-auto flex items-center justify-between gap-2 pb-4 border-b border-dark-800">
+      <div className="max-w-3xl w-full mx-auto flex items-center justify-between gap-2 pb-4 border-b border-dark-800">
         <button
           onClick={onSwitchToDemo}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-800 border border-dark-700 text-xs font-bold text-slate-300 transition-all"
@@ -86,7 +86,7 @@ export default function SubscriptionLockView({
       </div>
 
       {/* Center Lock / Activation Card */}
-      <div className="max-w-2xl w-full mx-auto my-6 space-y-5 animate-fadeIn">
+      <div className="max-w-3xl w-full mx-auto my-6 space-y-5 animate-fadeIn">
         
         {/* Hero Guarantee Card */}
         <div className="bg-gradient-to-b from-dark-900 to-dark-950 border-2 border-gold-500/40 rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden">
@@ -116,7 +116,7 @@ export default function SubscriptionLockView({
               </>
             ) : (
               <>
-                Los 30 días de tu suscripción para <strong className="text-white">{tenant?.email}</strong> se cumplieron. Tus clientes, citas y cuentas están 100% guardados y seguros. Realiza tu pago mensual para desbloquear tu sistema al instante.
+                Los 30 días de tu suscripción para <strong className="text-white">{tenant?.email}</strong> se cumplieron. Tus clientes, citas y cuentas están 100% guardados. Realiza tu pago mensual para desbloquear tu sistema al instante.
               </>
             )}
           </p>
@@ -129,8 +129,8 @@ export default function SubscriptionLockView({
               </span>
               <div className="flex items-baseline gap-2 justify-center sm:justify-start">
                 <span className="text-3xl font-black text-emerald-400 font-mono">${priceUsd} USD</span>
-                <span className="text-xs text-gold-400 font-mono font-bold">
-                  / Bs. {priceBs} (BCV)
+                <span className="text-sm text-gold-400 font-mono font-black">
+                  / {priceBs} Bs
                 </span>
               </div>
             </div>
@@ -147,48 +147,65 @@ export default function SubscriptionLockView({
         <div className="bg-dark-900 border border-dark-800 rounded-3xl p-5 sm:p-6 space-y-4">
           <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
             <CreditCard className="w-4 h-4 text-gold-400" />
-            <span>1. Elige dónde realizar tu pago ($10 o Bs. {priceBs})</span>
+            <span>1. Datos para Pagar (${priceUsd} USDT o {priceBs} Bs)</span>
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Pago Móvil */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {/* Pago Móvil / Cuenta BDV */}
             <div
-              onClick={() => setSelectedMethod('Pago Móvil BCV')}
+              onClick={() => setSelectedMethod('Pago Móvil BDV')}
               className={`cursor-pointer p-4 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
-                selectedMethod === 'Pago Móvil BCV'
+                selectedMethod === 'Pago Móvil BDV'
                   ? 'bg-gold-500/10 border-gold-500'
                   : 'bg-dark-850 border-dark-750 hover:border-dark-700'
               }`}
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-gold-400">📲 Pago Móvil (Bs. {priceBs})</span>
-                  {selectedMethod === 'Pago Móvil BCV' && <Check className="w-4 h-4 text-gold-400" />}
+                  <span className="text-xs font-black text-gold-400">📲 Pago Móvil ({priceBs} Bs)</span>
+                  {selectedMethod === 'Pago Móvil BDV' && <Check className="w-4 h-4 text-gold-400" />}
                 </div>
-                <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono">
-                  <div>{saasConfig.pagoMovilBank}</div>
-                  <div>CI/RIF: <strong className="text-white">{saasConfig.pagoMovilId}</strong></div>
-                  <div>Tel: <strong className="text-white">{saasConfig.pagoMovilPhone}</strong></div>
+                <div className="mt-2.5 space-y-1 text-xs text-slate-300 font-mono">
+                  <div>🏦 <strong className="text-white">{saasConfig.pagoMovilBank || 'Banco de Venezuela (0102)'}</strong></div>
+                  <div>👤 Titular: <strong className="text-white">{saasConfig.pagoMovilHolder || 'Carlos Rojas'}</strong></div>
+                  <div>🪪 Cédula: <strong className="text-emerald-400">{saasConfig.pagoMovilId || '17.907.078'}</strong></div>
+                  <div>📱 Teléfono: <strong className="text-emerald-400">{saasConfig.pagoMovilPhone || '04242061590'}</strong></div>
+                  <div className="pt-1 text-[10px] text-slate-400 break-all">
+                    Cuenta: <span className="text-slate-200">{saasConfig.pagoMovilAccount || '01020213260000172378'}</span>
+                  </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  copyText('pm', `${saasConfig.pagoMovilBank} | ${saasConfig.pagoMovilId} | ${saasConfig.pagoMovilPhone}`)
-                }}
-                className="mt-2 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-800 text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1 border border-dark-700"
-              >
-                {copiedField === 'pm' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedField === 'pm' ? '¡Copiado!' : 'Copiar Pago Móvil'}</span>
-              </button>
+              <div className="grid grid-cols-2 gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyText('pm', `0102 | ${saasConfig.pagoMovilId || '17907078'} | ${saasConfig.pagoMovilPhone || '04242061590'}`)
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
+                >
+                  {copiedField === 'pm' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedField === 'pm' ? '¡Copiado!' : 'Pago Móvil'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyText('cta', saasConfig.pagoMovilAccount || '01020213260000172378')
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
+                >
+                  {copiedField === 'cta' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedField === 'cta' ? '¡Copiada!' : 'Nro Cuenta'}</span>
+                </button>
+              </div>
             </div>
 
-            {/* Binance Pay */}
+            {/* Binance Pay ID */}
             <div
-              onClick={() => setSelectedMethod('Binance Pay (USDT)')}
+              onClick={() => setSelectedMethod('Binance Pay ID')}
               className={`cursor-pointer p-4 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
-                selectedMethod === 'Binance Pay (USDT)'
+                selectedMethod === 'Binance Pay ID'
                   ? 'bg-gold-500/10 border-gold-500'
                   : 'bg-dark-850 border-dark-750 hover:border-dark-700'
               }`}
@@ -196,55 +213,69 @@ export default function SubscriptionLockView({
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-amber-400">🟡 Binance Pay (${priceUsd} USDT)</span>
-                  {selectedMethod === 'Binance Pay (USDT)' && <Check className="w-4 h-4 text-gold-400" />}
+                  {selectedMethod === 'Binance Pay ID' && <Check className="w-4 h-4 text-gold-400" />}
                 </div>
-                <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono">
-                  <div className="text-slate-400 text-[11px]">Correo / Pay ID:</div>
-                  <div className="text-white font-bold break-all">{saasConfig.binanceEmail}</div>
+                <div className="mt-2.5 space-y-1.5 text-xs text-slate-300 font-mono">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Binance ID:</span>
+                    <strong className="text-lg text-white">{saasConfig.binanceIdOnly || '92423494'}</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Nombre de Usuario:</span>
+                    <strong className="text-amber-400">IngenioOS</strong>
+                  </div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  copyText('bin', saasConfig.binanceEmail)
+                  copyText('bin', saasConfig.binanceIdOnly || '92423494')
                 }}
-                className="mt-2 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-800 text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1 border border-dark-700"
+                className="mt-2 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-800 text-[11px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
               >
                 {copiedField === 'bin' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedField === 'bin' ? '¡Copiado!' : 'Copiar Binance'}</span>
+                <span>{copiedField === 'bin' ? '¡ID Copiado!' : 'Copiar ID: 92423494'}</span>
               </button>
             </div>
 
-            {/* Zelle */}
+            {/* Red BNB Smart Chain (BEP20) */}
             <div
-              onClick={() => setSelectedMethod('Zelle')}
+              onClick={() => setSelectedMethod('USDT Red BEP20')}
               className={`cursor-pointer p-4 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
-                selectedMethod === 'Zelle'
+                selectedMethod === 'USDT Red BEP20'
                   ? 'bg-gold-500/10 border-gold-500'
                   : 'bg-dark-850 border-dark-750 hover:border-dark-700'
               }`}
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-purple-400">💵 Zelle (${priceUsd} USD)</span>
-                  {selectedMethod === 'Zelle' && <Check className="w-4 h-4 text-gold-400" />}
+                  <span className="text-xs font-black text-emerald-400">⛓️ USDT BEP20 (${priceUsd})</span>
+                  {selectedMethod === 'USDT Red BEP20' && <Check className="w-4 h-4 text-gold-400" />}
                 </div>
-                <div className="mt-2 space-y-1 text-xs text-slate-300 font-mono">
-                  <div className="text-slate-400 text-[11px]">Cuenta Zelle:</div>
-                  <div className="text-white font-bold break-all">{saasConfig.zelleInfo}</div>
+                <div className="mt-2.5 space-y-1.5 text-xs text-slate-300 font-mono">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Red de Depósito:</span>
+                    <strong className="text-amber-400">BNB Smart Chain (BEP20)</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Dirección Wallet:</span>
+                    <span className="text-[11px] text-white font-bold break-all block">
+                      {saasConfig.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa'}
+                    </span>
+                  </div>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  copyText('zel', saasConfig.zelleInfo)
+                  copyText('bep20', saasConfig.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa')
                 }}
-                className="mt-2 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-800 text-[11px] font-bold text-slate-300 flex items-center justify-center gap-1 border border-dark-700"
+                className="mt-2 py-1.5 rounded-lg bg-dark-900 hover:bg-dark-800 text-[11px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
               >
-                {copiedField === 'zel' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedField === 'zel' ? '¡Copiado!' : 'Copiar Zelle'}</span>
+                {copiedField === 'bep20' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedField === 'bep20' ? '¡Wallet Copiada!' : 'Copiar Wallet BEP20'}</span>
               </button>
             </div>
           </div>
@@ -252,7 +283,7 @@ export default function SubscriptionLockView({
           {/* Step 2: Report Reference & Send Capture */}
           <form onSubmit={handleSendPaymentWhatsApp} className="pt-3 border-t border-dark-800 space-y-3">
             <label className="block text-xs font-bold text-slate-300">
-              2. Escribe los últimos dígitos de tu comprobante y envía el capture para activarte de inmediato:
+              2. Escribe los últimos dígitos de tu comprobante y envía el capture por WhatsApp para activarte de inmediato:
             </label>
 
             <div className="flex flex-col sm:flex-row gap-2.5">
@@ -287,7 +318,7 @@ export default function SubscriptionLockView({
       </div>
 
       {/* Footer */}
-      <div className="max-w-2xl w-full mx-auto text-center text-[11px] text-slate-500">
+      <div className="max-w-3xl w-full mx-auto text-center text-[11px] text-slate-500">
         Ingenio OS • Sistema de Gestión y Agenda para Barberías y Salones • Garantía de Satisfacción de {saasConfig.guaranteeDays} Días
       </div>
     </div>

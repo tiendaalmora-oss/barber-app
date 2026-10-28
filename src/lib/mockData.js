@@ -279,17 +279,22 @@ export const INITIAL_BUSINESS_PROFILE = {
 }
 
 export const INITIAL_SAAS_CONFIG = {
-  monthlyPriceUsd: 10,
+  monthlyPriceUsd: 6,
+  monthlyPriceBsFixed: '6.024',
   guaranteeDays: 7,
   subscriptionDays: 30,
   adminEmail: 'admin@ingenioos.online',
   adminPin: '2026',
-  ownerWhatsapp: '+584121234567',
-  pagoMovilBank: '0102 - Banco de Venezuela',
-  pagoMovilId: 'V-12.345.678',
-  pagoMovilPhone: '0412-1234567',
-  binanceEmail: 'pagos@ingenioos.online',
-  zelleInfo: 'pagos@ingenioos.online (Ingenio OS)'
+  ownerWhatsapp: '+5491164827875',
+  pagoMovilBank: 'Banco de Venezuela (0102)',
+  pagoMovilHolder: 'Carlos Rojas',
+  pagoMovilId: '17.907.078',
+  pagoMovilPhone: '04242061590',
+  pagoMovilAccount: '01020213260000172378',
+  binanceEmail: 'ID: 92423494 (IngenioOS)',
+  binanceIdOnly: '92423494',
+  zelleInfo: 'BNB Smart Chain (BEP20): 0xf34fe548272f23d363462ba2685f92932ddbd7aa',
+  bep20Address: '0xf34fe548272f23d363462ba2685f92932ddbd7aa'
 }
 
 export const INITIAL_SAAS_TENANTS = [
