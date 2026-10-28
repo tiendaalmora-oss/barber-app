@@ -210,6 +210,78 @@ export default function App() {
     }
   }, [activeTenantId])
 
+  // --- REAL-TIME MULTI-DEVICE SERVER SYNC (Phone <-> PC) ---
+  const fetchServerBootstrap = async () => {
+    try {
+      const res = await fetch('/api/bootstrap', { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.tenants)) {
+          setTenants(data.tenants)
+        }
+        if (data.saasConfig) {
+          setSaasConfig(data.saasConfig)
+        }
+      }
+    } catch (e) {
+      // Offline fallback uses local state
+    }
+  }
+
+  useEffect(() => {
+    // 1. Upload any existing local accounts from this browser (phone or PC) to server DB so nothing is lost
+    const syncInitial = async () => {
+      try {
+        const res = await fetch('/api/tenants/sync-local', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenants })
+        })
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data.tenants)) setTenants(data.tenants)
+          if (data.saasConfig) setSaasConfig(data.saasConfig)
+        }
+      } catch (e) {
+        fetchServerBootstrap()
+      }
+    }
+    syncInitial()
+
+    // 2. Poll every 3 seconds so PC Admin and Phone stay 100% synchronized in real time
+    const interval = setInterval(fetchServerBootstrap, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const pushTenantUpsertToServer = async (tenantObj) => {
+    try {
+      const res = await fetch('/api/tenants/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant: tenantObj })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.tenants)) setTenants(data.tenants)
+      }
+    } catch (e) {
+      console.warn('Offline tenant upsert')
+    }
+  }
+
+  const pushConfigToServer = async (newCfg) => {
+    setSaasConfig(newCfg)
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCfg)
+      })
+    } catch (e) {
+      console.warn('Offline config save')
+    }
+  }
+
   // Clean workspace vs Load Demo workspace
   const handleClearAllWorkspaceData = () => {
     setTransactions([])
@@ -331,6 +403,7 @@ export default function App() {
   const handleRegisterNewTenant = async (newTenant) => {
     setTenants(prev => [newTenant, ...prev])
     handleSelectTenant(newTenant)
+    await pushTenantUpsertToServer(newTenant)
 
     if (isSupabaseConfigured()) {
       try {
@@ -341,17 +414,31 @@ export default function App() {
           tasa_bcv_actual: exchangeRate
         }])
       } catch (e) {
-        console.warn('Tenant saved locally')
+        console.warn('Tenant saved on VPS server')
       }
     }
   }
 
-  const handleUpdateTenant = (updated) => {
+  const handleUpdateTenant = async (updated) => {
     setTenants(prev => prev.map(t => t.id === updated.id ? updated : t))
+    await pushTenantUpsertToServer(updated)
   }
 
-  const handleDeleteTenant = (tenantId) => {
+  const handleDeleteTenant = async (tenantId) => {
     setTenants(prev => prev.filter(t => t.id !== tenantId))
+    try {
+      const res = await fetch('/api/tenants/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: tenantId })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.tenants)) setTenants(data.tenants)
+      }
+    } catch (e) {
+      console.warn('Offline delete')
+    }
   }
 
   const handleClearDemoTenants = () => {
@@ -364,8 +451,12 @@ export default function App() {
     setActiveTenantId('ten_1')
   }
 
-  const handleReportPaymentRef = (tenantId, refString) => {
+  const handleReportPaymentRef = async (tenantId, refString) => {
+    const target = tenants.find(t => t.id === tenantId)
     setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, lastPaymentRef: refString } : t))
+    if (target) {
+      await pushTenantUpsertToServer({ ...target, lastPaymentRef: refString })
+    }
   }
 
   // Calculate how many clients are due for retargeting (for sidebar badge)
@@ -548,7 +639,8 @@ export default function App() {
         onClearDemoTenants={handleClearDemoTenants}
         onRestoreDemoTenants={handleRestoreDemoTenants}
         saasConfig={saasConfig}
-        onSaveSaasConfig={setSaasConfig}
+        onSaveSaasConfig={pushConfigToServer}
+        onRefreshServer={fetchServerBootstrap}
         exchangeRate={exchangeRate}
         onSelectTenantAndExit={(t) => {
           handleSelectTenant(t)

@@ -10,6 +10,7 @@ export default function SuperAdminView({
   onRestoreDemoTenants,
   saasConfig,
   onSaveSaasConfig,
+  onRefreshServer,
   exchangeRate,
   onSelectTenantAndExit,
   onExitSuperAdmin
@@ -319,6 +320,17 @@ export default function SuperAdminView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {onRefreshServer && (
+              <button
+                onClick={onRefreshServer}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold text-emerald-400"
+                title="Sincronización automática cada 3 segundos con teléfono/PC"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>En Vivo (Actualizar)</span>
+              </button>
+            )}
+
             <button
               onClick={() => setShowSettings(!showSettings)}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-xs font-bold text-gold-400"
