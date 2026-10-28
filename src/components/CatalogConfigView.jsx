@@ -1,13 +1,13 @@
-import React, { useState } from 'react'
-import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram, Pencil, X } from 'lucide-react'
 
 export default function CatalogConfigView({
   businessProfile,
   onSaveProfile,
-  nicheData,
-  customServices,
-  onAddCustomService,
-  onRemoveCustomService,
+  services,
+  onAddService,
+  onUpdateService,
+  onDeleteService,
   exchangeRate,
   onOpenPublicPreview
 }) {
@@ -15,12 +15,17 @@ export default function CatalogConfigView({
   const [copied, setCopied] = useState(false)
   const [savedToast, setSavedToast] = useState(false)
 
-  // New custom service state
+  // Sync when businessProfile changes (e.g. switching tenant)
+  useEffect(() => {
+    setForm(businessProfile)
+  }, [businessProfile])
+
+  // New / Edit service state
   const [newSvcName, setNewSvcName] = useState('')
   const [newSvcPrice, setNewSvcPrice] = useState('')
-  const [newSvcCategory, setNewSvcCategory] = useState('Promos / Combos')
+  const [newSvcCategory, setNewSvcCategory] = useState('Servicios')
+  const [editingSvcId, setEditingSvcId] = useState(null)
 
-  // Public URL construction
   const publicUrl = `${window.location.origin}/?reserva=1`
 
   const handleCopyLink = () => {
@@ -42,29 +47,44 @@ export default function CatalogConfigView({
   }
 
   const togglePaymentMethod = (method) => {
-    const exists = form.paymentMethods.includes(method)
+    const exists = (form.paymentMethods || []).includes(method)
     if (exists) {
       setForm({ ...form, paymentMethods: form.paymentMethods.filter(m => m !== method) })
     } else {
-      setForm({ ...form, paymentMethods: [...form.paymentMethods, method] })
+      setForm({ ...form, paymentMethods: [...(form.paymentMethods || []), method] })
     }
   }
 
-  const handleCreateService = (e) => {
+  const handleSaveService = (e) => {
     e.preventDefault()
     if (!newSvcName.trim() || !newSvcPrice) return
-    onAddCustomService({
-      id: 'cust_' + Date.now(),
-      name: newSvcName.trim(),
-      price_usd: parseFloat(newSvcPrice) || 5,
-      category: newSvcCategory,
-      isCustom: true
-    })
+
+    if (editingSvcId) {
+      onUpdateService({
+        id: editingSvcId,
+        name: newSvcName.trim(),
+        price_usd: parseFloat(newSvcPrice) || 5,
+        category: newSvcCategory
+      })
+      setEditingSvcId(null)
+    } else {
+      onAddService({
+        id: 'svc_' + Date.now(),
+        name: newSvcName.trim(),
+        price_usd: parseFloat(newSvcPrice) || 5,
+        category: newSvcCategory
+      })
+    }
     setNewSvcName('')
     setNewSvcPrice('')
   }
 
-  const allServices = [...(customServices || []), ...nicheData.services]
+  const startEditService = (svc) => {
+    setEditingSvcId(svc.id)
+    setNewSvcName(svc.name)
+    setNewSvcPrice(String(svc.price_usd))
+    setNewSvcCategory(svc.category || 'Servicios')
+  }
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -260,7 +280,7 @@ export default function CatalogConfigView({
                 </label>
                 <div className="flex flex-wrap gap-1.5 pt-0.5">
                   {['Pago Móvil BCV', 'Efectivo ($)', 'Zelle', 'Punto de Venta'].map(method => {
-                    const active = form.paymentMethods.includes(method)
+                    const active = (form.paymentMethods || []).includes(method)
                     return (
                       <button
                         type="button"
@@ -291,26 +311,38 @@ export default function CatalogConfigView({
           </form>
         </div>
 
-        {/* Right Column: Catálogo de Servicios & Agregar Servicio */}
+        {/* Right Column: Catálogo de Servicios Editable Completo */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5">
             <h3 className="font-bold text-white text-base mb-1">
-              Catálogo de Servicios y Precios
+              Tus Servicios y Precios ({services.length})
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Tus clientes ven los precios en Dólares y calculados en Bolívares a tu tasa BCV (<span className="text-gold-400 font-bold">Bs. {exchangeRate.toFixed(2)}</span>).
+              Agrega, edita o elimina cualquier servicio. Se actualiza en tu Caja y en tu Link Web (<span className="text-gold-400 font-bold">Bs. {exchangeRate.toFixed(2)}</span>).
             </p>
 
-            {/* Quick Form to add a new Service / Promo */}
-            <form onSubmit={handleCreateService} className="bg-dark-850 border border-dark-750 rounded-xl p-3 mb-4 space-y-2.5">
-              <div className="text-[11px] font-bold text-gold-400 flex items-center gap-1">
-                <Plus className="w-3.5 h-3.5" />
-                <span>Agregar Servicio o Promo al Catálogo</span>
+            {/* Form to Add or Edit a Service */}
+            <form onSubmit={handleSaveService} className="bg-dark-850 border border-gold-500/30 rounded-xl p-3 mb-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-bold text-gold-400 flex items-center gap-1">
+                  {editingSvcId ? <Pencil className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>{editingSvcId ? 'Editando Servicio y Precio' : 'Agregar Servicio o Promo'}</span>
+                </div>
+                {editingSvcId && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditingSvcId(null); setNewSvcName(''); setNewSvcPrice('') }}
+                    className="text-[10px] text-slate-400 hover:text-white flex items-center gap-0.5"
+                  >
+                    <X className="w-3 h-3" /> Cancelar
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <input
                   type="text"
-                  placeholder="Ej. Corte + Mascarilla Negra"
+                  required
+                  placeholder="Ej. Corte Degradé"
                   value={newSvcName}
                   onChange={(e) => setNewSvcName(e.target.value)}
                   className="col-span-2 px-3 py-2 rounded-lg bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
@@ -318,6 +350,7 @@ export default function CatalogConfigView({
                 <input
                   type="number"
                   step="0.5"
+                  required
                   placeholder="Precio $"
                   value={newSvcPrice}
                   onChange={(e) => setNewSvcPrice(e.target.value)}
@@ -326,49 +359,59 @@ export default function CatalogConfigView({
               </div>
               <button
                 type="submit"
-                className="w-full py-2 rounded-lg bg-dark-800 hover:bg-dark-750 border border-gold-500/30 text-gold-400 text-xs font-bold transition-all"
+                className="w-full py-2 rounded-lg bg-gold-500 hover:bg-gold-400 text-black text-xs font-black transition-all"
               >
-                + Publicar en mi Catálogo
+                {editingSvcId ? '✓ Guardar Cambios del Servicio' : '+ Agregar a Mis Servicios'}
               </button>
             </form>
 
-            {/* Active Catalog List */}
+            {/* Active Catalog List with Edit & Delete on ALL items */}
             <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {allServices.map(svc => (
-                <div
-                  key={svc.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-dark-850 border border-dark-750 hover:border-dark-700 transition-all"
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-white text-xs truncate">{svc.name}</span>
-                      {svc.isCustom && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-gold-500/15 text-gold-400 font-bold">
-                          Nuevo
-                        </span>
-                      )}
+              {services.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-500">
+                  No tienes servicios registrados. Agrega el primero arriba.
+                </div>
+              ) : (
+                services.map(svc => (
+                  <div
+                    key={svc.id}
+                    className="flex items-center justify-between p-3 rounded-xl bg-dark-850 border border-dark-750 hover:border-dark-700 transition-all"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <span className="font-bold text-white text-xs block truncate">{svc.name}</span>
+                      <span className="text-[10px] text-slate-400">
+                        Bs. {(svc.price_usd * exchangeRate).toFixed(2)}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-slate-400">
-                      Bs. {(svc.price_usd * exchangeRate).toFixed(2)}
-                    </span>
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-bold text-xs">
-                      ${svc.price_usd}
-                    </span>
-                    {svc.isCustom && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-bold text-xs">
+                        ${svc.price_usd}
+                      </span>
                       <button
-                        onClick={() => onRemoveCustomService(svc.id)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 transition-colors"
-                        title="Quitar servicio"
+                        type="button"
+                        onClick={() => startEditService(svc)}
+                        className="p-1.5 rounded-lg bg-dark-900 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750"
+                        title="Editar nombre o precio"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`¿Eliminar el servicio "${svc.name}"?`)) {
+                            onDeleteService(svc.id)
+                          }
+                        }}
+                        className="p-1.5 rounded-lg bg-dark-900 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
+                        title="Eliminar servicio"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

@@ -1,23 +1,28 @@
 import React, { useState } from 'react'
-import { Crown, ShieldCheck, CheckCircle2, Clock, AlertCircle, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Unlock, DollarSign, Users, Mail, Phone, Eye, RotateCcw } from 'lucide-react'
+import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X } from 'lucide-react'
 
 export default function SuperAdminView({
   tenants,
   onUpdateTenant,
   onAddTenant,
+  onDeleteTenant,
+  onClearDemoTenants,
+  onRestoreDemoTenants,
   saasConfig,
   onSaveSaasConfig,
   exchangeRate,
   onSelectTenantAndExit,
   onExitSuperAdmin
 }) {
-  const [filter, setFilter] = useState('all') // 'all' | 'pendiente_pago' | 'guarantee' | 'activo' | 'vencido'
+  const [filter, setFilter] = useState('all')
   const [showSettings, setShowSettings] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingTenant, setEditingTenant] = useState(null)
   const [configForm, setConfigForm] = useState(saasConfig)
   const [savedToast, setSavedToast] = useState(false)
+  const [copiedRegLink, setCopiedRegLink] = useState(false)
 
-  // Manual tenant creation form
+  // Manual tenant creation / edit form
   const [newBiz, setNewBiz] = useState('')
   const [newOwner, setNewOwner] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -25,8 +30,48 @@ export default function SuperAdminView({
   const [newPhone, setNewPhone] = useState('+58412')
   const [newNiche, setNewNiche] = useState('barberia')
   const [newStatus, setNewStatus] = useState('activo')
+  const [newDays, setNewDays] = useState('30')
 
-  // Helper: calculate how many days since payment activation (to track the 7-day guarantee window)
+  const registrationUrl = `${window.location.origin}/?registro=1`
+
+  const handleCopyRegistrationLink = () => {
+    navigator.clipboard.writeText(registrationUrl)
+    setCopiedRegLink(true)
+    setTimeout(() => setCopiedRegLink(false), 2500)
+  }
+
+  const handleShareRegLinkWhatsApp = () => {
+    const price = saasConfig.monthlyPriceUsd || 10
+    const text = `💈🚀 ¡Hola! Aquí tienes el enlace oficial para registrar tu Barbería / Salón en nuestro Sistema de Gestión, Caja y Agenda Online.\n\n🛡️ *Incluye ${saasConfig.guaranteeDays} días de Garantía Total de Reembolso* ($${price}/mes):\n👉 ${registrationUrl}\n\nCrea tu cuenta con tu correo y envíanos el comprobante para activarte de inmediato.`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const openCreateModal = () => {
+    setEditingTenant(null)
+    setNewBiz('')
+    setNewOwner('')
+    setNewEmail('')
+    setNewPass('123456')
+    setNewPhone('+58412')
+    setNewNiche('barberia')
+    setNewStatus('activo')
+    setNewDays('30')
+    setShowAddModal(true)
+  }
+
+  const openEditModal = (t) => {
+    setEditingTenant(t)
+    setNewBiz(t.businessName)
+    setNewOwner(t.ownerName)
+    setNewEmail(t.email)
+    setNewPass(t.password || '123')
+    setNewPhone(t.phone || '+58412')
+    setNewNiche(t.niche || 'barberia')
+    setNewStatus(t.status)
+    setNewDays(String(t.daysRemaining ?? 30))
+    setShowAddModal(true)
+  }
+
   const getDaysSinceActivation = (dateStr) => {
     if (!dateStr) return 99
     const start = new Date(dateStr + 'T00:00:00')
@@ -60,7 +105,6 @@ export default function SuperAdminView({
     return true
   })
 
-  // 1-Click Activate +30 Days (Paid upfront with 7d guarantee)
   const handleActivate30Days = (tenant) => {
     const todayStr = new Date().toISOString().split('T')[0]
     onUpdateTenant({
@@ -73,7 +117,6 @@ export default function SuperAdminView({
     })
   }
 
-  // 1-Click Cut / Expire
   const handleExpireTenant = (tenant) => {
     onUpdateTenant({
       ...tenant,
@@ -82,7 +125,6 @@ export default function SuperAdminView({
     })
   }
 
-  // Smart WhatsApp to Barbershop Owner
   const handleWhatsAppOwner = (tenant) => {
     const cleanPhone = (tenant.phone || '').replace(/[^0-9]/g, '')
     const price = saasConfig.monthlyPriceUsd || 10
@@ -97,7 +139,7 @@ export default function SuperAdminView({
         `Apenas me pases el capture por aquí te activo el acceso de inmediato.`
     } else if (tenant.status === 'activo') {
       msg = `✅ ¡Listo *${tenant.ownerName}*! Ya verificamos tu pago y activamos los *30 días* de *${tenant.businessName}*.\n\n` +
-        `👉 *Entra aquí:* ${window.location.origin}\n` +
+        `👉 *Entra aquí:* ${window.location.origin}/?login=1\n` +
         `📧 *Correo:* ${tenant.email}\n` +
         `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
         `🛡️ Recuerda que cuentas con tus *${saasConfig.guaranteeDays} días de garantía total* y soporte directo por este WhatsApp. ¡A sacarle provecho!`
@@ -120,28 +162,41 @@ export default function SuperAdminView({
     setShowSettings(false)
   }
 
-  const handleCreateManualTenant = (e) => {
+  const handleSaveTenantForm = (e) => {
     e.preventDefault()
     if (!newBiz.trim() || !newEmail.trim()) return
     const todayStr = new Date().toISOString().split('T')[0]
-    const created = {
-      id: 'ten_' + Date.now(),
-      businessName: newBiz.trim(),
-      ownerName: newOwner.trim() || 'Dueño',
-      email: newEmail.trim().toLowerCase(),
-      password: newPass.trim() || '123456',
-      phone: newPhone.trim(),
-      niche: newNiche,
-      status: newStatus,
-      activatedAt: newStatus === 'activo' ? todayStr : null,
-      daysRemaining: newStatus === 'activo' ? (saasConfig.subscriptionDays || 30) : 0,
-      lastPaymentRef: newStatus === 'activo' ? 'Pagado Directo' : 'Esperando Capture',
-      amountPaidUsd: newStatus === 'activo' ? (saasConfig.monthlyPriceUsd || 10) : 0
+
+    if (editingTenant) {
+      onUpdateTenant({
+        ...editingTenant,
+        businessName: newBiz.trim(),
+        ownerName: newOwner.trim() || 'Dueño',
+        email: newEmail.trim().toLowerCase(),
+        password: newPass.trim() || '123456',
+        phone: newPhone.trim(),
+        niche: newNiche,
+        status: newStatus,
+        daysRemaining: newStatus === 'activo' ? (parseInt(newDays) || 30) : 0
+      })
+    } else {
+      const created = {
+        id: 'ten_' + Date.now(),
+        businessName: newBiz.trim(),
+        ownerName: newOwner.trim() || 'Dueño',
+        email: newEmail.trim().toLowerCase(),
+        password: newPass.trim() || '123456',
+        phone: newPhone.trim(),
+        niche: newNiche,
+        status: newStatus,
+        isCleanAccount: true, // Starts 100% clean without demo data!
+        activatedAt: newStatus === 'activo' ? todayStr : null,
+        daysRemaining: newStatus === 'activo' ? (parseInt(newDays) || 30) : 0,
+        lastPaymentRef: newStatus === 'activo' ? 'Pagado Directo' : 'Esperando Capture',
+        amountPaidUsd: newStatus === 'activo' ? (saasConfig.monthlyPriceUsd || 10) : 0
+      }
+      onAddTenant(created)
     }
-    onAddTenant(created)
-    setNewBiz('')
-    setNewOwner('')
-    setNewEmail('')
     setShowAddModal(false)
   }
 
@@ -176,15 +231,15 @@ export default function SuperAdminView({
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-xs font-bold text-gold-400"
             >
               <Settings2 className="w-4 h-4" />
-              <span>Mis Datos de Cobro y Precio (${saasConfig.monthlyPriceUsd})</span>
+              <span>Mis Datos de Cobro (${saasConfig.monthlyPriceUsd})</span>
             </button>
 
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={openCreateModal}
               className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black shadow-lg shadow-emerald-500/20"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Crear Cuenta a Cliente</span>
+              <span>Crear Cuenta Limpia a Cliente</span>
             </button>
 
             <button
@@ -199,6 +254,38 @@ export default function SuperAdminView({
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+
+        {/* Shareable Registration Link Banner for Real Clients */}
+        <div className="bg-gradient-to-r from-purple-950/40 via-dark-900 to-dark-900 border border-purple-500/30 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">
+              🔗 Link de Venta y Registro Directo para Clientes Reales
+            </span>
+            <p className="text-xs text-slate-300 mt-0.5">
+              Envía este link a los barberos que quieran comprar. Les abrirá directo el formulario para registrar su correo y pagar con la Garantía de {saasConfig.guaranteeDays} Días (y su cuenta nacerá 100% limpia en cero):
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <code className="px-3 py-2 rounded-xl bg-dark-950 border border-dark-800 text-xs text-emerald-400 font-mono">
+              {registrationUrl}
+            </code>
+            <button
+              onClick={handleCopyRegistrationLink}
+              className="px-3.5 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-white border border-dark-700 text-xs font-bold flex items-center gap-1.5"
+            >
+              {copiedRegLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-gold-400" />}
+              <span>{copiedRegLink ? '¡Link Copiado!' : 'Copiar Link'}</span>
+            </button>
+            <button
+              onClick={handleShareRegLinkWhatsApp}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>Enviar por WhatsApp</span>
+            </button>
+          </div>
+        </div>
         
         {/* Collapsible Owner Payment Settings */}
         {showSettings && (
@@ -399,112 +486,191 @@ export default function SuperAdminView({
           </button>
         </div>
 
-        {/* Tenants Control List */}
-        <div className="space-y-3">
-          {filteredList.map(tenant => (
-            <div
-              key={tenant.id}
-              className="bg-dark-900 border border-dark-800 hover:border-dark-700 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all"
-            >
-              {/* Left info */}
-              <div className="space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-black text-white text-base">
-                    {tenant.businessName}
-                  </h3>
-
-                  {tenant.status === 'activo' && tenant.inGuarantee && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase">
-                      🛡️ Pagado • En Garantía (Día {tenant.dayOfSub} de {saasConfig.guaranteeDays})
-                    </span>
-                  )}
-
-                  {tenant.status === 'activo' && !tenant.inGuarantee && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
-                      🟢 Activo Firme • Quedan {tenant.daysRemaining} días
-                    </span>
-                  )}
-
-                  {tenant.status === 'pendiente_pago' && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase">
-                      ⏳ Esperando Pago Inicial (Bloqueado)
-                    </span>
-                  )}
-
-                  {tenant.status === 'vencido' && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-black uppercase">
-                      🔴 Mensualidad Vencida (Bloqueado)
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                  <span>👤 Dueño: <strong className="text-slate-200">{tenant.ownerName}</strong></span>
-                  <span className="font-mono">📧 Correo: <strong className="text-gold-400">{tenant.email}</strong></span>
-                  <span className="font-mono">🔑 Clave: <strong className="text-slate-300">{tenant.password || '123'}</strong></span>
-                  <span className="font-mono">📱 {tenant.phone}</span>
-                  <span>🧾 Ref: <strong className="text-emerald-400">{tenant.lastPaymentRef}</strong></span>
-                </div>
-              </div>
-
-              {/* Right 1-Click Actions */}
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                {tenant.status !== 'activo' ? (
-                  <button
-                    onClick={() => handleActivate30Days(tenant)}
-                    className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all"
-                  >
-                    <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                    <span>Activar +30 Días (Confirmar Pago)</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleExpireTenant(tenant)}
-                    className="px-3.5 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 font-bold text-xs flex items-center gap-1.5 transition-all"
-                    title="Pausar acceso por vencimiento o reembolso"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Cortar / Pausar</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => handleWhatsAppOwner(tenant)}
-                  className="px-3.5 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-emerald-400 border border-emerald-500/30 font-bold text-xs flex items-center gap-1.5 transition-all"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  <span>
-                    {tenant.status === 'pendiente_pago'
-                      ? 'Cobrar Activación'
-                      : tenant.status === 'activo'
-                      ? 'Enviar Acceso WA'
-                      : 'Cobrar Renovación'}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => onSelectTenantAndExit(tenant)}
-                  className="px-3 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-bold text-xs flex items-center gap-1"
-                  title="Ver cómo ve su cuenta este cliente"
-                >
-                  <Eye className="w-4 h-4 text-purple-400" />
-                  <span>Ver Cuenta</span>
-                </button>
-              </div>
-            </div>
-          ))}
+        {/* Clean Demo vs Restore Demo Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-dark-900 border border-dark-800 px-4 py-3 rounded-2xl">
+          <span className="text-xs text-slate-400">
+            Puedes editar o eliminar cualquier cuenta con los botones de cada fila, o limpiar las de ejemplo:
+          </span>
+          <div className="flex items-center gap-2">
+            {onClearDemoTenants && (
+              <button
+                onClick={() => {
+                  if (confirm('¿Quieres borrar las 4 cuentas ficticias de ejemplo para dejar tu panel limpio?')) {
+                    onClearDemoTenants()
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Borrar Cuentas de Ejemplo</span>
+              </button>
+            )}
+            {onRestoreDemoTenants && (
+              <button
+                onClick={onRestoreDemoTenants}
+                className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Restaurar Ejemplos (Modo Publicidad)</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Tenants Control List */}
+        {filteredList.length === 0 ? (
+          <div className="bg-dark-900 border border-dark-800 rounded-2xl p-10 text-center space-y-3">
+            <h3 className="font-bold text-white text-base">No hay cuentas en esta vista</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Usa el botón verde "+ Crear Cuenta Limpia a Cliente" arriba o envía tu link de registro ({registrationUrl}) a tus clientes.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filteredList.map(tenant => (
+              <div
+                key={tenant.id}
+                className="bg-dark-900 border border-dark-800 hover:border-dark-700 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all"
+              >
+                {/* Left info */}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-black text-white text-base">
+                      {tenant.businessName}
+                    </h3>
+
+                    {tenant.isCleanAccount && (
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase">
+                        ✨ Cuenta Limpia Real
+                      </span>
+                    )}
+
+                    {tenant.status === 'activo' && tenant.inGuarantee && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase">
+                        🛡️ Pagado • En Garantía (Día {tenant.dayOfSub} de {saasConfig.guaranteeDays})
+                      </span>
+                    )}
+
+                    {tenant.status === 'activo' && !tenant.inGuarantee && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
+                        🟢 Activo Firme • Quedan {tenant.daysRemaining} días
+                      </span>
+                    )}
+
+                    {tenant.status === 'pendiente_pago' && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase">
+                        ⏳ Esperando Pago Inicial (Bloqueado)
+                      </span>
+                    )}
+
+                    {tenant.status === 'vencido' && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-black uppercase">
+                        🔴 Mensualidad Vencida (Bloqueado)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                    <span>👤 Dueño: <strong className="text-slate-200">{tenant.ownerName}</strong></span>
+                    <span className="font-mono">📧 Correo: <strong className="text-gold-400">{tenant.email}</strong></span>
+                    <span className="font-mono">🔑 Clave: <strong className="text-slate-300">{tenant.password || '123'}</strong></span>
+                    <span className="font-mono">📱 {tenant.phone}</span>
+                    <span>🧾 Ref: <strong className="text-emerald-400">{tenant.lastPaymentRef}</strong></span>
+                  </div>
+                </div>
+
+                {/* Right 1-Click Actions */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {tenant.status !== 'activo' ? (
+                    <button
+                      onClick={() => handleActivate30Days(tenant)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all"
+                    >
+                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                      <span>Activar +30 Días</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleExpireTenant(tenant)}
+                      className="px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 font-bold text-xs flex items-center gap-1 transition-all"
+                      title="Pausar acceso por vencimiento o reembolso"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Pausar</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => handleWhatsAppOwner(tenant)}
+                    className="px-3 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-emerald-400 border border-emerald-500/30 font-bold text-xs flex items-center gap-1.5 transition-all"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>
+                      {tenant.status === 'pendiente_pago'
+                        ? 'Cobrar WA'
+                        : tenant.status === 'activo'
+                        ? 'Enviar Acceso WA'
+                        : 'Renovar WA'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => onSelectTenantAndExit(tenant)}
+                    className="px-3 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-bold text-xs flex items-center gap-1"
+                    title="Entrar a esta cuenta"
+                  >
+                    <Eye className="w-4 h-4 text-purple-400" />
+                    <span>Abrir</span>
+                  </button>
+
+                  <button
+                    onClick={() => openEditModal(tenant)}
+                    className="p-2 rounded-xl bg-dark-850 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-750"
+                    title="Editar correo, clave, nombre o días"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+
+                  {onDeleteTenant && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`¿Seguro que deseas eliminar la cuenta de "${tenant.businessName}" (${tenant.email})?`)) {
+                          onDeleteTenant(tenant.id)
+                        }
+                      }}
+                      className="p-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
+                      title="Eliminar cuenta"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
       </div>
 
-      {/* Modal: Crear Cuenta a Cliente Manualmente */}
+      {/* Modal: Crear o Editar Cuenta de Cliente */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="bg-dark-900 border border-dark-700 w-full max-w-md rounded-3xl p-5 shadow-2xl space-y-4">
-            <h3 className="font-black text-white text-base">
-              Registrar Nueva Barbería / Salón
-            </h3>
-            <form onSubmit={handleCreateManualTenant} className="space-y-3">
+            <div className="flex items-center justify-between border-b border-dark-800 pb-3">
+              <div>
+                <h3 className="font-black text-white text-base">
+                  {editingTenant ? 'Editar Cuenta de Barbería' : 'Crear Nueva Cuenta Limpia a Cliente'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {editingTenant ? 'Modifica sus credenciales o días activos' : 'La cuenta nacerá en cero lista para el cliente real'}
+                </p>
+              </div>
+              <button onClick={() => setShowAddModal(false)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTenantForm} className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Nombre del Local</label>
                 <input
@@ -562,29 +728,39 @@ export default function SuperAdminView({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">Nicho</label>
                   <select
                     value={newNiche}
                     onChange={(e) => setNewNiche(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
+                    className="w-full px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
                   >
                     <option value="barberia">Barbería</option>
-                    <option value="estetica">Salón & Uñas</option>
+                    <option value="estetica">Salón</option>
                     <option value="mixto">Mixto</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Estado Inicial</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Estado</label>
                   <select
                     value={newStatus}
                     onChange={(e) => setNewStatus(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
+                    className="w-full px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
                   >
-                    <option value="activo">✅ Ya Pagó (Activar 30d)</option>
-                    <option value="pendiente_pago">⏳ Por Pagar (Bloqueado)</option>
+                    <option value="activo">✅ Activo</option>
+                    <option value="pendiente_pago">⏳ Por Pagar</option>
+                    <option value="vencido">🔴 Vencido</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Días Activos</label>
+                  <input
+                    type="number"
+                    value={newDays}
+                    onChange={(e) => setNewDays(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
+                  />
                 </div>
               </div>
 
@@ -600,7 +776,7 @@ export default function SuperAdminView({
                   type="submit"
                   className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-black text-xs font-black"
                 >
-                  Guardar Cuenta
+                  {editingTenant ? 'Guardar Cambios' : 'Crear Cuenta Limpia'}
                 </button>
               </div>
             </form>

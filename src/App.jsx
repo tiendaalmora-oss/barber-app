@@ -27,19 +27,23 @@ import {
   INITIAL_SAAS_TENANTS
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles } from 'lucide-react'
 
 export default function App() {
-  // Check URL parameters (?reserva=1 or ?admin=1)
-  const isDirectClientLink = typeof window !== 'undefined' && window.location.search.includes('reserva=1')
-  const isDirectAdminLink = typeof window !== 'undefined' && window.location.search.includes('admin=1')
+  // Check URL parameters (?reserva=1, ?admin=1, ?registro=1, ?login=1)
+  const searchParams = typeof window !== 'undefined' ? window.location.search : ''
+  const isDirectClientLink = searchParams.includes('reserva=1')
+  const isDirectAdminLink = searchParams.includes('admin=1')
+  const isDirectRegisterLink = searchParams.includes('registro=1')
+  const isDirectLoginLink = searchParams.includes('login=1')
 
   // Global state
   const [currentNiche, setCurrentNiche] = useState('barberia')
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
   const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isDirectAdminLink)
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(isDirectRegisterLink || isDirectLoginLink)
+  const [authInitialTab, setAuthInitialTab] = useState(isDirectRegisterLink ? 'register' : 'login')
 
   // SaaS Multi-Tenant & Subscription State
   const [saasConfig, setSaasConfig] = useState(() => {
@@ -64,6 +68,34 @@ export default function App() {
     return saved ? parseFloat(saved) : 53.00
   })
 
+  // Editable Staff, Services, and Products per Niche
+  const [staffByNiche, setStaffByNiche] = useState(() => {
+    const saved = localStorage.getItem('barber_staff_by_niche')
+    return saved ? JSON.parse(saved) : {
+      barberia: NICHES.barberia.staff,
+      estetica: NICHES.estetica.staff,
+      mixto: NICHES.mixto.staff
+    }
+  })
+
+  const [servicesByNiche, setServicesByNiche] = useState(() => {
+    const saved = localStorage.getItem('barber_services_by_niche')
+    return saved ? JSON.parse(saved) : {
+      barberia: NICHES.barberia.services,
+      estetica: NICHES.estetica.services,
+      mixto: NICHES.mixto.services
+    }
+  })
+
+  const [productsByNiche, setProductsByNiche] = useState(() => {
+    const saved = localStorage.getItem('barber_products_by_niche')
+    return saved ? JSON.parse(saved) : {
+      barberia: NICHES.barberia.products,
+      estetica: NICHES.estetica.products,
+      mixto: NICHES.mixto.products
+    }
+  })
+
   const [transactions, setTransactions] = useState(() => {
     const saved = localStorage.getItem('barber_transactions')
     return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS
@@ -84,11 +116,6 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_BUSINESS_PROFILE
   })
 
-  const [customServices, setCustomServices] = useState(() => {
-    const saved = localStorage.getItem('barber_custom_services')
-    return saved ? JSON.parse(saved) : []
-  })
-
   const [retargetingConfig, setRetargetingConfig] = useState(() => {
     const saved = localStorage.getItem('barber_retargeting_config')
     return saved ? JSON.parse(saved) : INITIAL_RETARGETING_CONFIG
@@ -101,13 +128,35 @@ export default function App() {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState('local')
 
-  // Current niche metadata
-  const nicheData = NICHES[currentNiche]
+  // Current dynamic niche data combining metadata + editable staff/services/products
+  const baseNiche = NICHES[currentNiche] || NICHES.barberia
+  const currentStaff = staffByNiche[currentNiche] || []
+  const currentServices = servicesByNiche[currentNiche] || []
+  const currentProducts = productsByNiche[currentNiche] || []
+
+  const nicheData = {
+    ...baseNiche,
+    staff: currentStaff,
+    services: currentServices,
+    products: currentProducts
+  }
 
   // Persist to local storage
   useEffect(() => {
     localStorage.setItem('barber_rate', exchangeRate.toString())
   }, [exchangeRate])
+
+  useEffect(() => {
+    localStorage.setItem('barber_staff_by_niche', JSON.stringify(staffByNiche))
+  }, [staffByNiche])
+
+  useEffect(() => {
+    localStorage.setItem('barber_services_by_niche', JSON.stringify(servicesByNiche))
+  }, [servicesByNiche])
+
+  useEffect(() => {
+    localStorage.setItem('barber_products_by_niche', JSON.stringify(productsByNiche))
+  }, [productsByNiche])
 
   useEffect(() => {
     localStorage.setItem('barber_transactions', JSON.stringify(transactions))
@@ -126,10 +175,6 @@ export default function App() {
   }, [businessProfile])
 
   useEffect(() => {
-    localStorage.setItem('barber_custom_services', JSON.stringify(customServices))
-  }, [customServices])
-
-  useEffect(() => {
     localStorage.setItem('barber_retargeting_config', JSON.stringify(retargetingConfig))
   }, [retargetingConfig])
 
@@ -145,6 +190,100 @@ export default function App() {
     localStorage.setItem('barber_active_tenant_id', activeTenantId)
   }, [activeTenantId])
 
+  // Clean workspace vs Load Demo workspace
+  const handleClearAllWorkspaceData = () => {
+    setTransactions([])
+    setClients([])
+    setAppointments([])
+  }
+
+  const handleLoadDemoWorkspaceData = () => {
+    setTransactions(INITIAL_TRANSACTIONS)
+    setClients(INITIAL_CLIENTS)
+    setAppointments(INITIAL_APPOINTMENTS)
+    setStaffByNiche({
+      barberia: NICHES.barberia.staff,
+      estetica: NICHES.estetica.staff,
+      mixto: NICHES.mixto.staff
+    })
+    setServicesByNiche({
+      barberia: NICHES.barberia.services,
+      estetica: NICHES.estetica.services,
+      mixto: NICHES.mixto.services
+    })
+    setProductsByNiche({
+      barberia: NICHES.barberia.products,
+      estetica: NICHES.estetica.products,
+      mixto: NICHES.mixto.products
+    })
+  }
+
+  // Staff CRUD
+  const handleAddStaff = (newSt) => {
+    setStaffByNiche(prev => ({
+      ...prev,
+      [currentNiche]: [...(prev[currentNiche] || []), newSt]
+    }))
+  }
+
+  const handleUpdateStaff = (updatedSt) => {
+    setStaffByNiche(prev => ({
+      ...prev,
+      [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSt.id ? updatedSt : s)
+    }))
+  }
+
+  const handleDeleteStaff = (id) => {
+    setStaffByNiche(prev => ({
+      ...prev,
+      [currentNiche]: (prev[currentNiche] || []).filter(s => s.id !== id)
+    }))
+  }
+
+  // Services CRUD
+  const handleAddService = (newSvc) => {
+    setServicesByNiche(prev => ({
+      ...prev,
+      [currentNiche]: [newSvc, ...(prev[currentNiche] || [])]
+    }))
+  }
+
+  const handleUpdateService = (updatedSvc) => {
+    setServicesByNiche(prev => ({
+      ...prev,
+      [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSvc.id ? updatedSvc : s)
+    }))
+  }
+
+  const handleDeleteService = (id) => {
+    setServicesByNiche(prev => ({
+      ...prev,
+      [currentNiche]: (prev[currentNiche] || []).filter(s => s.id !== id)
+    }))
+  }
+
+  // Products CRUD
+  const handleAddProduct = (newProd) => {
+    setProductsByNiche(prev => ({
+      ...prev,
+      [currentNiche]: [newProd, ...(prev[currentNiche] || [])]
+    }))
+  }
+
+  const handleUpdateProduct = (updatedProd) => {
+    setProductsByNiche(prev => ({
+      ...prev,
+      [currentNiche]: (prev[currentNiche] || []).map(p => p.id === updatedProd.id ? updatedProd : p)
+    }))
+  }
+
+  const handleDeleteProduct = (id) => {
+    setProductsByNiche(prev => ({
+      ...prev,
+      [currentNiche]: (prev[currentNiche] || []).filter(p => p.id !== id)
+    }))
+  }
+
   // Handlers for SaaS Tenants
   const handleSelectTenant = (tenant) => {
     setActiveTenantId(tenant.id)
@@ -156,13 +295,16 @@ export default function App() {
       businessName: tenant.businessName,
       whatsapp: tenant.phone || prev.whatsapp
     }))
+    // If this is a newly created real customer account, clean out demo transactions/clients/appointments
+    if (tenant.isCleanAccount) {
+      handleClearAllWorkspaceData()
+    }
   }
 
   const handleRegisterNewTenant = async (newTenant) => {
     setTenants(prev => [newTenant, ...prev])
     handleSelectTenant(newTenant)
 
-    // Sync new business to Supabase gestion_negocios.negocios
     if (isSupabaseConfigured()) {
       try {
         await supabase.from('negocios').insert([{
@@ -181,6 +323,20 @@ export default function App() {
     setTenants(prev => prev.map(t => t.id === updated.id ? updated : t))
   }
 
+  const handleDeleteTenant = (tenantId) => {
+    setTenants(prev => prev.filter(t => t.id !== tenantId))
+  }
+
+  const handleClearDemoTenants = () => {
+    const demoIds = ['ten_1', 'ten_2', 'ten_3', 'ten_4']
+    setTenants(prev => prev.filter(t => !demoIds.includes(t.id)))
+  }
+
+  const handleRestoreDemoTenants = () => {
+    setTenants(INITIAL_SAAS_TENANTS)
+    setActiveTenantId('ten_1')
+  }
+
   const handleReportPaymentRef = (tenantId, refString) => {
     setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, lastPaymentRef: refString } : t))
   }
@@ -194,10 +350,20 @@ export default function App() {
     return days >= cycle
   }).length
 
+  // Clients CRUD
+  const handleAddClient = (newClient) => {
+    setClients(prev => [newClient, ...prev])
+  }
+
   const handleUpdateClient = (updatedClient) => {
     setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c))
   }
 
+  const handleDeleteClient = (clientId) => {
+    setClients(prev => prev.filter(c => c.id !== clientId))
+  }
+
+  // Appointments CRUD
   const handleAddAppointment = async (newApt) => {
     setAppointments(prev => [newApt, ...prev])
 
@@ -250,8 +416,23 @@ export default function App() {
     }))
   }
 
+  const handleDeleteAppointment = (id) => {
+    setAppointments(prev => prev.filter(a => a.id !== id))
+  }
+
+  // Transactions CRUD
   const handleRegisterTransaction = async (newTx) => {
     setTransactions(prev => [newTx, ...prev])
+
+    // If a product from inventory was sold, subtract 1 from stock
+    if (newTx.product_id) {
+      setProductsByNiche(prev => ({
+        ...prev,
+        [currentNiche]: (prev[currentNiche] || []).map(p =>
+          p.id === newTx.product_id ? { ...p, stock: Math.max(0, (p.stock || 0) - 1) } : p
+        )
+      }))
+    }
 
     const todayStr = new Date().toISOString().split('T')[0]
 
@@ -325,6 +506,10 @@ export default function App() {
     }
   }
 
+  const handleDeleteTransaction = (txId) => {
+    setTransactions(prev => prev.filter(t => t.id !== txId))
+  }
+
   // 1. If in Super-Admin Mode (Owner SaaS Control Panel)
   if (isSuperAdminOpen) {
     return (
@@ -332,6 +517,9 @@ export default function App() {
         tenants={tenants}
         onUpdateTenant={handleUpdateTenant}
         onAddTenant={handleRegisterNewTenant}
+        onDeleteTenant={handleDeleteTenant}
+        onClearDemoTenants={handleClearDemoTenants}
+        onRestoreDemoTenants={handleRestoreDemoTenants}
         saasConfig={saasConfig}
         onSaveSaasConfig={setSaasConfig}
         exchangeRate={exchangeRate}
@@ -350,7 +538,7 @@ export default function App() {
       <PublicBookingView
         businessProfile={businessProfile}
         nicheData={nicheData}
-        customServices={customServices}
+        customServices={[]}
         exchangeRate={exchangeRate}
         appointments={appointments}
         onBookAppointment={handleAddAppointment}
@@ -369,10 +557,13 @@ export default function App() {
           saasConfig={saasConfig}
           exchangeRate={exchangeRate}
           onReportPaymentRef={handleReportPaymentRef}
-          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onOpenAuthModal={() => {
+            setAuthInitialTab('login')
+            setIsAuthModalOpen(true)
+          }}
           onSwitchToDemo={() => {
             const firstActive = tenants.find(t => t.status === 'activo') || tenants[0]
-            handleSelectTenant(firstActive)
+            if (firstActive) handleSelectTenant(firstActive)
           }}
           onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
         />
@@ -384,6 +575,7 @@ export default function App() {
           onLoginSuccess={handleSelectTenant}
           onRegisterTenant={handleRegisterNewTenant}
           onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
+          initialTab={authInitialTab}
         />
       </>
     )
@@ -401,7 +593,10 @@ export default function App() {
         onOpenCashModal={() => setIsCashModalOpen(true)}
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenAuthModal={() => {
+          setAuthInitialTab('login')
+          setIsAuthModalOpen(true)
+        }}
         activeTenant={activeTenant}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
@@ -421,8 +616,8 @@ export default function App() {
             { id: 'catalogo', label: 'Mi Link & Catálogo', icon: Globe, badge: 'WEB' },
             { id: 'retargeting', label: 'Radar Clientes (Retoque)', icon: BellRing, alertCount: overdueClientsCount },
             { id: 'appointments', label: 'Turnos y Citas', icon: Calendar },
-            { id: 'commissions', label: `Comisiones (${nicheData.rolePlural})`, icon: Users },
-            { id: 'debts', label: 'Fiados & Membresías', icon: AlertCircle },
+            { id: 'commissions', label: `Equipo y Comisiones`, icon: Users },
+            { id: 'debts', label: 'Clientes, Fiados & VIP', icon: AlertCircle },
             { id: 'inventory', label: 'Pomadas & Insumos', icon: Package },
             { id: 'monthly', label: 'Cuentas Mes a Mes', icon: BarChart3 },
           ].map((item) => {
@@ -456,7 +651,7 @@ export default function App() {
             )
           })}
 
-          {/* Owner SaaS Control Button */}
+          {/* Owner SaaS Control + Clean/Demo Switcher */}
           <div className="pt-4 mt-auto space-y-2">
             <button
               onClick={() => setIsSuperAdminOpen(true)}
@@ -472,18 +667,36 @@ export default function App() {
                 </span>
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                Activar clientes (+30d), correos y control de pagos
+                Activar clientes (+30d), correos y link de venta
               </p>
             </button>
 
-            <div className="p-3 rounded-xl bg-dark-900 border border-dark-800 text-[11px] text-slate-400 space-y-1 shadow-md">
-              <div className="flex items-center gap-2 font-bold text-slate-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Guarda sin Internet</span>
+            <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800 space-y-1.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase px-1">
+                Modo de Datos:
               </div>
-              <p className="text-[10px] text-slate-400 leading-relaxed">
-                Respaldo automático en el teléfono y en la nube.
-              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={() => {
+                    if (confirm('¿Quieres dejar Caja, Clientes y Turnos en CERO listo para uso real?')) {
+                      handleClearAllWorkspaceData()
+                    }
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-red-500/20 text-[10px] font-bold text-slate-300 hover:text-red-400 border border-dark-750 flex items-center justify-center gap-1"
+                  title="Dejar en cero para entregar al cliente"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Dejar en 0</span>
+                </button>
+                <button
+                  onClick={handleLoadDemoWorkspaceData}
+                  className="py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-purple-500/20 text-[10px] font-bold text-purple-300 border border-dark-750 flex items-center justify-center gap-1"
+                  title="Cargar datos llenos para grabar videos de publicidad"
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Modo Video</span>
+                </button>
+              </div>
             </div>
           </div>
         </aside>
@@ -497,6 +710,13 @@ export default function App() {
               onOpenCashModal={() => setIsCashModalOpen(true)}
               onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
+              onDeleteTransaction={handleDeleteTransaction}
+              onClearAllData={() => {
+                if (confirm('¿Dejar toda la caja, clientes y turnos en CERO para empezar de verdad?')) {
+                  handleClearAllWorkspaceData()
+                }
+              }}
+              onLoadDemoData={handleLoadDemoWorkspaceData}
               nicheData={nicheData}
             />
           )}
@@ -505,10 +725,10 @@ export default function App() {
             <CatalogConfigView
               businessProfile={businessProfile}
               onSaveProfile={setBusinessProfile}
-              nicheData={nicheData}
-              customServices={customServices}
-              onAddCustomService={(svc) => setCustomServices(prev => [svc, ...prev])}
-              onRemoveCustomService={(id) => setCustomServices(prev => prev.filter(s => s.id !== id))}
+              services={currentServices}
+              onAddService={handleAddService}
+              onUpdateService={handleUpdateService}
+              onDeleteService={handleDeleteService}
               exchangeRate={exchangeRate}
               onOpenPublicPreview={() => setIsPublicPreview(true)}
             />
@@ -518,6 +738,7 @@ export default function App() {
             <RetargetingView
               clients={clients}
               onUpdateClient={handleUpdateClient}
+              onDeleteClient={handleDeleteClient}
               retargetingConfig={retargetingConfig}
               onSaveRetargetingConfig={setRetargetingConfig}
               businessProfile={businessProfile}
@@ -526,9 +747,14 @@ export default function App() {
 
           {activeTab === 'commissions' && (
             <CommissionsView
-              nicheData={nicheData}
+              staffList={currentStaff}
+              rolePlural={nicheData.rolePlural}
+              roleName={nicheData.roleName}
               transactions={transactions}
               exchangeRate={exchangeRate}
+              onAddStaff={handleAddStaff}
+              onUpdateStaff={handleUpdateStaff}
+              onDeleteStaff={handleDeleteStaff}
             />
           )}
 
@@ -538,6 +764,7 @@ export default function App() {
               nicheData={nicheData}
               onAddAppointment={handleAddAppointment}
               onToggleAppointmentStatus={handleToggleAppointmentStatus}
+              onDeleteAppointment={handleDeleteAppointment}
               clients={clients}
               businessProfile={businessProfile}
             />
@@ -547,13 +774,19 @@ export default function App() {
             <DebtsClientsView
               clients={clients}
               exchangeRate={exchangeRate}
+              onAddClient={handleAddClient}
+              onUpdateClient={handleUpdateClient}
+              onDeleteClient={handleDeleteClient}
             />
           )}
 
           {activeTab === 'inventory' && (
             <InventoryView
-              products={nicheData.products}
+              products={currentProducts}
               exchangeRate={exchangeRate}
+              onAddProduct={handleAddProduct}
+              onUpdateProduct={handleUpdateProduct}
+              onDeleteProduct={handleDeleteProduct}
             />
           )}
 
@@ -605,6 +838,7 @@ export default function App() {
         onLoginSuccess={handleSelectTenant}
         onRegisterTenant={handleRegisterNewTenant}
         onOpenSuperAdmin={() => setIsSuperAdminOpen(true)}
+        initialTab={authInitialTab}
       />
 
     </div>

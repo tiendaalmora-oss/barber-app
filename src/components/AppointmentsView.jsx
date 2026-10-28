@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2 } from 'lucide-react'
 
-export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, clients = [], businessProfile = {} }) {
+export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {} }) {
   // Today's ISO date string (YYYY-MM-DD)
   const getTodayStr = () => new Date().toISOString().split('T')[0]
 
@@ -235,6 +235,21 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                     {apt.status === 'en_atencion' && 'En la Silla'}
                     {apt.status === 'pendiente' && 'Esperando'}
                   </button>
+
+                  {onDeleteAppointment && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`¿Eliminar el turno de ${apt.client_name}?`)) {
+                          onDeleteAppointment(apt.id)
+                        }
+                      }}
+                      className="p-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-all"
+                      title="Cancelar / Eliminar turno"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             )

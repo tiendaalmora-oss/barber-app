@@ -44,6 +44,7 @@ export default function QuickCashModal({
       id: 'tx_' + Date.now(),
       type: 'ingreso',
       item_name: itemObj?.name || 'Servicio Personalizado',
+      product_id: itemObj?.stock !== undefined ? itemObj.id : null,
       category: itemObj?.category || 'Cortes',
       staff_name: staffObj?.name || 'Venta del Local',
       staff_id: staffObj?.id,
@@ -120,29 +121,42 @@ export default function QuickCashModal({
           {/* 2. Seleccionar Servicio o Producto */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-              2. ¿Qué se hizo o qué compró?
+              2. ¿Qué servicio se hizo o qué producto compró?
             </label>
-            <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
-              {nicheData.services.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => { setSelectedItem(item.id); setCustomPrice(''); }}
-                  className={`p-2.5 rounded-xl border text-left transition-all ${
-                    selectedItem === item.id && customPrice === ''
-                      ? 'bg-emerald-500/15 border-emerald-500/60 text-white'
-                      : 'bg-dark-800 border-dark-700/60 text-slate-300 hover:border-dark-600'
-                  }`}
-                >
-                  <div className="text-xs font-medium truncate">{item.name}</div>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-sm font-bold text-emerald-400">${item.price_usd}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      (Bs. {(item.price_usd * exchangeRate).toFixed(1)})
-                    </span>
-                  </div>
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+              {allItems.map((item) => {
+                const isProduct = item.stock !== undefined
+                return (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => { setSelectedItem(item.id); setCustomPrice(''); }}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      selectedItem === item.id && customPrice === ''
+                        ? 'bg-emerald-500/15 border-emerald-500/60 text-white'
+                        : 'bg-dark-800 border-dark-700/60 text-slate-300 hover:border-dark-600'
+                    }`}
+                  >
+                    <div className="text-xs font-medium truncate flex items-center gap-1">
+                      <span>{isProduct ? '🧴' : '✂️'}</span>
+                      <span className="truncate">{item.name}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-1 mt-1">
+                      <div>
+                        <span className="text-sm font-bold text-emerald-400">${item.price_usd}</span>
+                        <span className="text-[10px] text-slate-400 font-mono ml-1">
+                          (Bs. {(item.price_usd * exchangeRate).toFixed(1)})
+                        </span>
+                      </div>
+                      {isProduct && (
+                        <span className="text-[9px] text-blue-400 font-mono">
+                          Stock: {item.stock}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send } from 'lucide-react'
+import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Sparkles } from 'lucide-react'
 
 export default function DashboardView({ 
   transactions, 
@@ -7,6 +7,9 @@ export default function DashboardView({
   onOpenCashModal,
   onOpenExpenseModal,
   onOpenWhatsAppModal,
+  onDeleteTransaction,
+  onClearAllData,
+  onLoadDemoData,
   nicheData
 }) {
   const [filterPeriod, setFilterPeriod] = useState('hoy')
@@ -279,12 +282,31 @@ export default function DashboardView({
 
       {/* Recent Movements Feed (Ingresos en Verde, Gastos en Rojo) */}
       <div className="bg-dark-900 border border-dark-800 rounded-2xl shadow-xl overflow-hidden">
-        <div className="p-4 border-b border-dark-800 flex items-center justify-between">
+        <div className="p-4 border-b border-dark-800 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="font-bold text-white text-base">Movimientos de Caja de Hoy</h3>
-            <p className="text-xs text-slate-400">Historial en tiempo real de entradas y salidas</p>
+            <h3 className="font-bold text-white text-base">Movimientos de Caja de Hoy ({transactions.length})</h3>
+            <p className="text-xs text-slate-400">Historial en tiempo real de entradas y salidas (puedes borrar si te equivocas)</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {onClearAllData && transactions.length > 0 && (
+              <button
+                onClick={onClearAllData}
+                className="text-xs px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-dark-700 font-bold flex items-center gap-1"
+                title="Dejar toda la cuenta en cero lista para uso real"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Limpiar Datos de Prueba (Dejar en 0)</span>
+              </button>
+            )}
+            {onLoadDemoData && transactions.length === 0 && (
+              <button
+                onClick={onLoadDemoData}
+                className="text-xs px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-bold flex items-center gap-1"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Cargar Datos Demo (Para Videos)</span>
+              </button>
+            )}
             <button 
               onClick={onOpenExpenseModal}
               className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold"
@@ -301,61 +323,89 @@ export default function DashboardView({
         </div>
 
         <div className="divide-y divide-dark-800">
-          {transactions.map((tx) => {
-            const isExpense = tx.monto_usd < 0
-            return (
-              <div key={tx.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-dark-850/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg ${
-                    isExpense 
-                      ? 'bg-red-500/10 border-red-500/30 text-red-400' 
-                      : 'bg-dark-800 border-dark-700 text-gold-400'
-                  }`}>
-                    {isExpense ? '📉' : '✂️'}
+          {transactions.length === 0 ? (
+            <div className="p-8 text-center space-y-2">
+              <p className="text-sm font-bold text-white">La caja está en $0.00 (Lista para empezar)</p>
+              <p className="text-xs text-slate-400">Usa el botón dorado "+ Anotar Cobro" arriba para registrar tu primera venta real.</p>
+            </div>
+          ) : (
+            transactions.map((tx) => {
+              const isExpense = tx.monto_usd < 0
+              return (
+                <div key={tx.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-dark-850/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg ${
+                      isExpense 
+                        ? 'bg-red-500/10 border-red-500/30 text-red-400' 
+                        : 'bg-dark-800 border-dark-700 text-gold-400'
+                    }`}>
+                      {isExpense ? '📉' : '✂️'}
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-white flex items-center gap-2">
+                        {tx.item_name}
+                        {isExpense && (
+                          <span className="text-[10px] px-2 py-0.2 rounded-full bg-red-500/15 text-red-400 font-semibold border border-red-500/25">
+                            GASTO
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
+                        <span>{isExpense ? 'Salida de caja' : `Atendió: ${tx.staff_name}`}</span>
+                        {tx.client_name && tx.client_name !== '-' && (
+                          <>
+                            <span>•</span>
+                            <span className="text-slate-300">Cliente: {tx.client_name}</span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span className="font-mono text-[11px]">{tx.hora}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-sm font-bold text-white flex items-center gap-2">
-                      {tx.item_name}
-                      {isExpense && (
-                        <span className="text-[10px] px-2 py-0.2 rounded-full bg-red-500/15 text-red-400 font-semibold border border-red-500/25">
-                          GASTO
-                        </span>
-                      )}
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3">
+                    {/* Payment Method Badge */}
+                    <span className={`text-[11px] px-2.5 py-1 rounded-full font-medium border ${
+                      tx.metodo_pago === 'pago_movil' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      tx.metodo_pago === 'efectivo_usd' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                      tx.metodo_pago === 'fiado' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                      'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                    }`}>
+                      {tx.metodo_pago === 'pago_movil' ? 'PAGO MÓVIL' :
+                       tx.metodo_pago === 'efectivo_usd' ? 'EFECTIVO $' :
+                       tx.metodo_pago === 'fiado' ? 'FIADO' : tx.metodo_pago.toUpperCase()}
+                    </span>
+
+                    {/* Amount */}
+                    <div className="text-right">
+                      <div className={`text-sm font-black ${isExpense ? 'text-red-400' : 'text-white'}`}>
+                        {isExpense ? `-$${Math.abs(tx.monto_usd).toFixed(2)}` : `+$${tx.monto_usd.toFixed(2)}`} USD
+                      </div>
+                      <div className="text-xs text-gold-400 font-mono">
+                        Bs. {Math.abs(tx.monto_bs).toFixed(2)}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                      <span>{isExpense ? 'Salida de caja' : `Atendió: ${tx.staff_name}`}</span>
-                      <span>•</span>
-                      <span className="font-mono text-[11px]">{tx.hora}</span>
-                    </div>
+
+                    {/* Delete Transaction Button */}
+                    {onDeleteTransaction && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Seguro que deseas borrar este movimiento (${tx.item_name}) de la caja?`)) {
+                            onDeleteTransaction(tx.id)
+                          }
+                        }}
+                        className="p-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-colors"
+                        title="Eliminar movimiento por error"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between sm:justify-end gap-4">
-                  {/* Payment Method Badge */}
-                  <span className={`text-[11px] px-2.5 py-1 rounded-full font-medium border ${
-                    tx.metodo_pago === 'pago_movil' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                    tx.metodo_pago === 'efectivo_usd' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                    tx.metodo_pago === 'fiado' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                    'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                  }`}>
-                    {tx.metodo_pago === 'pago_movil' ? 'PAGO MÓVIL' :
-                     tx.metodo_pago === 'efectivo_usd' ? 'EFECTIVO $' :
-                     tx.metodo_pago === 'fiado' ? 'FIADO' : tx.metodo_pago.toUpperCase()}
-                  </span>
-
-                  {/* Amount */}
-                  <div className="text-right">
-                    <div className={`text-sm font-black ${isExpense ? 'text-red-400' : 'text-white'}`}>
-                      {isExpense ? `-$${Math.abs(tx.monto_usd).toFixed(2)}` : `+$${tx.monto_usd.toFixed(2)}`} USD
-                    </div>
-                    <div className="text-xs text-gold-400 font-mono">
-                      Bs. {Math.abs(tx.monto_bs).toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
       </div>
 

@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { BellRing, MessageSquare, Clock, Award, Zap, Settings2, Check, Flame, UserCheck, Calendar, Sparkles, Plus, RotateCcw } from 'lucide-react'
+import { BellRing, MessageSquare, Clock, Award, Zap, Settings2, Check, Flame, UserCheck, Calendar, Sparkles, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 export default function RetargetingView({
   clients,
   onUpdateClient,
+  onDeleteClient,
   retargetingConfig,
   onSaveRetargetingConfig,
   businessProfile
@@ -371,21 +372,37 @@ export default function RetargetingView({
                     </p>
                   </div>
 
-                  {client.status === 'overdue' && (
-                    <span className="px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-black uppercase shrink-0">
-                      🔴 Hace {client.daysSince} días (¡Le Toca!)
-                    </span>
-                  )}
-                  {client.status === 'soon' && (
-                    <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase shrink-0">
-                      🟡 Hace {client.daysSince} días (En {client.remainingDays}d)
-                    </span>
-                  )}
-                  {client.status === 'ok' && (
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase shrink-0">
-                      🟢 Hace {client.daysSince} días (Al día)
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {client.status === 'overdue' && (
+                      <span className="px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-black uppercase">
+                        🔴 Hace {client.daysSince}d (¡Le Toca!)
+                      </span>
+                    )}
+                    {client.status === 'soon' && (
+                      <span className="px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] font-black uppercase">
+                        🟡 En {client.remainingDays}d
+                      </span>
+                    )}
+                    {client.status === 'ok' && (
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
+                        🟢 Al día ({client.daysSince}d)
+                      </span>
+                    )}
+                    {onDeleteClient && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm(`¿Eliminar a ${client.name} del radar de clientes?`)) {
+                            onDeleteClient(client.id)
+                          }
+                        }}
+                        className="p-1.5 rounded-lg bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750"
+                        title="Eliminar cliente"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Cycle configurator per client */}

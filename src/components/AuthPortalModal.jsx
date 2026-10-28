@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Mail, Lock, Store, Phone, User, ShieldCheck, Crown, LogIn, UserPlus, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function AuthPortalModal({
@@ -8,10 +8,17 @@ export default function AuthPortalModal({
   saasConfig,
   onLoginSuccess,
   onRegisterTenant,
-  onOpenSuperAdmin
+  onOpenSuperAdmin,
+  initialTab = 'login'
 }) {
-  const [tab, setTab] = useState('login') // 'login' | 'register' | 'admin'
+  const [tab, setTab] = useState(initialTab) // 'login' | 'register' | 'admin'
   const [errorMsg, setErrorMsg] = useState('')
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setTab(initialTab)
+    }
+  }, [isOpen, initialTab])
 
   // Login form
   const [loginEmail, setLoginEmail] = useState('')
@@ -63,6 +70,7 @@ export default function AuthPortalModal({
       password: regPass.trim(),
       phone: regPhone.trim(),
       niche: regNiche,
+      isCleanAccount: true, // Starts 100% clean for real customers
       status: 'pendiente_pago', // Must pay upfront to activate (7-day guarantee)
       activatedAt: null,
       daysRemaining: 0,
