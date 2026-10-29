@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check, Settings, Calculator } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check, Settings, Calculator, Wifi, WifiOff } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
 
 export default function Navbar({ 
@@ -17,7 +17,9 @@ export default function Navbar({
   activeTenant,
   businessProfile,
   activeTab,
-  onSelectTab
+  onSelectTab,
+  isOnline = true,
+  showReconnectedBanner = false
 }) {
   const [bioSupported, setBioSupported] = useState(false)
   const [bioLinked, setBioLinked] = useState(Boolean(activeTenant?.biometricEnabled))
@@ -193,6 +195,26 @@ export default function Navbar({
             <LogOut className="w-3.5 h-3.5" />
             <span>Salir</span>
           </button>
+
+          {/* Estado de Conexión en Vivo para Grabación de Videos y Uso Diario */}
+          {!isOnline && (
+            <div 
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xs font-bold animate-pulse shadow-sm"
+              title="Estás trabajando en MODO LOCAL (sin conexión a internet). Toda la caja y clientes se guardan seguros en tu teléfono."
+            >
+              <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>MODO LOCAL (Sin Internet)</span>
+            </div>
+          )}
+
+          {showReconnectedBanner && isOnline && (
+            <div 
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold animate-bounce shadow-sm"
+            >
+              <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>¡En Línea! Sincronizado ✓</span>
+            </div>
+          )}
 
           {/* Tasa BCV Pill */}
           <button 

@@ -175,7 +175,8 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
-  '.woff2': 'font/woff2'
+  '.woff2': 'font/woff2',
+  '.webmanifest': 'application/manifest+json; charset=utf-8'
 }
 
 const server = http.createServer(async (req, res) => {
@@ -314,9 +315,10 @@ const server = http.createServer(async (req, res) => {
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath).toLowerCase()
     const contentType = MIME_TYPES[ext] || 'application/octet-stream'
+    const isServiceWorker = pathname === '/sw.js'
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000, immutable'
+      'Cache-Control': isServiceWorker || ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=31536000, immutable'
     })
     fs.createReadStream(filePath).pipe(res)
   } else {

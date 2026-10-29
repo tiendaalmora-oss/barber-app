@@ -29,7 +29,7 @@ import {
   INITIAL_SAAS_TENANTS
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff } from 'lucide-react'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -210,6 +210,32 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isDailyCloseModalOpen, setIsDailyCloseModalOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState('local')
+  const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true)
+  const [showReconnectedBanner, setShowReconnectedBanner] = useState(false)
+  const [offlineToast, setOfflineToast] = useState(null)
+
+  // Listen for Network Status (Online / Offline)
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true)
+      setShowReconnectedBanner(true)
+      setTimeout(() => setShowReconnectedBanner(false), 4500)
+      fetchServerBootstrap()
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+      setShowReconnectedBanner(false)
+      setOfflineToast('📴 Pasaste a Modo Sin Internet. Todo se seguirá guardando en tu teléfono.')
+      setTimeout(() => setOfflineToast(null), 4000)
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   // Current dynamic niche data combining metadata + editable staff/services/products
   const baseNiche = NICHES[currentNiche] || NICHES.barberia
@@ -343,8 +369,11 @@ export default function App() {
     }
     syncInitial()
 
-    // 2. Poll every 3 seconds so PC Admin and Phone stay 100% synchronized in real time
-    const interval = setInterval(fetchServerBootstrap, 3000)
+    // 2. Poll every 3 seconds only if device is online
+    const interval = setInterval(() => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      fetchServerBootstrap()
+    }, 3000)
     return () => clearInterval(interval)
   }, [])
 
@@ -820,7 +849,13 @@ export default function App() {
       })
     }
 
-    if (isSupabaseConfigured()) {
+    // If offline, display reassuring feedback on screen for video / user
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOfflineToast(`✅ Cobro de $${newTx.monto_usd} guardado en el teléfono (Modo Local).`)
+      setTimeout(() => setOfflineToast(null), 4000)
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine && isSupabaseConfigured()) {
       try {
         setSyncStatus('syncing')
         await supabase.from('transacciones').insert([{
@@ -836,13 +871,20 @@ export default function App() {
       } catch (e) {
         setSyncStatus('local')
       }
+    } else {
+      setSyncStatus('local')
     }
   }
 
   const handleRegisterExpense = async (newExpense) => {
     setTransactions(prev => [newExpense, ...prev])
 
-    if (isSupabaseConfigured()) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setOfflineToast(`📉 Gasto de $${Math.abs(newExpense.monto_usd)} guardado en el teléfono (Modo Local).`)
+      setTimeout(() => setOfflineToast(null), 4000)
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine && isSupabaseConfigured()) {
       try {
         await supabase.from('transacciones').insert([{
           item_name: newExpense.item_name,
@@ -953,6 +995,8 @@ export default function App() {
         businessProfile={businessProfile}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        isOnline={isOnline}
+        showReconnectedBanner={showReconnectedBanner}
       />
 
       {/* Main Container */}
@@ -1199,6 +1243,14 @@ export default function App() {
           localStorage.setItem('barber_transactions', JSON.stringify([]))
         }}
       />
+
+      {/* Floating Offline Toast Notification for Camera / User Reassurance */}
+      {offlineToast && (
+        <div className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-2xl bg-dark-900/95 border border-amber-500/50 text-amber-200 text-xs font-bold shadow-2xl flex items-center gap-2.5 backdrop-blur-md animate-fadeIn">
+          <WifiOff className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{offlineToast}</span>
+        </div>
+      )}
 
     </div>
   )
