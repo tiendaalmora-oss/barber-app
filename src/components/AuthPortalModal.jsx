@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2 } from 'lucide-react'
+import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2, MessageSquare } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
@@ -192,25 +192,6 @@ export default function AuthPortalModal({
       }
     }
 
-    // Mirror registration to Supabase Auth if configured for email verification
-    if (isSupabaseConfigured()) {
-      try {
-        await supabase.auth.signUp({
-          email: cleanEmail,
-          password: regPass.trim().length >= 6 ? regPass.trim() : regPass.trim() + '00',
-          options: {
-            data: {
-              business_name: regBusiness.trim(),
-              owner_name: regOwner.trim(),
-              phone: regPhone.trim()
-            }
-          }
-        })
-      } catch (e) {
-        // Non-blocking
-      }
-    }
-
     const newTenant = {
       id: tenantId,
       saasProduct: 'barberia_saas',
@@ -235,7 +216,7 @@ export default function AuthPortalModal({
     if (onClose) onClose()
   }
 
-  // 4. Password Recovery via Security PIN or Last 4 digits of registered WhatsApp
+  // 4. Password Recovery via Security PIN or WhatsApp digits (+ WhatsApp support fallback)
   const handleRecoverPassword = async (e) => {
     e.preventDefault()
     setErrorMsg('')
@@ -244,21 +225,25 @@ export default function AuthPortalModal({
     const cleanEmail = recEmail.trim().toLowerCase()
     const found = tenants.find(t => t.email.toLowerCase() === cleanEmail)
     if (!found) {
-      setErrorMsg('No encontramos ninguna cuenta con ese correo electrónico.')
+      setErrorMsg('No encontramos ninguna cuenta con ese correo. Si eres nuevo, toca "Crear Cuenta Nueva".')
       return
     }
 
     const inputDigits = recPinOrPhone.replace(/[^0-9]/g, '')
     const phoneDigits = (found.phone || '').replace(/[^0-9]/g, '')
     const last4Phone = phoneDigits.slice(-4)
-    const savedPin = found.securityPin || ''
+    const last3Phone = phoneDigits.slice(-3)
+    const savedPin = (found.securityPin || '').replace(/[^0-9]/g, '')
 
     const isMatch =
       (savedPin && inputDigits === savedPin) ||
-      (last4Phone && last4Phone.length === 4 && inputDigits === last4Phone)
+      (last4Phone && inputDigits === last4Phone) ||
+      (last3Phone && inputDigits === last3Phone) ||
+      (inputDigits.length >= 3 && phoneDigits.endsWith(inputDigits)) ||
+      (inputDigits.length >= 3 && savedPin.endsWith(inputDigits))
 
     if (!isMatch) {
-      setErrorMsg('El PIN de Seguridad o los últimos 4 dígitos de tu WhatsApp no coinciden con los registrados.')
+      setErrorMsg('El PIN o dígitos no coinciden. Escribe los 4 números de tu PIN o los últimos dígitos de tu WhatsApp, o toca el botón verde abajo para pedir tu clave por WhatsApp.')
       return
     }
 
@@ -280,7 +265,19 @@ export default function AuthPortalModal({
     setTimeout(() => {
       onLoginSuccess(updated)
       if (onClose) onClose()
-    }, 1000)
+    }, 800)
+  }
+
+  const handleWhatsAppRecoveryHelp = () => {
+    const cleanPhone = (saasConfig?.ownerWhatsapp || '+5491164827875').replace(/[^0-9]/g, '')
+    const targetEmail = recEmail.trim() || loginEmail.trim() || 'No especificado'
+    const msg = `👋 ¡Hola soporte de Ingenio OS! Se me olvidó la clave de mi cuenta de BarberOS.\n\n` +
+      `📧 *Mi Correo Registrado:* ${targetEmail}\n` +
+      `🔑 ¿Me podrían indicar o restablecer mi contraseña para poder ingresar? ¡Gracias!`
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank')
   }
 
   return (
@@ -669,9 +666,21 @@ export default function AuthPortalModal({
               </button>
               <button
                 type="submit"
-                className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black"
+                className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black shadow-md shadow-emerald-500/20"
               >
                 Guardar Nueva Clave
+              </button>
+            </div>
+
+            <div className="pt-2 border-t border-dark-800 text-center">
+              <button
+                type="button"
+                onClick={handleWhatsAppRecoveryHelp}
+                className="w-full py-2.5 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                title="Escribir a Soporte Técnico por WhatsApp para recuperar tu contraseña"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span>¿No recuerdas tu PIN? Recuperar por WhatsApp</span>
               </button>
             </div>
           </form>
