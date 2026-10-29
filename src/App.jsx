@@ -1217,6 +1217,7 @@ export default function App() {
               onDeleteAppointment={handleDeleteAppointment}
               clients={clients}
               businessProfile={businessProfile}
+              onOpenSettings={() => setIsSettingsModalOpen(true)}
             />
           )}
 

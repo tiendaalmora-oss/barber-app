@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2 } from 'lucide-react'
+import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2, Settings } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
 
-export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {} }) {
+export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {}, onOpenSettings }) {
   // Today's ISO date string strictly in local timezone
   const getTodayStr = () => getLocalDateIso()
 
@@ -76,12 +76,25 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
       {/* Header with Date Navigator */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-dark-900 border border-dark-800 p-4 rounded-2xl">
         <div>
-          <h2 className="text-xl font-black text-white flex items-center gap-2">
-            Turnos y Agenda
-            <span className="text-xs px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
-              {formatDateLabel(selectedDate)}
-            </span>
-          </h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              Turnos y Agenda
+              <span className="text-xs px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 font-medium">
+                {formatDateLabel(selectedDate)}
+              </span>
+            </h2>
+            {onOpenSettings && (
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="text-[11px] px-2.5 py-1 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-gold-400 border border-dark-750 flex items-center gap-1.5 transition-all shadow-sm"
+                title="Configurar los horarios de atención y bloques de reserva de tu agenda"
+              >
+                <Settings className="w-3.5 h-3.5 text-gold-400" />
+                <span>Modificar Horarios</span>
+              </button>
+            )}
+          </div>
           <p className="text-xs text-slate-400 mt-0.5">
             Organiza los turnos por día para que los clientes no esperen de pie
           </p>
@@ -297,14 +310,17 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
               {/* Selector de HORA */}
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Hora Estimada</label>
-                <div className="grid grid-cols-3 gap-1.5 mb-1.5">
-                  {['10:00 AM', '02:00 PM', '04:30 PM'].map(h => (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-1.5 max-h-28 overflow-y-auto p-1 bg-dark-900 rounded-xl border border-dark-750">
+                  {((businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
+                    ? businessProfile.bookingSlots
+                    : ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM']
+                  ).map(h => (
                     <button
                       type="button"
                       key={h}
                       onClick={() => setNewTime(h)}
-                      className={`py-1 text-[11px] rounded-lg border font-mono transition-all ${
-                        newTime === h ? 'bg-purple-600 text-white border-purple-500' : 'bg-dark-800 text-slate-400 border-dark-700'
+                      className={`py-1 text-[11px] rounded-lg border font-mono transition-all text-center ${
+                        newTime === h ? 'bg-purple-600 text-white border-purple-500 font-bold shadow-sm' : 'bg-dark-800 text-slate-400 border-dark-700 hover:text-white'
                       }`}
                     >
                       {h}

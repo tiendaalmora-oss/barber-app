@@ -1,17 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
-
-const TIME_SLOTS = [
-  '09:00 AM',
-  '10:00 AM',
-  '11:30 AM',
-  '01:00 PM',
-  '02:00 PM',
-  '03:30 PM',
-  '05:00 PM',
-  '06:00 PM'
-]
+import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 
 export default function PublicBookingView({
   businessProfile,
@@ -23,6 +13,10 @@ export default function PublicBookingView({
   isOwnerPreview,
   onExitPreview
 }) {
+  const activeSlots = (businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
+    ? businessProfile.bookingSlots
+    : DEFAULT_BOOKING_SLOTS
+
   const getTodayStr = () => getLocalDateIso()
   const getTomorrowStr = () => {
     const d = new Date()
@@ -37,7 +31,7 @@ export default function PublicBookingView({
   const [selectedService, setSelectedService] = useState(allServices[0]?.name || '')
   const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || 'any')
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
-  const [selectedTime, setSelectedTime] = useState('10:00 AM')
+  const [selectedTime, setSelectedTime] = useState(activeSlots[0] || '10:00 AM')
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [bookedTicket, setBookedTicket] = useState(null)
@@ -518,7 +512,7 @@ export default function PublicBookingView({
 
                 {/* Horas disponibles (sincronizadas con las citas ocupadas) */}
                 <div className="grid grid-cols-4 gap-2 pt-1">
-                  {TIME_SLOTS.map(slot => {
+                  {activeSlots.map(slot => {
                     const taken = isSlotTaken(slot)
                     const active = selectedTime === slot && !taken
                     return (

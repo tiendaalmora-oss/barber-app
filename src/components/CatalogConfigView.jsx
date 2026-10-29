@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram, Pencil, X } from 'lucide-react'
+import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 
 export default function CatalogConfigView({
   businessProfile,
@@ -78,6 +79,27 @@ export default function CatalogConfigView({
     }
     setNewSvcName('')
     setNewSvcPrice('')
+  }
+
+  const toggleBookingSlot = (slot) => {
+    const current = form.bookingSlots || DEFAULT_BOOKING_SLOTS
+    if (current.includes(slot)) {
+      if (current.length <= 1) return
+      setForm({ ...form, bookingSlots: current.filter(s => s !== slot) })
+    } else {
+      const next = [...current, slot].sort((a, b) => {
+        return MASTER_BOOKING_SLOTS.indexOf(a) - MASTER_BOOKING_SLOTS.indexOf(b)
+      })
+      setForm({ ...form, bookingSlots: next })
+    }
+  }
+
+  const setAllSlots = () => {
+    setForm({ ...form, bookingSlots: MASTER_BOOKING_SLOTS })
+  }
+
+  const setDefaultSlots = () => {
+    setForm({ ...form, bookingSlots: DEFAULT_BOOKING_SLOTS })
   }
 
   const startEditService = (svc) => {
@@ -247,16 +269,72 @@ export default function CatalogConfigView({
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Horario de Trabajo</span>
+                  <span>Horario de Trabajo (Texto)</span>
                 </label>
                 <input
                   type="text"
-                  value={form.schedule}
+                  value={form.schedule || ''}
                   onChange={(e) => setForm({ ...form, schedule: e.target.value })}
                   placeholder="Ej. Lun a Sáb: 9:00 AM a 7:00 PM"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
                 />
               </div>
+            </div>
+
+            {/* Selector de Horas de Agenda y Turnos Disponibles */}
+            <div className="pt-3 border-t border-dark-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Horas Disponibles en la Agenda (Turnos)</span>
+                  </label>
+                  <p className="text-[11px] text-slate-400">
+                    Toca para activar o desactivar las horas que salen en tu Link de Reserva
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={setDefaultSlots}
+                    className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
+                    title="Activar de 9 AM a 7 PM"
+                  >
+                    Típicas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={setAllSlots}
+                    className="text-[10px] px-2 py-0.5 rounded bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-medium"
+                    title="Activar todas desde 8 AM hasta 8:30 PM"
+                  >
+                    Todas
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-36 overflow-y-auto p-2 bg-dark-950 rounded-xl border border-dark-800">
+                {MASTER_BOOKING_SLOTS.map(slot => {
+                  const active = (form.bookingSlots || DEFAULT_BOOKING_SLOTS).includes(slot)
+                  return (
+                    <button
+                      type="button"
+                      key={slot}
+                      onClick={() => toggleBookingSlot(slot)}
+                      className={`py-1.5 px-1 rounded-lg text-[10px] font-mono font-bold transition-all text-center ${
+                        active
+                          ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30 border border-purple-500 scale-[1.02]'
+                          : 'bg-dark-900 text-slate-500 border border-dark-800 hover:border-dark-700 hover:text-slate-400'
+                      }`}
+                    >
+                      {slot}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-[10px] text-slate-500 italic">
+                * {(form.bookingSlots || DEFAULT_BOOKING_SLOTS).length} horas habilitadas para que tus clientes aparten turno.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
