@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award } from 'lucide-react'
+import { getLocalDateIso } from '../lib/dateUtils'
 
 const AVATAR_OPTIONS = ['✂️', '💈', '⚡', '👑', '🔥', '💅', '✨', '🧔']
 
@@ -11,9 +12,25 @@ export default function CommissionsView({
   exchangeRate,
   onAddStaff,
   onUpdateStaff,
-  onDeleteStaff
+  onDeleteStaff,
+  onRegisterExpense
 }) {
-  const [paidStatus, setPaidStatus] = useState({})
+  const todayKey = 'barber_commissions_paid_' + getLocalDateIso()
+  const [paidStatus, setPaidStatus] = useState(() => {
+    try {
+      const saved = localStorage.getItem(todayKey)
+      return saved ? JSON.parse(saved) : {}
+    } catch (e) {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(todayKey, JSON.stringify(paidStatus))
+    } catch (e) {}
+  }, [paidStatus, todayKey])
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
 
@@ -77,8 +94,22 @@ export default function CommissionsView({
   })
 
   const handlePayCommission = (staffId, staffName, amount) => {
-    if (confirm(`¿Confirmas que le entregaste a ${staffName} su comisión de $${amount.toFixed(2)} USD?`)) {
+    if (confirm(`¿Confirmas que le entregaste a ${staffName} su comisión de $${amount.toFixed(2)} USD?\n\nAl confirmar, se registrará como salida de dinero (Gasto) en la caja para que el arqueo de hoy cuadre exacto.`)) {
       setPaidStatus(prev => ({ ...prev, [staffId]: true }))
+      if (onRegisterExpense && amount > 0) {
+        onRegisterExpense({
+          id: 'exp_comm_' + Date.now(),
+          type: 'gasto',
+          item_name: `Pago Comisión - ${staffName}`,
+          category: 'Comisiones',
+          monto_usd: -amount,
+          monto_bs: -parseFloat((amount * exchangeRate).toFixed(2)),
+          tasa_bcv: exchangeRate,
+          metodo_pago: 'efectivo_usd',
+          hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          fecha: new Date().toISOString()
+        })
+      }
     }
   }
 

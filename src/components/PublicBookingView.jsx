@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram } from 'lucide-react'
+import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 const TIME_SLOTS = [
   '09:00 AM',
@@ -22,11 +23,11 @@ export default function PublicBookingView({
   isOwnerPreview,
   onExitPreview
 }) {
-  const getTodayStr = () => new Date().toISOString().split('T')[0]
+  const getTodayStr = () => getLocalDateIso()
   const getTomorrowStr = () => {
     const d = new Date()
     d.setDate(d.getDate() + 1)
-    return d.toISOString().split('T')[0]
+    return getLocalDateIso(d)
   }
 
   const allServices = [...(customServices || []), ...nicheData.services]
@@ -88,8 +89,8 @@ export default function PublicBookingView({
 
   const handleSendWhatsAppConfirmation = () => {
     if (!bookedTicket) return
-    const cleanPhone = (businessProfile.whatsapp || '').replace(/[^0-9]/g, '')
-    const msg = `👋 ¡Hola *${businessProfile.businessName}*! Acabo de apartar mi turno por su página web:\n\n` +
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
+    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de apartar mi turno por su página web:\n\n` +
       `👤 *Cliente:* ${bookedTicket.client_name}\n` +
       `✂️ *Servicio:* ${bookedTicket.service} ($${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n` +
       `💈 *Atiende:* ${bookedTicket.staffName}\n` +
@@ -103,9 +104,9 @@ export default function PublicBookingView({
   }
 
   const handleOrderProductWhatsApp = (prod) => {
-    const cleanPhone = (businessProfile.whatsapp || '').replace(/[^0-9]/g, '')
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
     const bs = (prod.price_usd * exchangeRate).toFixed(2)
-    const msg = `👋 ¡Hola *${businessProfile.businessName}*! Vi en su catálogo el producto *${prod.name}* ($${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
+    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* ($${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
       : `https://wa.me/?text=${encodeURIComponent(msg)}`

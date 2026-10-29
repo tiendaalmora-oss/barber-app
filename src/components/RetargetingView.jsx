@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { BellRing, MessageSquare, Clock, Award, Zap, Settings2, Check, Flame, UserCheck, Calendar, Sparkles, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 export default function RetargetingView({
   clients,
@@ -17,14 +18,15 @@ export default function RetargetingView({
 
   const publicUrl = `${window.location.origin}/?reserva=1`
 
-  // Calculate days since last visit
+  // Calculate days since last visit (Resilient with ISO strings and pure YYYY-MM-DD)
   const getDaysSince = (dateStr) => {
     if (!dateStr) return 20
-    const last = new Date(dateStr + 'T00:00:00')
+    const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+    const last = new Date(cleanDate + 'T00:00:00')
     const now = new Date()
     const diffTime = now.getTime() - last.getTime()
     const days = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    return Math.max(0, days)
+    return Math.max(0, isNaN(days) ? 0 : days)
   }
 
   // Enrich clients with computed status
@@ -87,11 +89,13 @@ export default function RetargetingView({
   }
 
   const handleSendWhatsApp = (client) => {
-    const cleanPhone = (client.phone || '').replace(/[^0-9]/g, '')
+    const cleanPhone = normalizeWhatsAppPhone(client.phone || '')
+    if (!cleanPhone || cleanPhone.length < 9) {
+      alert(`El cliente ${client.name} no tiene un teléfono válido registrado para enviarle WhatsApp.`)
+      return
+    }
     const msg = buildPersonalizedMessage(client)
-    const url = cleanPhone
-      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
     window.open(url, '_blank')
   }
 

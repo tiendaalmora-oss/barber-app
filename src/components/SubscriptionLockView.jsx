@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2 } from 'lucide-react'
+import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 export default function SubscriptionLockView({
   tenant,
@@ -31,7 +32,7 @@ export default function SubscriptionLockView({
     }
     setReported(true)
 
-    const cleanPhone = (saasConfig.ownerWhatsapp || '+5491164827875').replace(/[^0-9]/g, '')
+    const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
     const msg = isNewAccount
       ? `🚀 *¡Hola equipo de IngenioOS!* Acabo de registrar mi negocio y realicé el pago para activar mi cuenta (con la Garantía de ${saasConfig.guaranteeDays} días):\n\n` +
         `💈 *Negocio:* ${tenant?.businessName}\n` +

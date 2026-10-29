@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
+import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
 
 export default function DailyCloseModal({
   isOpen,
@@ -8,47 +9,56 @@ export default function DailyCloseModal({
   exchangeRate,
   businessProfile,
   staffList,
-  onResetDay
+  onResetDay,
+  onResetDailyTransactions
 }) {
   const [cashInDrawerCounted, setCashInDrawerCounted] = useState('')
   const [copied, setCopied] = useState(false)
   const [confirmedReset, setConfirmedReset] = useState(false)
 
+  const handleResetAction = onResetDay || onResetDailyTransactions
+
   if (!isOpen) return null
 
-  // 1. Incomes by Payment Method
-  const incomeTx = transactions.filter(t => t.monto_usd > 0)
+  // 1. Filter transactions for TODAY in local time
+  const todayTx = (transactions || []).filter(t => isDateToday(t.fecha))
+  const incomeTx = todayTx.filter(t => t.monto_usd > 0)
   const totalIncomeUSD = incomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
   const totalIncomeBs = totalIncomeUSD * exchangeRate
 
   const efectivoUSD = incomeTx
-    .filter(t => t.metodo_pago === 'efectivo')
+    .filter(t => isEfectivoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
   const pagoMovilUSD = incomeTx
-    .filter(t => t.metodo_pago === 'pago_movil')
+    .filter(t => isPagoMovilMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
   const pagoMovilBs = pagoMovilUSD * exchangeRate
 
   const zelleUSD = incomeTx
-    .filter(t => t.metodo_pago === 'zelle' || t.metodo_pago === 'binance')
+    .filter(t => isDigitalMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
   const puntoUSD = incomeTx
-    .filter(t => t.metodo_pago === 'punto')
+    .filter(t => isPuntoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
   const fiadoUSD = incomeTx
-    .filter(t => t.metodo_pago === 'fiado')
+    .filter(t => isFiadoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
-  // 2. Expenses
-  const expenseTx = transactions.filter(t => t.monto_usd < 0)
+  // 2. Expenses of today
+  const expenseTx = todayTx.filter(t => t.monto_usd < 0)
   const totalExpensesUSD = Math.abs(expenseTx.reduce((sum, t) => sum + t.monto_usd, 0))
   const totalExpensesBs = totalExpensesUSD * exchangeRate
 
-  // Cash expected in drawer (Cash in minus expenses paid in cash)
-  const expectedCashInDrawer = Math.max(0, efectivoUSD - totalExpensesUSD)
+  // Cash expected in drawer (Efectivo cobrado menos gastos en efectivo)
+  const cashExpensesUSD = Math.abs(
+    expenseTx
+      .filter(t => isEfectivoMethod(t.metodo_pago) || !t.metodo_pago)
+      .reduce((sum, t) => sum + t.monto_usd, 0)
+  )
+  const expectedCashInDrawer = Math.max(0, efectivoUSD - cashExpensesUSD)
 
   // 3. Commissions by Staff Member
   const commissionsByStaff = (staffList || []).map(staff => {
@@ -139,7 +149,7 @@ export default function DailyCloseModal({
 
   const handleSendWhatsApp = () => {
     const text = generateWhatsAppClosingText()
-    const cleanPhone = (businessProfile?.whatsapp || '').replace(/[^0-9]/g, '')
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
       : `https://wa.me/?text=${encodeURIComponent(text)}`
@@ -354,7 +364,7 @@ export default function DailyCloseModal({
             </button>
           </div>
 
-          {onResetDay && (
+          {handleResetAction && (
             <div className="w-full sm:w-auto flex justify-end">
               {!confirmedReset ? (
                 <button
@@ -371,7 +381,7 @@ export default function DailyCloseModal({
                   <button
                     type="button"
                     onClick={() => {
-                      onResetDay()
+                      handleResetAction()
                       setConfirmedReset(false)
                       onClose()
                     }}

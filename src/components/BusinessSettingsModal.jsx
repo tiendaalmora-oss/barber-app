@@ -22,20 +22,40 @@ export default function BusinessSettingsModal({
 
   if (!isOpen) return null
 
-  // Handle local image upload (converts to optimized base64 data URL)
+  // Handle local image upload with automatic Canvas downscaling (prevents LocalStorage QuotaExceededError)
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('La imagen es muy pesada. Te recomendamos una imagen menor a 2 MB.')
-      return
-    }
-
     const reader = new FileReader()
     reader.onload = (event) => {
-      const base64 = event.target?.result
-      setForm(prev => ({ ...prev, logoUrl: base64 }))
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const maxDim = 256
+        let width = img.width
+        let height = img.height
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width)
+            width = maxDim
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height)
+            height = maxDim
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8)
+        setForm(prev => ({ ...prev, logoUrl: compressedBase64 }))
+      }
+      img.src = event.target?.result
     }
     reader.readAsDataURL(file)
   }

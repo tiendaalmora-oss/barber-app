@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2 } from 'lucide-react'
+import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {} }) {
-  // Today's ISO date string (YYYY-MM-DD)
-  const getTodayStr = () => new Date().toISOString().split('T')[0]
+  // Today's ISO date string strictly in local timezone
+  const getTodayStr = () => getLocalDateIso()
 
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
   const [showAddModal, setShowAddModal] = useState(false)
@@ -52,14 +53,14 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
   const changeDateByDays = (days) => {
     const current = new Date(selectedDate + 'T00:00:00')
     current.setDate(current.getDate() + days)
-    setSelectedDate(current.toISOString().split('T')[0])
+    setSelectedDate(getLocalDateIso(current))
   }
 
   const formatDateLabel = (dateStr) => {
     const today = getTodayStr()
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowStr = tomorrow.toISOString().split('T')[0]
+    const tomorrowStr = getLocalDateIso(tomorrow)
 
     if (dateStr === today) return 'Hoy'
     if (dateStr === tomorrowStr) return 'Mañana'
@@ -207,7 +208,7 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                     onClick={() => {
                       const foundClient = clients.find(c => c.name.toLowerCase() === apt.client_name.toLowerCase())
                       const rawPhone = apt.client_phone || foundClient?.phone || ''
-                      const cleanPhone = rawPhone.replace(/[^0-9]/g, '')
+                      const cleanPhone = normalizeWhatsAppPhone(rawPhone)
                       const bizName = businessProfile?.businessName || 'nuestro local'
                       const msg = `👋 ¡Activo *${apt.client_name.split(' ')[0]}*! 💈✂️ Te escribimos de *${bizName}* para confirmar tu turno de *${formatDateLabel(apt.date || selectedDate)}* a las *${apt.time}* (${apt.service} con ${staffObj?.name || 'el equipo'}).\n\n¿Me confirmas tu asistencia? ¡Te esperamos puntual!`
                       const url = cleanPhone

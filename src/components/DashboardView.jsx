@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Sparkles, Lock } from 'lucide-react'
+import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
 
 export default function DashboardView({ 
   transactions, 
@@ -33,7 +34,7 @@ export default function DashboardView({
   const totalBusinessNetUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
   const totalServicesCount = transactions.filter(t => t.monto_usd > 0).length
 
-  // 1. DYNAMIC 7-day revenue trend based strictly on REAL transactions
+  // 1. DYNAMIC 7-day revenue trend based strictly on REAL transactions (Local Timezone Resilient)
   const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
   const today = new Date()
 
@@ -41,11 +42,11 @@ export default function DashboardView({
     // 6 days ago ... today (idx = 6 is today)
     const d = new Date()
     d.setDate(today.getDate() - (6 - idx))
-    const dateIso = d.toISOString().split('T')[0]
+    const dateIso = getLocalDateIso(d)
     const dayLabel = idx === 6 ? 'Hoy' : dayNames[d.getDay()]
 
     const dayTx = transactions.filter(t => {
-      const txDate = t.fecha ? t.fecha.split('T')[0] : ''
+      const txDate = t.fecha ? getLocalDateIso(t.fecha) : ''
       return txDate === dateIso
     })
 
@@ -66,7 +67,7 @@ export default function DashboardView({
   const hasWeeklySales = weeklyData.some(d => d.revenue > 0)
   const bestDay = hasWeeklySales ? [...weeklyData].sort((a, b) => b.revenue - a.revenue)[0] : null
 
-  // 2. DYNAMIC real payment methods breakdown
+  // 2. DYNAMIC real payment methods breakdown (Unified IDs & Normalized Methods)
   const paymentMethodsList = [
     { id: 'pago_movil', label: 'Pago Móvil (Bs)', color: 'bg-blue-500' },
     { id: 'efectivo', label: 'Efectivo $ (Gaveta)', color: 'bg-emerald-500' },
@@ -75,7 +76,15 @@ export default function DashboardView({
     { id: 'fiado', label: 'Fiados (Por Cobrar)', color: 'bg-amber-500' },
   ].map(m => {
     const sum = transactions
-      .filter(t => t.monto_usd > 0 && (t.metodo_pago === m.id || (m.id === 'zelle' && t.metodo_pago === 'binance')))
+      .filter(t => {
+        if (t.monto_usd <= 0) return false
+        if (m.id === 'efectivo') return isEfectivoMethod(t.metodo_pago)
+        if (m.id === 'punto') return isPuntoMethod(t.metodo_pago)
+        if (m.id === 'pago_movil') return isPagoMovilMethod(t.metodo_pago)
+        if (m.id === 'zelle') return isDigitalMethod(t.metodo_pago)
+        if (m.id === 'fiado') return isFiadoMethod(t.metodo_pago)
+        return t.metodo_pago === m.id
+      })
       .reduce((acc, t) => acc + t.monto_usd, 0)
     const pct = totalIncomeUSD > 0 ? Math.round((sum / totalIncomeUSD) * 100) : 0
     return { ...m, sum, pct }
@@ -440,14 +449,16 @@ export default function DashboardView({
                   <div className="flex items-center justify-between sm:justify-end gap-3">
                     {/* Payment Method Badge */}
                     <span className={`text-[11px] px-2.5 py-1 rounded-full font-medium border ${
-                      tx.metodo_pago === 'pago_movil' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                      tx.metodo_pago === 'efectivo_usd' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                      tx.metodo_pago === 'fiado' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                      isPagoMovilMethod(tx.metodo_pago) ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      isEfectivoMethod(tx.metodo_pago) ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                      isPuntoMethod(tx.metodo_pago) ? 'bg-teal-500/10 text-teal-400 border-teal-500/20' :
+                      isFiadoMethod(tx.metodo_pago) ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                       'bg-purple-500/10 text-purple-400 border-purple-500/20'
                     }`}>
-                      {tx.metodo_pago === 'pago_movil' ? 'PAGO MÓVIL' :
-                       tx.metodo_pago === 'efectivo_usd' ? 'EFECTIVO $' :
-                       tx.metodo_pago === 'fiado' ? 'FIADO' : tx.metodo_pago.toUpperCase()}
+                      {isPagoMovilMethod(tx.metodo_pago) ? 'PAGO MÓVIL' :
+                       isEfectivoMethod(tx.metodo_pago) ? 'EFECTIVO $' :
+                       isPuntoMethod(tx.metodo_pago) ? 'PUNTO DE VENTA' :
+                       isFiadoMethod(tx.metodo_pago) ? 'FIADO' : (tx.metodo_pago || 'OTRO').toUpperCase()}
                     </span>
 
                     {/* Amount */}

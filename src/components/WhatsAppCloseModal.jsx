@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { X, MessageSquare, Copy, Check, ExternalLink, Send, Smartphone, ShieldCheck, Share2 } from 'lucide-react'
+import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
 
 export default function WhatsAppCloseModal({
   isOpen,
@@ -23,9 +24,10 @@ export default function WhatsAppCloseModal({
   })
   const timeStr = today.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
 
-  // Calculations
-  const incomeTx = transactions.filter(t => t.monto_usd > 0)
-  const expenseTx = transactions.filter(t => t.monto_usd < 0)
+  // Calculations for TODAY in local timezone
+  const todayTx = (transactions || []).filter(t => isDateToday(t.fecha))
+  const incomeTx = todayTx.filter(t => t.monto_usd > 0)
+  const expenseTx = todayTx.filter(t => t.monto_usd < 0)
 
   const totalIncomeUSD = incomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
   const totalIncomeBs = totalIncomeUSD * exchangeRate
@@ -40,10 +42,11 @@ export default function WhatsAppCloseModal({
   const netProfitBs = netProfitUSD * exchangeRate
 
   // Breakdown by payment method
-  const pagoMovilUSD = incomeTx.filter(t => t.metodo_pago === 'pago_movil').reduce((s, t) => s + t.monto_usd, 0)
-  const efectivoUSD = incomeTx.filter(t => t.metodo_pago === 'efectivo_usd').reduce((s, t) => s + t.monto_usd, 0)
-  const digitalUSD = incomeTx.filter(t => ['zelle', 'binance'].includes(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
-  const fiadoUSD = incomeTx.filter(t => t.metodo_pago === 'fiado').reduce((s, t) => s + t.monto_usd, 0)
+  const pagoMovilUSD = incomeTx.filter(t => isPagoMovilMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
+  const efectivoUSD = incomeTx.filter(t => isEfectivoMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
+  const puntoUSD = incomeTx.filter(t => isPuntoMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
+  const digitalUSD = incomeTx.filter(t => isDigitalMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
+  const fiadoUSD = incomeTx.filter(t => isFiadoMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
 
   // Breakdown by staff
   const staffSummary = {}
@@ -74,6 +77,7 @@ export default function WhatsAppCloseModal({
     `📊 *MÉTODOS DE PAGO:*`,
     `• Pago Móvil: $${pagoMovilUSD.toFixed(2)} USD (~Bs. ${(pagoMovilUSD * exchangeRate).toFixed(2)})`,
     `• Efectivo $ (Gaveta): $${efectivoUSD.toFixed(2)} USD`,
+    puntoUSD > 0 ? `• Punto de Venta: $${puntoUSD.toFixed(2)} USD (~Bs. ${(puntoUSD * exchangeRate).toFixed(2)})` : null,
     digitalUSD > 0 ? `• Zelle / Binance: $${digitalUSD.toFixed(2)} USD` : null,
     fiadoUSD > 0 ? `• Fiados Registrados: $${fiadoUSD.toFixed(2)} USD` : null,
     `────────────────────────`,
@@ -97,12 +101,9 @@ export default function WhatsAppCloseModal({
   }
 
   const handleSendWhatsApp = () => {
-    let cleanPhone = phoneNumber.replace(/[^0-9]/g, '')
+    let cleanPhone = normalizeWhatsAppPhone(phoneNumber)
     let url = ''
     if (cleanPhone) {
-      if (!cleanPhone.startsWith('58') && cleanPhone.length === 10) {
-        cleanPhone = '58' + cleanPhone
-      }
       url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(fullMessage)}`
     } else {
       url = `https://wa.me/?text=${encodeURIComponent(fullMessage)}`

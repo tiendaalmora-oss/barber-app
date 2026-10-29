@@ -30,12 +30,36 @@ import {
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff } from 'lucide-react'
+import { getLocalDateIso, isDateToday } from './lib/dateUtils'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
   const searchParams = typeof window !== 'undefined' ? window.location.search : ''
   const hostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : ''
   const isDirectClientLink = searchParams.includes('reserva=1')
+  const publicTenantParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('b') : null
+  const [publicTenantWs, setPublicTenantWs] = useState(null)
+
+  useEffect(() => {
+    if (!publicTenantParam) return
+    // 1. Try local cache
+    try {
+      const localScoped = localStorage.getItem(`barber_ws_${publicTenantParam}`)
+      if (localScoped) {
+        setPublicTenantWs(JSON.parse(localScoped))
+      }
+    } catch (e) {}
+
+    // 2. Fetch from VPS server
+    fetch(`/api/workspace/${encodeURIComponent(publicTenantParam)}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.workspace) {
+          setPublicTenantWs(data.workspace)
+        }
+      })
+      .catch(() => {})
+  }, [publicTenantParam])
   // Admin ONLY allowed on ingeniodigital.shop domain (or localhost during dev) — completely blocked on barber.ingenioos.online!
   const isAdminDomain = hostname.includes('ingeniodigital.shop') || ((hostname === 'localhost' || hostname === '127.0.0.1') && searchParams.includes('admin=1'))
   const isDirectRegisterLink = searchParams.includes('registro=1')
@@ -280,12 +304,16 @@ export default function App() {
       productsByNiche
     }
     // 1. Save in local browser storage isolated for this tenant
-    localStorage.setItem(`barber_ws_${activeTenantId}`, JSON.stringify(ws))
-    // 2. Backward compatibility with legacy global keys
-    localStorage.setItem('barber_transactions', JSON.stringify(transactions))
-    localStorage.setItem('barber_clients_v2', JSON.stringify(clients))
-    localStorage.setItem('barber_appointments', JSON.stringify(appointments))
-    localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
+    try {
+      localStorage.setItem(`barber_ws_${activeTenantId}`, JSON.stringify(ws))
+      // 2. Backward compatibility with legacy global keys
+      localStorage.setItem('barber_transactions', JSON.stringify(transactions))
+      localStorage.setItem('barber_clients_v2', JSON.stringify(clients))
+      localStorage.setItem('barber_appointments', JSON.stringify(appointments))
+      localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
+    } catch (storageErr) {
+      console.warn('Storage quota warning, continuing with in-memory state:', storageErr)
+    }
 
     // 3. Debounced sync to VPS backend
     const timeout = setTimeout(async () => {
@@ -816,7 +844,7 @@ export default function App() {
       }))
     }
 
-    const todayStr = new Date().toISOString().split('T')[0]
+    const todayStr = getLocalDateIso()
 
     if (newTx.client_name && newTx.client_name !== 'Cliente Mostrador') {
       setClients(prev => {
@@ -930,14 +958,50 @@ export default function App() {
 
   // 2. If in Public Client Landing Mode (?reserva=1 or Owner Preview)
   if (isPublicPreview) {
+    const bookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || businessProfile
+    const bookingServices = (publicTenantWs && publicTenantWs.servicesByNiche && publicTenantWs.servicesByNiche[currentNiche]) || currentServices
+    const bookingStaff = (publicTenantWs && publicTenantWs.staffByNiche && publicTenantWs.staffByNiche[currentNiche]) || currentStaff
+    const bookingAppointments = (publicTenantWs && publicTenantWs.appointments) || appointments
+
+    const bookingNicheData = {
+      ...nicheData,
+      staff: bookingStaff,
+      services: bookingServices
+    }
+
+    const handlePublicBookAppointment = async (newApt) => {
+      if (publicTenantParam) {
+        const nextAppointments = [newApt, ...(bookingAppointments || [])]
+        try {
+          await fetch(`/api/workspace/${encodeURIComponent(publicTenantParam)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appointments: nextAppointments })
+          })
+          setPublicTenantWs(prev => ({
+            ...(prev || {}),
+            appointments: nextAppointments
+          }))
+          const localKey = `barber_ws_${publicTenantParam}`
+          const localWs = localStorage.getItem(localKey)
+          if (localWs) {
+            const parsed = JSON.parse(localWs)
+            parsed.appointments = nextAppointments
+            localStorage.setItem(localKey, JSON.stringify(parsed))
+          }
+        } catch (e) {}
+      }
+      handleAddAppointment(newApt)
+    }
+
     return (
       <PublicBookingView
-        businessProfile={businessProfile}
-        nicheData={nicheData}
+        businessProfile={bookingProfile}
+        nicheData={bookingNicheData}
         customServices={[]}
         exchangeRate={exchangeRate}
-        appointments={appointments}
-        onBookAppointment={handleAddAppointment}
+        appointments={bookingAppointments}
+        onBookAppointment={handlePublicBookAppointment}
         isOwnerPreview={!isDirectClientLink}
         onExitPreview={() => setIsPublicPreview(false)}
       />
@@ -1147,6 +1211,7 @@ export default function App() {
               onAddStaff={handleAddStaff}
               onUpdateStaff={handleUpdateStaff}
               onDeleteStaff={handleDeleteStaff}
+              onRegisterExpense={handleRegisterExpense}
             />
           )}
 
@@ -1169,6 +1234,7 @@ export default function App() {
               onAddClient={handleAddClient}
               onUpdateClient={handleUpdateClient}
               onDeleteClient={handleDeleteClient}
+              onRegisterTransaction={handleRegisterTransaction}
             />
           )}
 
@@ -1238,9 +1304,13 @@ export default function App() {
         exchangeRate={exchangeRate}
         nicheData={nicheData}
         businessProfile={businessProfile}
+        staffList={currentStaff}
+        onResetDay={() => {
+          // Clear only today's closed transactions, keeping previous days intact for historical monthly reports!
+          setTransactions(prev => prev.filter(t => !isDateToday(t.fecha)))
+        }}
         onResetDailyTransactions={() => {
-          setTransactions([])
-          localStorage.setItem('barber_transactions', JSON.stringify([]))
+          setTransactions(prev => prev.filter(t => !isDateToday(t.fecha)))
         }}
       />
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
+import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 const SAAS_PRODUCTS = [
   { id: 'all', label: '🌐 Todos los Productos', icon: '🌐', domain: 'ingeniodigital.shop', status: 'Hub Central' },
@@ -158,7 +159,7 @@ export default function SuperAdminView({
   }
 
   const handleWhatsAppOwner = (tenant) => {
-    const cleanPhone = (tenant.phone || '').replace(/[^0-9]/g, '')
+    const cleanPhone = normalizeWhatsAppPhone(tenant.phone || '')
     const price = saasConfig.monthlyPriceUsd || 6
     const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
     let msg = ''

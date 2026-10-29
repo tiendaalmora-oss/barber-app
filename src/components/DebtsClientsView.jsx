@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
 import { AlertCircle, CheckCircle2, MessageCircle, Crown, Phone, Plus, Pencil, Trash2, X } from 'lucide-react'
+import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 export default function DebtsClientsView({
   clients,
   exchangeRate,
   onAddClient,
   onUpdateClient,
-  onDeleteClient
+  onDeleteClient,
+  onRegisterTransaction
 }) {
   const [activeSubTab, setActiveSubTab] = useState('fiados') // 'fiados' or 'membresias'
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -76,24 +78,55 @@ export default function DebtsClientsView({
   const vipClients = clients.filter(c => c.plan && c.plan !== 'Cliente Regular')
 
   const handleSettle = (client) => {
-    if (confirm(`¿Confirmas que ${client.name} ya pagó los $${(client.debt_usd || 0).toFixed(2)} USD que debía?`)) {
+    const debtAmount = client.debt_usd || 0
+    if (confirm(`¿Confirmas que ${client.name} ya pagó los $${debtAmount.toFixed(2)} USD que debía?\n\nAl confirmar, este dinero se sumará a los ingresos de la caja de hoy.`)) {
       onUpdateClient({ ...client, debt_usd: 0 })
+      if (onRegisterTransaction && debtAmount > 0) {
+        onRegisterTransaction({
+          id: 'tx_settle_' + Date.now(),
+          type: 'ingreso',
+          item_name: `Cobro de Deuda - ${client.name}`,
+          category: 'Cobro Fiado',
+          staff_name: 'Cobro de Caja',
+          staff_id: null,
+          client_name: client.name,
+          client_phone: client.phone || '',
+          monto_usd: debtAmount,
+          monto_bs: parseFloat((debtAmount * exchangeRate).toFixed(2)),
+          tasa_bcv: exchangeRate,
+          metodo_pago: 'efectivo_usd',
+          comision_usd: 0,
+          ganancia_negocio_usd: debtAmount,
+          hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          fecha: new Date().toISOString()
+        })
+      }
     }
   }
 
   const openWhatsAppReminder = (client) => {
+    const cleanPhone = normalizeWhatsAppPhone(client.phone || '')
+    if (!cleanPhone || cleanPhone.length < 9) {
+      alert(`El cliente ${client.name} no tiene un teléfono válido registrado para enviarle WhatsApp.`)
+      return
+    }
     const debtBs = ((client.debt_usd || 0) * exchangeRate).toFixed(2)
     const text = encodeURIComponent(
       `¡Épale ${client.name.split(' ')[0]}! 👋 ¿Cómo estás pana? Te escribo de la barbería para recordarte con cariño el saldo pendiente de $${(client.debt_usd || 0).toFixed(2)} USD (Bs. ${debtBs} a la tasa de hoy). Puedes pasarlo por Pago Móvil cuando puedas o te llegas al local. ¡Un abrazo!`
     )
-    window.open(`https://wa.me/${(client.phone || '').replace(/[^0-9]/g, '')}?text=${text}`, '_blank')
+    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank')
   }
 
   const openWhatsAppVipRenewal = (client) => {
+    const cleanPhone = normalizeWhatsAppPhone(client.phone || '')
+    if (!cleanPhone || cleanPhone.length < 9) {
+      alert(`El cliente ${client.name} no tiene un teléfono válido registrado para enviarle WhatsApp.`)
+      return
+    }
     const text = encodeURIComponent(
       `¡Buenas ${client.name.split(' ')[0]}! 👋 Te escribo de la barbería para avisarte que tu ${client.plan} le toca renovación pronto (${client.plan_renueva || 'este mes'}). Avísame para apartarte tu cupo fijo en la semana. ¡Saludos!`
     )
-    window.open(`https://wa.me/${(client.phone || '').replace(/[^0-9]/g, '')}?text=${text}`, '_blank')
+    window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank')
   }
 
   return (

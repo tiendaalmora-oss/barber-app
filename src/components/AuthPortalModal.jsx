@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2, MessageSquare } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 export default function AuthPortalModal({
   isOpen,
@@ -269,7 +270,7 @@ export default function AuthPortalModal({
   }
 
   const handleWhatsAppRecoveryHelp = () => {
-    const cleanPhone = (saasConfig?.ownerWhatsapp || '+5491164827875').replace(/[^0-9]/g, '')
+    const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
     const targetEmail = recEmail.trim() || loginEmail.trim() || 'No especificado'
     const msg = `👋 ¡Hola soporte de Ingenio OS! Se me olvidó la clave de mi cuenta de BarberOS.\n\n` +
       `📧 *Mi Correo Registrado:* ${targetEmail}\n` +
