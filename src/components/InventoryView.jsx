@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Package, AlertTriangle, Plus, Minus, Pencil, Trash2, X } from 'lucide-react'
+import { Package, AlertTriangle, Plus, Minus, Pencil, Trash2, X, Globe, EyeOff, Image, Upload } from 'lucide-react'
+import { PRODUCT_IMAGE_PRESETS } from '../lib/mockData'
 
 export default function InventoryView({
   products,
@@ -18,6 +19,8 @@ export default function InventoryView({
   const [stock, setStock] = useState('10')
   const [minStock, setMinStock] = useState('4')
   const [category, setCategory] = useState('Productos')
+  const [showInCatalog, setShowInCatalog] = useState(true)
+  const [imageUrl, setImageUrl] = useState('')
 
   const openCreateModal = () => {
     setEditingProd(null)
@@ -27,6 +30,8 @@ export default function InventoryView({
     setStock('10')
     setMinStock('4')
     setCategory('Productos')
+    setShowInCatalog(true)
+    setImageUrl('')
     setIsModalOpen(true)
   }
 
@@ -38,7 +43,54 @@ export default function InventoryView({
     setStock(String(prod.stock || 0))
     setMinStock(String(prod.min_stock || 3))
     setCategory(prod.category || 'Productos')
+    setShowInCatalog(prod.showInCatalog !== false)
+    setImageUrl(prod.imageUrl || '')
     setIsModalOpen(true)
+  }
+
+  const handleToggleCatalogVisibility = (prod) => {
+    const nextVal = prod.showInCatalog === false ? true : false
+    onUpdateProduct({
+      ...prod,
+      showInCatalog: nextVal
+    })
+  }
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const maxDim = 180
+        let width = img.width
+        let height = img.height
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width)
+            width = maxDim
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height)
+            height = maxDim
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        const compressed = canvas.toDataURL('image/jpeg', 0.7)
+        setImageUrl(compressed)
+      }
+      img.src = event.target?.result
+    }
+    reader.readAsDataURL(file)
   }
 
   const handleSaveProduct = (e) => {
@@ -52,7 +104,9 @@ export default function InventoryView({
       price_usd: parseFloat(priceUsd) || 0,
       stock: parseInt(stock) || 0,
       min_stock: parseInt(minStock) || 3,
-      category
+      category,
+      showInCatalog,
+      imageUrl: (imageUrl || '').trim()
     }
 
     if (editingProd) {
@@ -144,13 +198,60 @@ export default function InventoryView({
                 }`}
               >
                 <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="font-bold text-white text-sm">{prod.name}</h3>
-                      <div className="flex items-center gap-2 mt-1 text-xs">
-                        <span className="text-slate-400">Costo: ${prod.cost_usd}</span>
-                        <span>•</span>
-                        <span className="text-emerald-400 font-semibold">Ganas: +${unitProfitUSD.toFixed(2)}/u</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      {/* Product Thumbnail */}
+                      <div className="w-14 h-14 rounded-xl bg-dark-850 border border-dark-750 shrink-0 overflow-hidden flex items-center justify-center relative shadow-sm">
+                        {prod.imageUrl ? (
+                          <img
+                            src={prod.imageUrl}
+                            alt={prod.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <Package className="w-6 h-6 text-slate-600" />
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-bold text-white text-sm truncate" title={prod.name}>
+                            {prod.name}
+                          </h3>
+                        </div>
+
+                        {/* Toggle Web Catalog Badge */}
+                        <div className="mt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCatalogVisibility(prod)}
+                            className={`text-[10px] px-2 py-0.5 rounded-full border inline-flex items-center gap-1 font-bold transition-all ${
+                              prod.showInCatalog !== false
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                                : 'bg-dark-850 text-slate-400 border-dark-750 hover:text-slate-300'
+                            }`}
+                            title="Toca para mostrar u ocultar en tu Catálogo Web"
+                          >
+                            {prod.showInCatalog !== false ? (
+                              <>
+                                <Globe className="w-3 h-3 text-emerald-400" />
+                                <span>En Catálogo Web</span>
+                              </>
+                            ) : (
+                              <>
+                                <EyeOff className="w-3 h-3 text-slate-500" />
+                                <span>Solo Local (Oculto)</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1 text-xs">
+                          <span className="text-slate-400">Costo: ${prod.cost_usd}</span>
+                          <span>•</span>
+                          <span className="text-emerald-400 font-semibold">Ganas: +${unitProfitUSD.toFixed(2)}/u</span>
+                        </div>
                       </div>
                     </div>
 
@@ -315,6 +416,87 @@ export default function InventoryView({
                     onChange={(e) => setMinStock(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
                   />
+                </div>
+              </div>
+
+              {/* Switch de visibilidad en el catálogo web */}
+              <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-xs font-bold text-white block">
+                    Mostrar en Catálogo Web
+                  </span>
+                  <span className="text-[11px] text-slate-400 block leading-tight mt-0.5">
+                    {showInCatalog 
+                      ? '✓ Visible para clientes en tu link de reservas' 
+                      : '🔒 Solo local (oculto en tu link web, para cobrar en el local)'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInCatalog(!showInCatalog)}
+                  className={`w-11 h-6 rounded-full transition-colors relative shrink-0 p-0.5 ${
+                    showInCatalog ? 'bg-emerald-500' : 'bg-dark-700'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                    showInCatalog ? 'translate-x-5' : 'translate-x-0'
+                  }`} />
+                </button>
+              </div>
+
+              {/* Selector de Foto del Producto */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Image className="w-3.5 h-3.5 text-gold-400" />
+                    <span>Foto del Producto (Elegante y Ligera)</span>
+                  </label>
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="text-[10px] text-red-400 hover:underline"
+                    >
+                      Quitar foto
+                    </button>
+                  )}
+                </div>
+
+                {/* Presets Rápidos */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 mb-2">
+                  {PRODUCT_IMAGE_PRESETS.map(preset => (
+                    <button
+                      type="button"
+                      key={preset.id}
+                      onClick={() => setImageUrl(preset.url)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border shrink-0 transition-all ${
+                        imageUrl === preset.url
+                          ? 'bg-gold-500 text-black border-gold-400 shadow-sm'
+                          : 'bg-dark-850 text-slate-400 border-dark-750 hover:text-white'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Upload or Preview */}
+                <div className="flex items-center gap-2.5">
+                  {imageUrl ? (
+                    <div className="w-12 h-12 rounded-xl bg-dark-850 border border-gold-500/40 overflow-hidden shrink-0">
+                      <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  ) : null}
+                  <label className="flex-1 cursor-pointer py-2 px-3 rounded-xl bg-dark-850 border border-dashed border-dark-700 hover:border-gold-500/50 text-slate-400 hover:text-white text-xs flex items-center justify-center gap-2 transition-all">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{imageUrl ? 'Cambiar por foto de mi teléfono' : 'Subir foto propia (Auto-comprimida)'}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                  </label>
                 </div>
               </div>
 

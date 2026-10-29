@@ -1,3 +1,14 @@
+export const PRODUCT_IMAGE_PRESETS = [
+  { id: 'cera', label: '💈 Cera / Pomada', url: 'https://images.unsplash.com/photo-1597854710119-a5a8fac0915f?w=200&h=200&fit=crop&q=80' },
+  { id: 'aceite', label: '🧴 Aceite Barba', url: 'https://images.unsplash.com/photo-1626285861696-9f0bf5a49c6d?w=200&h=200&fit=crop&q=80' },
+  { id: 'minoxidil', label: '🌿 Tónico / Minox', url: 'https://images.unsplash.com/photo-1608248597359-561352467d58?w=200&h=200&fit=crop&q=80' },
+  { id: 'gel', label: '🪒 Gel Afeitar', url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=200&h=200&fit=crop&q=80' },
+  { id: 'polvo', label: '💨 Cera Polvo', url: 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=200&h=200&fit=crop&q=80' },
+  { id: 'aftershave', label: '❄️ Aftershave', url: 'https://images.unsplash.com/photo-1616683693504-3ea7e9ad6fec?w=200&h=200&fit=crop&q=80' },
+  { id: 'shampoo', label: '🧼 Champú', url: 'https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?w=200&h=200&fit=crop&q=80' },
+  { id: 'peine', label: '🪮 Peine / Cepillo', url: 'https://images.unsplash.com/photo-1590159763121-7c9ff3149e0a?w=200&h=200&fit=crop&q=80' }
+]
+
 export const NICHES = {
   barberia: {
     id: 'barberia',
@@ -16,10 +27,10 @@ export const NICHES = {
       { id: 's6', name: 'Corte Infantil (Niños)', price_usd: 5, category: 'Cortes' },
     ],
     products: [
-      { id: 'p1', name: 'Cera Mate Fijadora (150g)', price_usd: 8, cost_usd: 4, stock: 12, min_stock: 5, category: 'Productos' },
-      { id: 'p2', name: 'Aceite Esencial para Barba', price_usd: 6, cost_usd: 3, stock: 4, min_stock: 5, category: 'Productos' },
-      { id: 'p3', name: 'Tónico Minoxidil 5%', price_usd: 12, cost_usd: 7, stock: 8, min_stock: 3, category: 'Productos' },
-      { id: 'p4', name: 'Caja de Hojillas Gillette (100 unid)', price_usd: 5, cost_usd: 2.5, stock: 15, min_stock: 5, category: 'Insumos' },
+      { id: 'p1', name: 'Cera Mate Fijadora (150g)', price_usd: 8, cost_usd: 4, stock: 12, min_stock: 5, category: 'Productos', showInCatalog: true, imageUrl: 'https://images.unsplash.com/photo-1597854710119-a5a8fac0915f?w=200&h=200&fit=crop&q=80' },
+      { id: 'p2', name: 'Aceite Esencial para Barba', price_usd: 6, cost_usd: 3, stock: 4, min_stock: 5, category: 'Productos', showInCatalog: true, imageUrl: 'https://images.unsplash.com/photo-1626285861696-9f0bf5a49c6d?w=200&h=200&fit=crop&q=80' },
+      { id: 'p3', name: 'Tónico Minoxidil 5%', price_usd: 12, cost_usd: 7, stock: 8, min_stock: 3, category: 'Productos', showInCatalog: true, imageUrl: 'https://images.unsplash.com/photo-1608248597359-561352467d58?w=200&h=200&fit=crop&q=80' },
+      { id: 'p4', name: 'Caja de Hojillas Gillette (100 unid)', price_usd: 5, cost_usd: 2.5, stock: 15, min_stock: 5, category: 'Insumos', showInCatalog: false, imageUrl: '' },
     ],
     staff: [
       { id: 'e1', name: 'Carlos "El Fino"', commission_pct: 50, avatar: '✂️' },

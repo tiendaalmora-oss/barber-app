@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram } from 'lucide-react'
+import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 
@@ -16,6 +16,8 @@ export default function PublicBookingView({
   const activeSlots = (businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
     ? businessProfile.bookingSlots
     : DEFAULT_BOOKING_SLOTS
+
+  const catalogProducts = (nicheData?.products || []).filter(p => p.showInCatalog !== false)
 
   const getTodayStr = () => getLocalDateIso()
   const getTomorrowStr = () => {
@@ -222,7 +224,7 @@ export default function PublicBookingView({
             }`}
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Productos en Venta ({nicheData.products.length})</span>
+            <span>Productos en Venta ({catalogProducts.length})</span>
           </button>
         </div>
 
@@ -302,37 +304,66 @@ export default function PublicBookingView({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {nicheData.products.map(prod => {
-                const priceBs = (prod.price_usd * exchangeRate).toFixed(2)
-                return (
-                  <div
-                    key={prod.id}
-                    className="bg-dark-900 border border-dark-800 rounded-2xl p-4 flex flex-col justify-between gap-3"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-bold text-white text-sm">{prod.name}</h3>
-                        <span className="px-2.5 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono font-black text-xs shrink-0">
-                          ${prod.price_usd}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Bs. {priceBs} • Disponible en mostrador
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleOrderProductWhatsApp(prod)}
-                      className="w-full py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+            {catalogProducts.length === 0 ? (
+              <div className="bg-dark-900 border border-dark-800 rounded-2xl p-8 text-center space-y-2">
+                <ShoppingBag className="w-8 h-8 text-slate-600 mx-auto" />
+                <p className="text-sm font-bold text-white">No hay productos disponibles en la web</p>
+                <p className="text-xs text-slate-400">Pregunta directamente en el local para adquirir productos o insumos.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {catalogProducts.map(prod => {
+                  const priceBs = (prod.price_usd * exchangeRate).toFixed(2)
+                  return (
+                    <div
+                      key={prod.id}
+                      className="bg-dark-900 border border-dark-800 hover:border-dark-700 rounded-2xl p-3.5 flex flex-col justify-between gap-3 transition-all"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span>Encargar por WhatsApp</span>
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
+                      <div className="flex gap-3">
+                        {/* Product Thumbnail */}
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-dark-850 border border-dark-750 shrink-0 overflow-hidden flex items-center justify-center relative shadow-sm">
+                          {prod.imageUrl ? (
+                            <img
+                              src={prod.imageUrl}
+                              alt={prod.name}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <Package className="w-7 h-7 text-slate-600" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-1.5">
+                            <h3 className="font-bold text-white text-xs sm:text-sm leading-tight">
+                              {prod.name}
+                            </h3>
+                            <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono font-black text-xs shrink-0">
+                              ${prod.price_usd}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gold-400/90 mt-1 font-mono font-semibold">
+                            Bs. {priceBs}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Disponible en mostrador
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleOrderProductWhatsApp(prod)}
+                        className="w-full py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>Encargar por WhatsApp</span>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
