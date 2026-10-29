@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Sparkles, Lock } from 'lucide-react'
+import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Lock } from 'lucide-react'
 import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
 
 export default function DashboardView({ 
@@ -10,9 +10,6 @@ export default function DashboardView({
   onOpenWhatsAppModal,
   onOpenDailyCloseModal,
   onDeleteTransaction,
-  onClearAllData,
-  onLoadDemoData,
-  isDemoAccount,
   nicheData
 }) {
   const [filterPeriod, setFilterPeriod] = useState('hoy')
@@ -364,31 +361,6 @@ export default function DashboardView({
             <p className="text-xs text-slate-400">Historial en tiempo real de entradas y salidas (puedes borrar si te equivocas)</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {onClearAllData && transactions.length > 0 && (
-              <button
-                onClick={onClearAllData}
-                className="text-xs px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-dark-700 font-bold flex items-center gap-1"
-                title="Dejar toda la cuenta en cero lista para uso real"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Limpiar Datos de Prueba (Dejar en 0)</span>
-              </button>
-            )}
-            {onLoadDemoData && (transactions.length === 0 || isDemoAccount) && (
-              <button
-                onClick={() => {
-                  if (transactions.length > 0 && !confirm('¿Recargar todos los datos de demostración con el historial completo de 7 días y reportes mensuales para grabar videos?')) {
-                    return
-                  }
-                  onLoadDemoData()
-                }}
-                className="text-xs px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-bold flex items-center gap-1 transition-all"
-                title="Carga el set completo de 35 ventas de toda la semana y meses anteriores para grabar videos con gráficas y reportes llenos"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                <span>{transactions.length === 0 ? 'Cargar Datos Demo (Para Videos)' : 'Recargar Historial Demo (Videos)'}</span>
-              </button>
-            )}
             <button 
               onClick={onOpenExpenseModal}
               className="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 font-bold"

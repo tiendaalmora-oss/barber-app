@@ -1166,13 +1166,6 @@ export default function App() {
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
               onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
               onDeleteTransaction={handleDeleteTransaction}
-              onClearAllData={() => {
-                if (confirm('¿Dejar toda la caja, clientes y turnos en CERO para empezar de verdad?')) {
-                  handleClearAllWorkspaceData()
-                }
-              }}
-              onLoadDemoData={handleLoadDemoWorkspaceData}
-              isDemoAccount={activeTenant?.email === 'demo@ingenioos.online' || activeTenantId === 'ten_1'}
               nicheData={nicheData}
             />
           )}
