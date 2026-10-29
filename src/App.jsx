@@ -159,18 +159,33 @@ export default function App() {
   const initWs = getInitialWorkspace()
 
   const [transactions, setTransactions] = useState(() => {
+    const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+    const isDemo = loggedId === 'ten_1'
+    if (isDemo && (!initWs || !Array.isArray(initWs.transactions) || initWs.transactions.length < 15)) {
+      return INITIAL_TRANSACTIONS
+    }
     if (initWs && Array.isArray(initWs.transactions)) return initWs.transactions
     const saved = localStorage.getItem('barber_transactions')
     return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS
   })
 
   const [clients, setClients] = useState(() => {
+    const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+    const isDemo = loggedId === 'ten_1'
+    if (isDemo && (!initWs || !Array.isArray(initWs.clients) || initWs.clients.length === 0)) {
+      return INITIAL_CLIENTS
+    }
     if (initWs && Array.isArray(initWs.clients)) return initWs.clients
     const saved = localStorage.getItem('barber_clients_v2')
     return saved ? JSON.parse(saved) : INITIAL_CLIENTS
   })
 
   const [appointments, setAppointments] = useState(() => {
+    const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+    const isDemo = loggedId === 'ten_1'
+    if (isDemo && (!initWs || !Array.isArray(initWs.appointments) || initWs.appointments.length === 0)) {
+      return INITIAL_APPOINTMENTS
+    }
     if (initWs && Array.isArray(initWs.appointments)) return initWs.appointments
     const saved = localStorage.getItem('barber_appointments')
     return saved ? JSON.parse(saved) : INITIAL_APPOINTMENTS
@@ -373,6 +388,7 @@ export default function App() {
     setTransactions(INITIAL_TRANSACTIONS)
     setClients(INITIAL_CLIENTS)
     setAppointments(INITIAL_APPOINTMENTS)
+    setBusinessProfile(INITIAL_BUSINESS_PROFILE)
     setStaffByNiche({
       barberia: NICHES.barberia.staff,
       estetica: NICHES.estetica.staff,
@@ -388,6 +404,34 @@ export default function App() {
       estetica: NICHES.estetica.products,
       mixto: NICHES.mixto.products
     })
+    const ws = {
+      transactions: INITIAL_TRANSACTIONS,
+      clients: INITIAL_CLIENTS,
+      appointments: INITIAL_APPOINTMENTS,
+      businessProfile: INITIAL_BUSINESS_PROFILE,
+      staffByNiche: {
+        barberia: NICHES.barberia.staff,
+        estetica: NICHES.estetica.staff,
+        mixto: NICHES.mixto.staff
+      },
+      servicesByNiche: {
+        barberia: NICHES.barberia.services,
+        estetica: NICHES.estetica.services,
+        mixto: NICHES.mixto.services
+      },
+      productsByNiche: {
+        barberia: NICHES.barberia.products,
+        estetica: NICHES.estetica.products,
+        mixto: NICHES.mixto.products
+      }
+    }
+    try {
+      localStorage.setItem('barber_ws_ten_1', JSON.stringify(ws))
+      localStorage.setItem('barber_transactions', JSON.stringify(INITIAL_TRANSACTIONS))
+      localStorage.setItem('barber_clients_v2', JSON.stringify(INITIAL_CLIENTS))
+      localStorage.setItem('barber_appointments', JSON.stringify(INITIAL_APPOINTMENTS))
+      localStorage.setItem('barber_profile', JSON.stringify(INITIAL_BUSINESS_PROFILE))
+    } catch (e) {}
   }
 
   // Staff CRUD
@@ -494,28 +538,42 @@ export default function App() {
       setCurrentNiche(tenant.niche)
     }
 
+    const isDemo = tenant.email === 'demo@ingenioos.online' || tenant.id === 'ten_1'
+
     // Load tenant-scoped workspace from localStorage or server (NEVER wipe it!)
     try {
       const localScoped = localStorage.getItem(`barber_ws_${tenant.id}`)
       if (localScoped) {
         const parsed = JSON.parse(localScoped)
-        if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions)
-        if (Array.isArray(parsed.clients)) setClients(parsed.clients)
-        if (Array.isArray(parsed.appointments)) setAppointments(parsed.appointments)
-        if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
-        if (parsed.staffByNiche) setStaffByNiche(parsed.staffByNiche)
-        if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
-        if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
+        if (isDemo && (!Array.isArray(parsed.transactions) || parsed.transactions.length < 15)) {
+          handleLoadDemoWorkspaceData()
+        } else {
+          if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions)
+          if (Array.isArray(parsed.clients)) setClients(parsed.clients)
+          if (Array.isArray(parsed.appointments)) setAppointments(parsed.appointments)
+          if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
+          if (parsed.staffByNiche) setStaffByNiche(parsed.staffByNiche)
+          if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
+          if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
+        }
       } else {
-        fetchTenantWorkspace(tenant.id)
-        setBusinessProfile(prev => ({
-          ...prev,
-          businessName: tenant.businessName,
-          whatsapp: tenant.phone || prev.whatsapp
-        }))
+        if (isDemo) {
+          handleLoadDemoWorkspaceData()
+        } else {
+          fetchTenantWorkspace(tenant.id)
+          setBusinessProfile(prev => ({
+            ...prev,
+            businessName: tenant.businessName,
+            whatsapp: tenant.phone || prev.whatsapp
+          }))
+        }
       }
     } catch (e) {
-      fetchTenantWorkspace(tenant.id)
+      if (isDemo) {
+        handleLoadDemoWorkspaceData()
+      } else {
+        fetchTenantWorkspace(tenant.id)
+      }
     }
   }
 
@@ -1006,6 +1064,7 @@ export default function App() {
                 }
               }}
               onLoadDemoData={handleLoadDemoWorkspaceData}
+              isDemoAccount={activeTenant?.email === 'demo@ingenioos.online' || activeTenantId === 'ten_1'}
               nicheData={nicheData}
             />
           )}

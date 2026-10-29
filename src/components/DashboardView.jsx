@@ -11,6 +11,7 @@ export default function DashboardView({
   onDeleteTransaction,
   onClearAllData,
   onLoadDemoData,
+  isDemoAccount,
   nicheData
 }) {
   const [filterPeriod, setFilterPeriod] = useState('hoy')
@@ -364,13 +365,19 @@ export default function DashboardView({
                 <span>Limpiar Datos de Prueba (Dejar en 0)</span>
               </button>
             )}
-            {onLoadDemoData && transactions.length === 0 && (
+            {onLoadDemoData && (transactions.length === 0 || isDemoAccount) && (
               <button
-                onClick={onLoadDemoData}
-                className="text-xs px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-bold flex items-center gap-1"
+                onClick={() => {
+                  if (transactions.length > 0 && !confirm('¿Recargar todos los datos de demostración con el historial completo de 7 días y reportes mensuales para grabar videos?')) {
+                    return
+                  }
+                  onLoadDemoData()
+                }}
+                className="text-xs px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 font-bold flex items-center gap-1 transition-all"
+                title="Carga el set completo de 35 ventas de toda la semana y meses anteriores para grabar videos con gráficas y reportes llenos"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Cargar Datos Demo (Para Videos)</span>
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>{transactions.length === 0 ? 'Cargar Datos Demo (Para Videos)' : 'Recargar Historial Demo (Videos)'}</span>
               </button>
             )}
             <button 
