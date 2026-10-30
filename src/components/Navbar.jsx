@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check, Settings, Calculator, Wifi, WifiOff } from 'lucide-react'
+import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check, Settings, Calculator, Wifi, WifiOff, Zap } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
 
 export default function Navbar({ 
@@ -98,9 +98,20 @@ export default function Navbar({
                 >
                   {businessProfile?.businessName || nicheNames[currentNiche] || 'Mi Negocio'}
                 </button>
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
-                  <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 30}d)</span>
-                </span>
+                {activeTenant?.isTrial24h ? (
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1 animate-pulse">
+                    <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+                    <span>PRUEBA 24H ({
+                      activeTenant?.trialExpiresAt
+                        ? `${Math.max(1, Math.ceil((new Date(activeTenant.trialExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))}h`
+                        : '24h'
+                    })</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
+                    <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 30}d)</span>
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
                 {businessProfile?.slogan || (activeTenant?.email ? `Sesión: ${activeTenant.email}` : 'Control de Caja & Cuentas Claras')}

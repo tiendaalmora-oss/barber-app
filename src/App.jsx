@@ -1027,10 +1027,26 @@ export default function App() {
   }
 
   // 4. If Active Tenant has NOT paid upfront ('pendiente_pago') or is expired ('vencido') -> Lock Screen with 7-Day Guarantee
-  if (activeTenant.status !== 'activo') {
+  const now = Date.now()
+  const isTrial = Boolean(activeTenant?.isTrial24h || activeTenant?.subscriptionType === 'trial_24h')
+  const isTrialExpired = isTrial && activeTenant?.trialExpiresAt && new Date(activeTenant.trialExpiresAt).getTime() <= now
+
+  if (activeTenant && isTrialExpired && activeTenant.status === 'activo') {
+    activeTenant.status = 'vencido'
+    activeTenant.isTrial24h = false
+    activeTenant.daysRemaining = 0
+    pushTenantUpsertToServer({
+      ...activeTenant,
+      status: 'vencido',
+      isTrial24h: false,
+      daysRemaining: 0
+    })
+  }
+
+  if (activeTenant.status !== 'activo' || isTrialExpired) {
     return (
       <SubscriptionLockView
-        tenant={activeTenant}
+        tenant={isTrialExpired ? { ...activeTenant, status: 'vencido', wasTrial: true } : activeTenant}
         saasConfig={saasConfig}
         exchangeRate={exchangeRate}
         onReportPaymentRef={handleReportPaymentRef}

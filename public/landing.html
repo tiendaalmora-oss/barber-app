@@ -264,11 +264,14 @@
     .video-box {
       background: #000;
       border: 2px solid var(--card-border);
-      border-radius: 20px;
+      border-radius: 24px;
       overflow: hidden;
       position: relative;
-      aspect-ratio: 16/9;
-      box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.9), 0 0 20px rgba(16, 185, 129, 0.15);
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+      aspect-ratio: 9/16;
+      box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.9), 0 0 25px rgba(16, 185, 129, 0.2);
       cursor: pointer;
     }
     .hero-video-player {
@@ -889,6 +892,118 @@
       text-decoration: none;
       box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
     }
+  
+    /* VSL Hero & Step-by-Step Styling */
+    .vsl-video-wrap {
+      margin: 18px auto 20px;
+      width: 100%;
+      max-width: 320px;
+    }
+    .pulse-cta {
+      animation: pulseGold 2.2s infinite ease-in-out;
+    }
+    @keyframes pulseGold {
+      0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+      70% { box-shadow: 0 0 0 16px rgba(245, 158, 11, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+    }
+    .vsl-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 18px 0 32px;
+    }
+    @media (max-width: 600px) {
+      .vsl-steps-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .vsl-step-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px;
+      text-align: left;
+    }
+    .vsl-step-card:hover {
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+    .vsl-step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .vsl-step-num {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #000;
+      font-weight: 900;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .vsl-step-card h4 {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 0;
+    }
+    .vsl-step-card p {
+      font-size: 12.8px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+      margin-bottom: 0;
+    }
+    .no-excuses-box {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(16, 185, 129, 0.06) 100%);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 20px;
+      padding: 22px;
+      margin: 26px 0;
+      text-align: center;
+    }
+    .no-excuses-box h3 {
+      font-size: 18px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .no-excuses-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+      text-align: left;
+    }
+    @media (max-width: 600px) {
+      .no-excuses-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .no-excuse-item {
+      background: var(--bg-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .no-excuse-item h5 {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--gold);
+      margin-bottom: 4px;
+    }
+    .no-excuse-item p {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.4;
+      margin-bottom: 0;
+    }
+
   </style>
 </head>
 <body>
@@ -910,70 +1025,93 @@
 
   <main class="container">
     
-    <!-- Hero Section -->
+    <!-- Hero Section / VSL -->
     <section class="hero">
       <div class="badge-top">
-        ⚡ AUMENTA EL LUCRO DE TU BARBERÍA
+        ⚡ DEMO EN VIVO PASO A PASO
       </div>
       <h1>
-        Organiza tus Ganancias y Controla tus Gastos con <span class="gold">Caja Simple y Automática</span>
+        Mira Cómo Funciona BarberOS <br><span class="gold">en 60 Segundos</span>
       </h1>
       <p>
-        El sistema todo-en-uno para barberías y salones en Venezuela: cobra en Bolívares y Dólares en 3 segundos, manda el cierre diario a WhatsApp y llena tus sillas vacías.
+        El paso a paso en pantalla: cómo crear tu cuenta, cobrar en 3 segundos y cuadrar tu Pago Móvil y efectivo sin perder más dinero.
       </p>
 
-      <!-- Horizontal Image Under Title (User Request: Aumentada la altura para visibilidad óptima) -->
-      <div class="hero-banner-wrap">
-        <img 
-          src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/images/barberos/1793217554032-bb40b9a7-Panel_de_Barber_a_en_Vivo__1_.png" 
-          alt="BarberOS en acción" 
-          class="hero-banner-img"
-        >
-        <div class="hero-banner-overlay">
-          <span>💈 BarberOS · Control Total en Celular y PC</span>
-          <span class="tag">EN VIVO</span>
+      <!-- Main Video Showcase (Centered VSL) -->
+      <div class="vsl-video-wrap">
+        <div class="video-box" onclick="handleHeroVideo(this)">
+          <video
+            id="heroVideoEl"
+            class="hero-video-player"
+            src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/videos/barberos/1793301891026-ad847fa2-1028__1__1_.mp4#t=0.001"
+            playsinline
+            preload="auto"
+          ></video>
+          <div class="video-play-btn">▶</div>
         </div>
       </div>
 
-      <div class="hero-pills">
-        <div class="hero-pill">⏱️ Caja en 3 Segundos</div>
-        <div class="hero-pill">🌐 Tu Web de Citas</div>
-        <div class="hero-pill">📲 Cierre a WhatsApp</div>
-        <div class="hero-pill">📴 Sin Internet</div>
-      </div>
-
-      <a 
-        href="https://wa.me/5491164827875?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20BarberOS%20y%20quiero%20activar%20mi%20cuenta%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20barber%C3%ADa%20%F0%9F%92%88" 
-        target="_blank" 
-        class="btn-cta"
+      <!-- High-Converting CTA Button Directly Under Video -->
+      <a
+        href="https://wa.me/5491164827875?text=Hola!%20Vi%20el%20video%20de%20BarberOS%20y%20quiero%20activar%20mi%20barber%C3%ADa%20por%20Bs.%206.024%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20%F0%9F%92%88"
+        target="_blank"
+        class="btn-cta pulse-cta"
       >
         <span>💬</span>
-        <span>OBTENER ACCESO POR WHATSAPP</span>
+        <span>ACTIVAR MI BARBERÍA POR BS. 6.024</span>
       </a>
       <div class="cta-sub">
-        7 Días de Garantía Total de Devolución · Activación en 5 Minutos
+        🛡️ <strong>Cero Riesgo:</strong> 7 Días de Garantía Total · Devolución por Pago Móvil si no es lo que esperas
+      </div>
+
+      <!-- Key Benefits Pills -->
+      <div class="hero-pills">
+        <div class="hero-pill">⏱️ Cobra en 3 Toques</div>
+        <div class="hero-pill">💵 Pago Móvil + USD</div>
+        <div class="hero-pill">📴 Funciona sin Internet</div>
+        <div class="hero-pill">📲 Cierre a WhatsApp</div>
       </div>
     </section>
 
-    <!-- Video Showcase Section (User Request: Just after hero) -->
-    <section class="video-section">
+    <!-- The 4 Steps Shown in Video -->
+    <section>
       <div class="section-header">
-        <h2>Mira Cómo Funciona en 45 Segundos</h2>
-        <p>Registrar un corte y cerrar caja nunca fue tan rápido</p>
+        <h2>El Paso a Paso: Así de Simple es Operarlo</h2>
+        <p>Lo que viste en el video aplicado a tu mostrador de cobro</p>
       </div>
 
-      <div class="video-box" onclick="handleHeroVideo(this)">
-        <!-- 👇 PEGA AQUÍ EL LINK .MP4 EXPLICATIVO (45s) EN src="" Y LA PORTADA EN poster="" -->
-        <video 
-          id="heroVideoEl"
-          class="hero-video-player" 
-          src="" 
-          poster="https://images.unsplash.com/photo-1585747860715-2ba37e788b70?auto=format&fit=crop&w=1200&q=80"
-          playsinline 
-          preload="metadata"
-        ></video>
-        <div class="video-play-btn">▶</div>
-        <div class="video-time-badge">0:45 min</div>
+      <div class="vsl-steps-grid">
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">1</span>
+            <h4>Tu Local Listo en 10 Segundos</h4>
+          </div>
+          <p>Entras desde cualquier celular o PC sin descargas pesadas. Creas el nombre de tu barbería y ves la Tasa Oficial BCV sincronizada automáticamente cada mañana.</p>
+        </div>
+
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">2</span>
+            <h4>Botón 'Anotar Cobro en Caja'</h4>
+          </div>
+          <p>Tocas la foto del barbero (ej. Carlos 50%) y marcas el servicio (ej. Fade $6). La app te muestra en pantalla el total en Dólares y en Bolívares al instante.</p>
+        </div>
+
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">3</span>
+            <h4>División de la Plata en Vivo</h4>
+          </div>
+          <p>Eliges si pagó en Pago Móvil, Efectivo en gaveta o Zelle. El sistema te desglosa en tiempo real: <em>$3 para Carlos y $3 limpios para el local</em>. Cero peleas de comisiones.</p>
+        </div>
+
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">4</span>
+            <h4>Recibo WhatsApp y Cierre de Turno</h4>
+          </div>
+          <p>Envía el ticket digital con tu logo al WhatsApp del cliente. A las 8 PM tocas 'Cierre de Turno' y cuadras billetes físicos en mano vs banco en 1 solo clic.</p>
+        </div>
       </div>
     </section>
 
@@ -1336,13 +1474,39 @@
       </div>
     </section>
 
-    <!-- Guarantee Box -->
+    <!-- Guarantee & No Excuses Box -->
     <section>
+      <div class="no-excuses-box">
+        <div style="font-size: 32px; margin-bottom: 6px;">🚀</div>
+        <h3>Hoy ya no tienes excusa para no tener tu barbería automatizada</h3>
+        <p style="font-size: 13px; color: var(--txt-muted); max-width: 620px; margin: 0 auto 12px;">
+          Diseñado específicamente para la realidad de las barberías venezolanas:
+        </p>
+
+        <div class="no-excuses-grid">
+          <div class="no-excuse-item">
+            <h5>💻 ¿Cero Computación?</h5>
+            <p>Es tan fácil como WhatsApp. Botones grandes táctiles para que cualquier barbero cobre en 3 segundos.</p>
+          </div>
+          <div class="no-excuse-item">
+            <h5>⚡ ¿Se va la Luz o WiFi?</h5>
+            <p>Sigue funcionando sin conexión a internet y sincroniza solo al volver la señal. Tu local nunca se detiene.</p>
+          </div>
+          <div class="no-excuse-item">
+            <h5>💰 ¿El Costo?</h5>
+            <p>Solo Bs. 6.024 / mes ($6 USD). Menos de lo que cobras por 1 solo corte de cabello en todo un mes.</p>
+          </div>
+        </div>
+      </div>
+
       <div class="guarantee-box">
         <div class="guarantee-badge">🛡️</div>
-        <h3>Garantía Total de 7 Días de Reembolso</h3>
-        <p>
-          Prueba BarberOS en tu negocio por 7 días completos. Si sientes que no te ahorra tiempo, no te ayuda a controlar tu plata o no cumple tus expectativas, te devolvemos el 100% de tu dinero por Pago Móvil o Binance. Sin preguntas y sin burocracia.
+        <h3 style="font-size: 18px; color: #fbbf24;">Garantía Total de Cero Riesgo · 7 Días de Reembolso</h3>
+        <p style="font-size: 13.5px; max-width: 640px; margin: 8px auto 14px;">
+          Prueba BarberOS en tu negocio por 7 días completos. Si sientes que no te ahorra horas de dolor de cabeza, no te ayuda a controlar tu plata o simplemente no es lo que esperabas, te devolvemos el <strong>100% de tus 6.024 Bs. por Pago Móvil o Binance</strong> de inmediato. Sin preguntas, sin trabas y sin resentimientos.
+        </p>
+        <p style="font-size: 12px; color: #34d399; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+          ✅ El riesgo es 100% nuestro. Cero riesgo para ti.
         </p>
       </div>
     </section>

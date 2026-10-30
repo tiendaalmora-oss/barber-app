@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download } from 'lucide-react'
+import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
@@ -94,7 +94,7 @@ export default function SuperAdminView({
     setNewPass(t.password || '123')
     setNewPhone(t.phone || '+58412')
     setNewNiche(t.niche || 'barberia')
-    setNewStatus(t.status)
+    setNewStatus(t.isTrial24h ? 'trial_24h' : t.status)
     setNewDays(String(t.daysRemaining ?? 30))
     setShowAddModal(true)
   }
@@ -107,11 +107,25 @@ export default function SuperAdminView({
   }
 
   const allEnrichedTenants = tenants.map(t => {
+    const now = Date.now()
+    const isTrial24h = Boolean(t.isTrial24h || t.subscriptionType === 'trial_24h')
+    const trialExpired = isTrial24h && t.trialExpiresAt && new Date(t.trialExpiresAt).getTime() <= now
+    const effectiveStatus = trialExpired ? 'vencido' : t.status
+
+    let trialHoursRemaining = 0
+    if (isTrial24h && t.trialExpiresAt && !trialExpired) {
+      trialHoursRemaining = Math.max(1, Math.ceil((new Date(t.trialExpiresAt).getTime() - now) / (1000 * 60 * 60)))
+    }
+
     const dayOfSub = getDaysSinceActivation(t.activatedAt)
-    const inGuarantee = t.status === 'activo' && dayOfSub <= (saasConfig.guaranteeDays || 7)
+    const inGuarantee = effectiveStatus === 'activo' && !isTrial24h && dayOfSub <= (saasConfig.guaranteeDays || 7)
     const saasProduct = t.saasProduct || 'barberia_saas'
     return {
       ...t,
+      status: effectiveStatus,
+      isTrial24h,
+      trialExpired,
+      trialHoursRemaining,
       saasProduct,
       dayOfSub,
       inGuarantee
@@ -123,30 +137,53 @@ export default function SuperAdminView({
     : allEnrichedTenants.filter(t => t.saasProduct === selectedProduct)
 
   const activeTenants = enrichedTenants.filter(t => t.status === 'activo')
+  const paidActiveTenants = enrichedTenants.filter(t => t.status === 'activo' && !t.isTrial24h)
+  const trialTenants = enrichedTenants.filter(t => t.status === 'activo' && t.isTrial24h)
   const pendingTenants = enrichedTenants.filter(t => t.status === 'pendiente_pago')
   const guaranteeTenants = enrichedTenants.filter(t => t.inGuarantee)
   const expiredTenants = enrichedTenants.filter(t => t.status === 'vencido')
 
-  const mrrUsd = activeTenants.length * (saasConfig.monthlyPriceUsd || 10)
+  const mrrUsd = paidActiveTenants.length * (saasConfig.monthlyPriceUsd || 10)
   const mrrBs = (mrrUsd * exchangeRate).toFixed(2)
 
   const filteredList = enrichedTenants.filter(t => {
     if (filter === 'pendiente_pago') return t.status === 'pendiente_pago'
+    if (filter === 'trials') return t.isTrial24h && t.status === 'activo'
     if (filter === 'guarantee') return t.inGuarantee
     if (filter === 'activo') return t.status === 'activo'
     if (filter === 'vencido') return t.status === 'vencido'
     return true
   })
 
+  const handleActivate24Hours = (tenant) => {
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+    const todayStr = now.toISOString().split('T')[0]
+    onUpdateTenant({
+      ...tenant,
+      status: 'activo',
+      subscriptionType: 'trial_24h',
+      isTrial24h: true,
+      trialExpiresAt: expiresAt,
+      activatedAt: todayStr,
+      daysRemaining: 1,
+      amountPaidUsd: 0,
+      lastPaymentRef: 'Prueba 24 Horas'
+    })
+  }
+
   const handleActivate30Days = (tenant) => {
     const todayStr = new Date().toISOString().split('T')[0]
     onUpdateTenant({
       ...tenant,
       status: 'activo',
+      subscriptionType: 'mes_30d',
+      isTrial24h: false,
+      trialExpiresAt: null,
       activatedAt: todayStr,
       daysRemaining: saasConfig.subscriptionDays || 30,
       amountPaidUsd: saasConfig.monthlyPriceUsd || 10,
-      lastPaymentRef: tenant.lastPaymentRef === 'Esperando Capture' ? 'Activado Manual' : tenant.lastPaymentRef
+      lastPaymentRef: (tenant.lastPaymentRef === 'Esperando Capture' || tenant.lastPaymentRef === 'Prueba 24 Horas') ? 'Activado Manual' : tenant.lastPaymentRef
     })
   }
 
@@ -154,6 +191,8 @@ export default function SuperAdminView({
     onUpdateTenant({
       ...tenant,
       status: 'vencido',
+      isTrial24h: false,
+      trialExpiresAt: null,
       daysRemaining: 0
     })
   }
@@ -164,7 +203,13 @@ export default function SuperAdminView({
     const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
     let msg = ''
 
-    if (tenant.status === 'pendiente_pago') {
+    if (tenant.status === 'activo' && tenant.isTrial24h) {
+      msg = `⚡ ¡Listo *${tenant.ownerName}*! Ya te activamos tu *Prueba de 24 Horas* para *${tenant.businessName}*.\n\n` +
+        `👉 *Entra aquí:* ${barberBaseUrl}/?login=1\n` +
+        `📧 *Correo:* ${tenant.email}\n` +
+        `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
+        `Tienes acceso completo durante las próximas 24 horas para registrar cobros, probar la caja, turnos y tu catálogo online. ¡Pruébalo con calma y cualquier duda me escribes por aquí!`
+    } else if (tenant.status === 'pendiente_pago') {
       msg = `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* con el correo *${tenant.email}*.\n\n` +
         `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${price} USDT* (${priceBs} Bs).\n\n` +
         `🏦 *Banco:* ${saasConfig.pagoMovilBank || 'Banco de Venezuela (0102)'}\n` +
@@ -182,8 +227,13 @@ export default function SuperAdminView({
         `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
         `🛡️ Recuerda que cuentas con tus *${saasConfig.guaranteeDays} días de garantía total* y soporte directo por este WhatsApp. ¡A sacarle provecho!`
     } else {
-      msg = `👋 ¡Épale *${tenant.ownerName}*! Te escribo para avisarte que se cumplieron los 30 días de suscripción del sistema de *${tenant.businessName}*.\n\n` +
-        `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*$${price} USDT / ${priceBs} Bs*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
+      if (tenant.isTrial24h || tenant.lastPaymentRef === 'Prueba 24 Horas') {
+        msg = `👋 ¡Hola *${tenant.ownerName}*! Se cumplieron las 24 horas de prueba de tu sistema para *${tenant.businessName}*.\n\n` +
+          `Todos tus datos y clientes quedaron guardados intactos. ¿Qué tal te pareció? Si deseas activar el mes completo (*$${price} USDT / ${priceBs} Bs* con tus ${saasConfig.guaranteeDays} días de garantía de reembolso), avísame por aquí y te reactivo en 1 minuto.`
+      } else {
+        msg = `👋 ¡Épale *${tenant.ownerName}*! Te escribo para avisarte que se cumplieron los 30 días de suscripción del sistema de *${tenant.businessName}*.\n\n` +
+          `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*$${price} USDT / ${priceBs} Bs*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
+      }
     }
 
     const url = cleanPhone
@@ -203,7 +253,10 @@ export default function SuperAdminView({
   const handleSaveTenantForm = (e) => {
     e.preventDefault()
     if (!newBiz.trim() || !newEmail.trim()) return
-    const todayStr = new Date().toISOString().split('T')[0]
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0]
+    const isTrial = newStatus === 'trial_24h'
+    const actualStatus = isTrial ? 'activo' : newStatus
 
     if (editingTenant) {
       onUpdateTenant({
@@ -215,8 +268,11 @@ export default function SuperAdminView({
         password: newPass.trim() || '123456',
         phone: newPhone.trim(),
         niche: newNiche,
-        status: newStatus,
-        daysRemaining: newStatus === 'activo' ? (parseInt(newDays) || 30) : 0
+        status: actualStatus,
+        subscriptionType: isTrial ? 'trial_24h' : (actualStatus === 'activo' ? 'mes_30d' : null),
+        isTrial24h: isTrial,
+        trialExpiresAt: isTrial ? (editingTenant.trialExpiresAt || new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()) : null,
+        daysRemaining: actualStatus === 'activo' ? (isTrial ? 1 : (parseInt(newDays) || 30)) : 0
       })
     } else {
       const created = {
@@ -228,12 +284,15 @@ export default function SuperAdminView({
         password: newPass.trim() || '123456',
         phone: newPhone.trim(),
         niche: newNiche,
-        status: newStatus,
+        status: actualStatus,
+        subscriptionType: isTrial ? 'trial_24h' : (actualStatus === 'activo' ? 'mes_30d' : null),
+        isTrial24h: isTrial,
+        trialExpiresAt: isTrial ? new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString() : null,
         isCleanAccount: true, // Starts 100% clean without demo data!
-        activatedAt: newStatus === 'activo' ? todayStr : null,
-        daysRemaining: newStatus === 'activo' ? (parseInt(newDays) || 30) : 0,
-        lastPaymentRef: newStatus === 'activo' ? 'Pagado Directo' : 'Esperando Capture',
-        amountPaidUsd: newStatus === 'activo' ? (saasConfig.monthlyPriceUsd || 6) : 0
+        activatedAt: actualStatus === 'activo' ? todayStr : null,
+        daysRemaining: actualStatus === 'activo' ? (isTrial ? 1 : (parseInt(newDays) || 30)) : 0,
+        lastPaymentRef: isTrial ? 'Prueba 24 Horas' : (actualStatus === 'activo' ? 'Pagado Directo' : 'Esperando Capture'),
+        amountPaidUsd: (actualStatus === 'activo' && !isTrial) ? (saasConfig.monthlyPriceUsd || 6) : 0
       }
       onAddTenant(created)
     }
@@ -719,55 +778,69 @@ export default function SuperAdminView({
         )}
 
         {/* Top SaaS Revenue & Status Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-          <div className="col-span-2 lg:col-span-1 bg-gradient-to-br from-emerald-500/20 to-dark-900 border border-emerald-500/40 rounded-2xl p-4">
-            <span className="text-[11px] font-black text-emerald-400 uppercase">💰 Tu Ingreso Mensual</span>
-            <div className="text-2xl font-black text-white font-mono mt-1">${mrrUsd} USD</div>
-            <span className="text-[11px] text-slate-300 font-mono">Bs. {mrrBs} ({activeTenants.length} activos)</span>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-emerald-500/20 to-dark-900 border border-emerald-500/40 rounded-2xl p-3.5">
+            <span className="text-[11px] font-black text-emerald-400 uppercase">💰 Ingreso Mensual</span>
+            <div className="text-xl sm:text-2xl font-black text-white font-mono mt-1">${mrrUsd} USD</div>
+            <span className="text-[10px] text-slate-300 font-mono">Bs. {mrrBs} ({paidActiveTenants.length} pagados)</span>
           </div>
 
           <button
             onClick={() => setFilter('all')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-3.5 rounded-2xl border text-left transition-all ${
               filter === 'all' ? 'bg-dark-800 border-gold-500' : 'bg-dark-900 border-dark-800'
             }`}
           >
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Todas las Cuentas</span>
-            <div className="text-2xl font-black text-white mt-1">{enrichedTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Barberías en base</span>
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Todas</span>
+            <div className="text-xl sm:text-2xl font-black text-white mt-1">{enrichedTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Total negocios</span>
           </button>
 
           <button
             onClick={() => setFilter('pendiente_pago')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-3.5 rounded-2xl border text-left transition-all ${
               filter === 'pendiente_pago' ? 'bg-amber-500/15 border-amber-500' : 'bg-dark-900 border-dark-800'
             }`}
           >
-            <span className="text-[11px] font-bold text-amber-400 uppercase">⏳ Por Activar Pago</span>
-            <div className="text-2xl font-black text-amber-400 mt-1">{pendingTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Registraron su correo</span>
+            <span className="text-[11px] font-bold text-amber-400 uppercase">⏳ Por Pagar</span>
+            <div className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{pendingTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Esperando pago</span>
+          </button>
+
+          <button
+            onClick={() => setFilter('trials')}
+            className={`p-3.5 rounded-2xl border text-left transition-all ${
+              filter === 'trials' ? 'bg-amber-500/20 border-amber-400 shadow-sm shadow-amber-500/10' : 'bg-dark-900 border-dark-800'
+            }`}
+          >
+            <span className="text-[11px] font-bold text-amber-300 uppercase flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+              <span>Pruebas 24h</span>
+            </span>
+            <div className="text-xl sm:text-2xl font-black text-amber-300 mt-1">{trialTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Probando gratis</span>
           </button>
 
           <button
             onClick={() => setFilter('guarantee')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-3.5 rounded-2xl border text-left transition-all ${
               filter === 'guarantee' ? 'bg-blue-500/15 border-blue-500' : 'bg-dark-900 border-dark-800'
             }`}
           >
-            <span className="text-[11px] font-bold text-blue-400 uppercase">🛡️ En Garantía ({saasConfig.guaranteeDays}d)</span>
-            <div className="text-2xl font-black text-blue-400 mt-1">{guaranteeTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Pagaron hace &lt; {saasConfig.guaranteeDays} días</span>
+            <span className="text-[11px] font-bold text-blue-400 uppercase">🛡️ En Garantía</span>
+            <div className="text-xl sm:text-2xl font-black text-blue-400 mt-1">{guaranteeTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Primeros {saasConfig.guaranteeDays} días</span>
           </button>
 
           <button
             onClick={() => setFilter('vencido')}
-            className={`p-4 rounded-2xl border text-left transition-all ${
+            className={`p-3.5 rounded-2xl border text-left transition-all ${
               filter === 'vencido' ? 'bg-red-500/15 border-red-500' : 'bg-dark-900 border-dark-800'
             }`}
           >
-            <span className="text-[11px] font-bold text-red-400 uppercase">🔴 Mes Vencido</span>
-            <div className="text-2xl font-black text-red-400 mt-1">{expiredTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Toca cobrar renovación</span>
+            <span className="text-[11px] font-bold text-red-400 uppercase">🔴 Vencidos</span>
+            <div className="text-xl sm:text-2xl font-black text-red-400 mt-1">{expiredTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Toca renovación</span>
           </button>
         </div>
 
@@ -834,13 +907,20 @@ export default function SuperAdminView({
                       </span>
                     )}
 
-                    {tenant.status === 'activo' && tenant.inGuarantee && (
+                    {tenant.status === 'activo' && tenant.isTrial24h && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-1">
+                        <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+                        <span>⚡ Prueba 24h Activa ({tenant.trialHoursRemaining}h restantes)</span>
+                      </span>
+                    )}
+
+                    {tenant.status === 'activo' && !tenant.isTrial24h && tenant.inGuarantee && (
                       <span className="px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30 text-[10px] font-black uppercase">
                         🛡️ Pagado • En Garantía (Día {tenant.dayOfSub} de {saasConfig.guaranteeDays})
                       </span>
                     )}
 
-                    {tenant.status === 'activo' && !tenant.inGuarantee && (
+                    {tenant.status === 'activo' && !tenant.isTrial24h && !tenant.inGuarantee && (
                       <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-black uppercase">
                         🟢 Activo Firme • Quedan {tenant.daysRemaining} días
                       </span>
@@ -854,7 +934,7 @@ export default function SuperAdminView({
 
                     {tenant.status === 'vencido' && (
                       <span className="px-2.5 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-black uppercase">
-                        🔴 Mensualidad Vencida (Bloqueado)
+                        {tenant.isTrial24h || tenant.lastPaymentRef === 'Prueba 24 Horas' ? '🔴 Prueba 24h Vencida (Bloqueado)' : '🔴 Mensualidad Vencida (Bloqueado)'}
                       </span>
                     )}
                   </div>
@@ -877,13 +957,45 @@ export default function SuperAdminView({
                 {/* Right 1-Click Actions */}
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                   {tenant.status !== 'activo' ? (
-                    <button
-                      onClick={() => handleActivate30Days(tenant)}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all"
-                    >
-                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
-                      <span>Activar +30 Días</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleActivate24Hours(tenant)}
+                        className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                        title="Activar 24 horas de prueba gratuita para que conozca el sistema"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                        <span>Prueba 24h</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleActivate30Days(tenant)}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                        title="Activar 30 días de suscripción mensual"
+                      >
+                        <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                        <span>Activar +30 Días</span>
+                      </button>
+                    </>
+                  ) : tenant.isTrial24h ? (
+                    <>
+                      <button
+                        onClick={() => handleActivate30Days(tenant)}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+                        title="Cliente pagó: ascender de prueba a 30 días completos"
+                      >
+                        <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                        <span>Activar +30 Días</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleExpireTenant(tenant)}
+                        className="px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 font-bold text-xs flex items-center gap-1 transition-all"
+                        title="Pausar o finalizar prueba"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Pausar</span>
+                      </button>
+                    </>
                   ) : (
                     <button
                       onClick={() => handleExpireTenant(tenant)}
@@ -903,6 +1015,8 @@ export default function SuperAdminView({
                     <span>
                       {tenant.status === 'pendiente_pago'
                         ? 'Cobrar WA'
+                        : tenant.status === 'activo' && tenant.isTrial24h
+                        ? 'Acceso 24h WA'
                         : tenant.status === 'activo'
                         ? 'Enviar Acceso WA'
                         : 'Renovar WA'}
@@ -1054,10 +1168,16 @@ export default function SuperAdminView({
                   <label className="block text-xs font-bold text-slate-300 mb-1">Estado</label>
                   <select
                     value={newStatus}
-                    onChange={(e) => setNewStatus(e.target.value)}
+                    onChange={(e) => {
+                      setNewStatus(e.target.value)
+                      if (e.target.value === 'trial_24h') setNewDays('1')
+                      else if (e.target.value === 'activo') setNewDays('30')
+                      else setNewDays('0')
+                    }}
                     className="w-full px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
                   >
-                    <option value="activo">✅ Activo</option>
+                    <option value="activo">✅ Activo (30 Días)</option>
+                    <option value="trial_24h">⚡ Prueba 24 Horas</option>
                     <option value="pendiente_pago">⏳ Por Pagar</option>
                     <option value="vencido">🔴 Vencido</option>
                   </select>

@@ -176,7 +176,8 @@ const MIME_TYPES = {
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
-  '.webmanifest': 'application/manifest+json; charset=utf-8'
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.pdf': 'application/pdf'
 }
 
 const server = http.createServer(async (req, res) => {
@@ -305,6 +306,18 @@ const server = http.createServer(async (req, res) => {
   let targetPath = pathname
   if (targetPath === '/landing' || targetPath === '/v4' || targetPath === '/ventas') {
     targetPath = '/landing.html'
+  }
+  if (targetPath === '/manual' || targetPath === '/manual.pdf' || targetPath === '/guia') {
+    targetPath = '/bonos/Manual_Oficial_BarberOS.pdf'
+  }
+  if (targetPath === '/bono1' || targetPath === '/bono1.pdf') {
+    targetPath = '/bonos/Bono1_Corte_Rentable.pdf'
+  }
+  if (targetPath === '/bono2' || targetPath === '/bono2.pdf') {
+    targetPath = '/bonos/Bono2_Kit_Redes_Dias_Muertos.pdf'
+  }
+  if (targetPath === '/bono3' || targetPath === '/bono3.pdf') {
+    targetPath = '/bonos/Bono3_Checklist_Arranque_BarberOS.pdf'
   }
   let filePath = path.join(DIST_DIR, targetPath === '/' ? 'index.html' : targetPath)
   if (!filePath.startsWith(DIST_DIR)) {

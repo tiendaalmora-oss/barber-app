@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2 } from 'lucide-react'
+import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2, Zap } from 'lucide-react'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 export default function SubscriptionLockView({
@@ -16,7 +16,8 @@ export default function SubscriptionLockView({
 
   const priceUsd = saasConfig.monthlyPriceUsd || 6
   const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
-  const isNewAccount = tenant?.status === 'pendiente_pago'
+  const isTrialFinished = Boolean(tenant?.wasTrial || tenant?.lastPaymentRef === 'Prueba 24 Horas' || tenant?.subscriptionType === 'trial_24h')
+  const isNewAccount = tenant?.status === 'pendiente_pago' && !isTrialFinished
 
   const copyText = (label, text) => {
     navigator.clipboard.writeText(text)
@@ -33,7 +34,15 @@ export default function SubscriptionLockView({
     setReported(true)
 
     const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
-    const msg = isNewAccount
+    const msg = isTrialFinished
+      ? `⚡ *¡Hola equipo de IngenioOS!* Finalicé mi prueba de 24 horas en *${tenant?.businessName}* y quiero activar mi mes completo de 30 días:\n\n` +
+        `💈 *Negocio:* ${tenant?.businessName}\n` +
+        `👤 *Dueño:* ${tenant?.ownerName}\n` +
+        `📧 *Correo de Acceso:* ${tenant?.email}\n` +
+        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
+        `🧾 *Referencia:* ${refText}\n\n` +
+        `Adjunto mi comprobante para reactivar mi acceso. ¡Muchas gracias!`
+      : isNewAccount
       ? `🚀 *¡Hola equipo de IngenioOS!* Acabo de registrar mi negocio y realicé el pago para activar mi cuenta (con la Garantía de ${saasConfig.guaranteeDays} días):\n\n` +
         `💈 *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName}\n` +
@@ -79,23 +88,31 @@ export default function SubscriptionLockView({
         {/* Hero Guarantee Card */}
         <div className="bg-gradient-to-b from-dark-900 to-dark-950 border-2 border-gold-500/40 rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden">
           <div className="w-16 h-16 rounded-2xl bg-gold-500/15 border border-gold-500/40 text-gold-400 mx-auto flex items-center justify-center mb-3">
-            {isNewAccount ? <ShieldCheck className="w-9 h-9" /> : <Lock className="w-8 h-8" />}
+            {isTrialFinished ? <Zap className="w-9 h-9 text-amber-400 fill-amber-400" /> : isNewAccount ? <ShieldCheck className="w-9 h-9" /> : <Lock className="w-8 h-8" />}
           </div>
 
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold-500/15 text-gold-400 border border-gold-500/30 text-[11px] font-black uppercase tracking-wider">
-            {isNewAccount
+            {isTrialFinished
+              ? '⚡ Tu Prueba Gratuita de 24 Horas ha Finalizado'
+              : isNewAccount
               ? `🛡️ Garantía Blindada de ${saasConfig.guaranteeDays} Días • Cero Riesgo`
               : '⚡ Membresía Mensual Vencida'}
           </span>
 
           <h1 className="text-2xl sm:text-3xl font-black text-white mt-2">
-            {isNewAccount
+            {isTrialFinished
+              ? `¡Gracias por probar BarberOS con ${tenant?.businessName}!`
+              : isNewAccount
               ? `¡Cuenta creada para ${tenant?.businessName}!`
               : `Renueva el acceso de ${tenant?.businessName}`}
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 mt-2 max-w-xl mx-auto leading-relaxed">
-            {isNewAccount ? (
+            {isTrialFinished ? (
+              <>
+                Esperamos que hayas disfrutado probando el sistema para <strong className="text-white">{tenant?.businessName}</strong>. Todos tus clientes, cobros y catálogo están <strong className="text-emerald-400">100% guardados</strong>. Para continuar usando tu sistema sin interrupciones, activa tu mes completo con los {saasConfig.guaranteeDays} días de garantía total.
+              </>
+            ) : isNewAccount ? (
               <>
                 Tu correo <strong className="text-white">{tenant?.email}</strong> ya está registrado. Para activar tus <strong className="text-gold-400">30 días completos de sistema</strong> (Caja, Comisiones, Link de Citas y Retargeting), realiza tu pago inicial.{' '}
                 <span className="text-emerald-400 font-bold">
