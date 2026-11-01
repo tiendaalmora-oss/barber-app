@@ -1,12 +1,42 @@
 import React, { useState, useEffect } from 'react'
-import { X, Check, RefreshCw, DollarSign } from 'lucide-react'
+import { X, Check, RefreshCw, DollarSign, Sparkles } from 'lucide-react'
 
 export default function ExchangeRateModal({ isOpen, onClose, currentRate, onSaveRate }) {
   const [rate, setRate] = useState(currentRate)
+  const [liveBcv, setLiveBcv] = useState(889.26)
+  const [liveParalelo, setLiveParalelo] = useState(988.88)
+  const [loadingLive, setLoadingLive] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
+
+  const fetchLiveRates = async () => {
+    setLoadingLive(true)
+    try {
+      const res = await fetch('https://ve.dolarapi.com/v1/dolares')
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          const oficial = data.find(d => d.fuente === 'oficial')
+          const paralelo = data.find(d => d.fuente === 'paralelo')
+          if (oficial && oficial.promedio) {
+            setLiveBcv(Number(oficial.promedio.toFixed(2)))
+          }
+          if (paralelo && paralelo.promedio) {
+            setLiveParalelo(Number(paralelo.promedio.toFixed(2)))
+          }
+          setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+        }
+      }
+    } catch (e) {
+      // Offline fallback: keep default current 2026 rates
+    } finally {
+      setLoadingLive(false)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
       setRate(currentRate)
+      fetchLiveRates()
     }
   }, [isOpen, currentRate])
 
@@ -44,6 +74,26 @@ export default function ExchangeRateModal({ isOpen, onClose, currentRate, onSave
           </button>
         </div>
 
+        {/* Live Internet Rate Indicator */}
+        <div className="mt-3 px-3 py-2 rounded-xl bg-dark-850 border border-dark-750 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${loadingLive ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'}`}></span>
+            <span className="text-slate-300">
+              BCV Oficial Hoy: <strong className="text-gold-400 font-mono">Bs. {liveBcv.toFixed(2)}</strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchLiveRates}
+            disabled={loadingLive}
+            className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition-all"
+            title="Refrescar tasa del BCV en vivo"
+          >
+            <RefreshCw className={`w-3 h-3 ${loadingLive ? 'animate-spin text-gold-400' : ''}`} />
+            <span>{lastUpdated ? lastUpdated : 'Actualizar'}</span>
+          </button>
+        </div>
+
         {/* Form */}
         <form onSubmit={handleSave} className="mt-4 space-y-4">
           <div>
@@ -66,29 +116,54 @@ export default function ExchangeRateModal({ isOpen, onClose, currentRate, onSave
             </div>
           </div>
 
-          {/* Quick presets */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setRate((prev) => (parseFloat(prev) + 0.5).toFixed(2))}
-              className="flex-1 py-1.5 px-2 bg-dark-800 hover:bg-dark-750 text-slate-300 rounded-lg text-xs font-medium border border-dark-700"
-            >
-              +0.50 Bs
-            </button>
-            <button
-              type="button"
-              onClick={() => setRate((prev) => (parseFloat(prev) + 1.0).toFixed(2))}
-              className="flex-1 py-1.5 px-2 bg-dark-800 hover:bg-dark-750 text-slate-300 rounded-lg text-xs font-medium border border-dark-700"
-            >
-              +1.00 Bs
-            </button>
-            <button
-              type="button"
-              onClick={() => setRate(53.25)}
-              className="flex-1 py-1.5 px-2 bg-dark-800 hover:bg-dark-750 text-slate-300 rounded-lg text-xs font-medium border border-dark-700"
-            >
-              BCV Oficial
-            </button>
+          {/* Quick presets (BCV en vivo + Paralelo + incrementos) */}
+          <div className="space-y-1.5">
+            <div className="text-[10px] uppercase font-bold text-slate-400 px-0.5">
+              Cargar con 1 Clic:
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRate(liveBcv.toFixed(2))}
+                className="py-2 px-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 rounded-xl text-xs font-bold border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-all text-center"
+              >
+                <span>🏛️ BCV ({liveBcv.toFixed(2)})</span>
+              </button>
+
+              {liveParalelo && (
+                <button
+                  type="button"
+                  onClick={() => setRate(liveParalelo.toFixed(2))}
+                  className="py-2 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-xl text-xs font-bold border border-amber-500/30 flex items-center justify-center gap-1.5 transition-all text-center"
+                >
+                  <span>⚡ Paralelo ({liveParalelo.toFixed(2)})</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setRate((prev) => (parseFloat(prev || 0) + 1.0).toFixed(2))}
+                className="flex-1 py-1 px-2 bg-dark-800 hover:bg-dark-750 text-slate-300 rounded-lg text-xs font-medium border border-dark-700"
+              >
+                +1.00 Bs
+              </button>
+              <button
+                type="button"
+                onClick={() => setRate((prev) => (parseFloat(prev || 0) + 5.0).toFixed(2))}
+                className="flex-1 py-1 px-2 bg-dark-800 hover:bg-dark-750 text-slate-300 rounded-lg text-xs font-medium border border-dark-700"
+              >
+                +5.00 Bs
+              </button>
+              <button
+                type="button"
+                onClick={() => setRate((prev) => Math.max(1, parseFloat(prev || 0) - 1.0).toFixed(2))}
+                className="flex-1 py-1 px-2 bg-dark-800 hover:bg-dark-750 text-slate-300 rounded-lg text-xs font-medium border border-dark-700"
+              >
+                -1.00 Bs
+              </button>
+            </div>
           </div>
 
           {/* Example preview */}

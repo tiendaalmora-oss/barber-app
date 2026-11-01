@@ -161,7 +161,7 @@ export default function App() {
       return Number(initWs.exchangeRate)
     }
     const saved = localStorage.getItem('barber_rate')
-    return saved ? parseFloat(saved) : 53.00
+    return saved ? parseFloat(saved) : 889.26
   })
 
   // Editable Staff, Services, and Products per Niche

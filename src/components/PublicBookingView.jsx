@@ -13,7 +13,7 @@ export default function PublicBookingView({
   isOwnerPreview,
   onExitPreview
 }) {
-  const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 53.00
+  const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 889.26
 
   const activeSlots = (businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
     ? businessProfile.bookingSlots

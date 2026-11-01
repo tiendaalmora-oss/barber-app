@@ -6,7 +6,7 @@ const MONTH_NAMES = [
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ]
 
-export default function MonthlyReportView({ transactions = [], exchangeRate = 53 }) {
+export default function MonthlyReportView({ transactions = [], exchangeRate = 889.26 }) {
   const currentMonthIdx = new Date().getMonth()
   const currentMonthName = MONTH_NAMES[currentMonthIdx]
 
