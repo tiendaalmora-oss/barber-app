@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react'
 
 export default function QuickCashModal({
@@ -7,7 +7,8 @@ export default function QuickCashModal({
   nicheData,
   exchangeRate,
   onRegisterTransaction,
-  clients = []
+  clients = [],
+  prefillData = null
 }) {
   const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || '')
   const [activeItemTab, setActiveItemTab] = useState('servicios') // 'servicios' | 'productos'
@@ -16,16 +17,58 @@ export default function QuickCashModal({
   const [clientPhone, setClientPhone] = useState('')
 
   // Multi-item cart: holds services and products on the same bill
-  const [cart, setCart] = useState(() => {
-    const firstSvc = nicheData.services[0]
-    return firstSvc ? [{
-      id: firstSvc.id,
-      name: firstSvc.name,
-      price_usd: firstSvc.price_usd,
-      isProduct: false,
-      qty: 1
-    }] : []
-  })
+  const [cart, setCart] = useState([])
+
+  // Pre-fill fields whenever opened from an appointment or normal trigger
+  useEffect(() => {
+    if (!isOpen) return
+
+    if (prefillData) {
+      setClientName(prefillData.clientName || '')
+      setClientPhone(prefillData.clientPhone || '')
+      if (prefillData.staffId) {
+        setSelectedStaff(prefillData.staffId)
+      } else if (nicheData.staff[0]?.id) {
+        setSelectedStaff(nicheData.staff[0].id)
+      }
+
+      // Pre-fill cart with the appointment's service
+      const svcMatch = (nicheData.services || []).find(s => 
+        s.name.toLowerCase() === (prefillData.serviceName || '').toLowerCase()
+      )
+
+      if (svcMatch) {
+        setCart([{
+          id: svcMatch.id,
+          name: svcMatch.name,
+          price_usd: svcMatch.price_usd,
+          isProduct: false,
+          qty: 1
+        }])
+      } else if (prefillData.serviceName) {
+        setCart([{
+          id: 'svc_' + Date.now(),
+          name: prefillData.serviceName,
+          price_usd: 5,
+          isProduct: false,
+          qty: 1
+        }])
+      }
+    } else {
+      // Normal open: reset or default
+      setClientName('')
+      setClientPhone('')
+      if (nicheData.staff[0]?.id) setSelectedStaff(nicheData.staff[0].id)
+      const firstSvc = nicheData.services[0]
+      setCart(firstSvc ? [{
+        id: firstSvc.id,
+        name: firstSvc.name,
+        price_usd: firstSvc.price_usd,
+        isProduct: false,
+        qty: 1
+      }] : [])
+    }
+  }, [isOpen, prefillData])
 
   if (!isOpen) return null
 
@@ -119,7 +162,8 @@ export default function QuickCashModal({
       comision_usd: staffCommissionUSD,
       ganancia_negocio_usd: businessProfitUSD,
       hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      fecha: new Date().toISOString()
+      fecha: new Date().toISOString(),
+      appointment_id: prefillData?.appointmentId || null
     }
 
     onRegisterTransaction(transaction)
@@ -148,6 +192,13 @@ export default function QuickCashModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {prefillData && (
+          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-1.5 flex items-center justify-between text-xs text-emerald-300 mt-2 shrink-0">
+            <span>📅 Cobrando turno de <strong>{prefillData.clientName}</strong></span>
+            <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full font-bold">Auto-Cita</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
           

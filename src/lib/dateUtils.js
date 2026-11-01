@@ -132,3 +132,64 @@ export function inferServiceDuration(service) {
   }
   return 30
 }
+
+/**
+ * Days of the week configuration for Venezuela / Latin America (Monday-first)
+ */
+export const DAYS_OF_WEEK = [
+  { id: 'lunes', label: 'Lunes', short: 'Lun', dayIndex: 1 },
+  { id: 'martes', label: 'Martes', short: 'Mar', dayIndex: 2 },
+  { id: 'miercoles', label: 'Miércoles', short: 'Mié', dayIndex: 3 },
+  { id: 'jueves', label: 'Jueves', short: 'Jue', dayIndex: 4 },
+  { id: 'viernes', label: 'Viernes', short: 'Vie', dayIndex: 5 },
+  { id: 'sabado', label: 'Sábado', short: 'Sáb', dayIndex: 6 },
+  { id: 'domingo', label: 'Domingo', short: 'Dom', dayIndex: 0 },
+]
+
+/**
+ * Returns the day key ('lunes', 'martes', etc.) for a given date string or Date object.
+ */
+export function getDayKeyFromDate(dateStr) {
+  if (!dateStr) return 'lunes'
+  const clean = typeof dateStr === 'string' && dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+  const d = new Date(`${clean}T12:00:00`)
+  const dayIdx = isNaN(d.getTime()) ? 1 : d.getDay()
+  const found = DAYS_OF_WEEK.find(day => day.dayIndex === dayIdx)
+  return found ? found.id : 'lunes'
+}
+
+/**
+ * Returns human-readable day label (e.g. 'Lunes', 'Domingo')
+ */
+export function getDayLabelFromDate(dateStr) {
+  if (!dateStr) return 'Lunes'
+  const key = getDayKeyFromDate(dateStr)
+  const found = DAYS_OF_WEEK.find(d => d.id === key)
+  return found ? found.label : 'Lunes'
+}
+
+/**
+ * Retrieves the day schedule { enabled: boolean, slots: string[] } for a given date.
+ * Fully backward-compatible with legacy businessProfile.bookingSlots.
+ */
+export function getScheduleForDate(businessProfile, dateStr, fallbackSlots = []) {
+  const dayKey = getDayKeyFromDate(dateStr)
+  const weekly = businessProfile?.weeklySchedule
+  if (weekly && weekly[dayKey]) {
+    const dayConfig = weekly[dayKey]
+    return {
+      enabled: dayConfig.enabled !== false,
+      slots: Array.isArray(dayConfig.slots) ? dayConfig.slots : []
+    }
+  }
+
+  // Backward compatibility fallback to global bookingSlots
+  const defaultSlots = (businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
+    ? businessProfile.bookingSlots
+    : fallbackSlots
+
+  return {
+    enabled: true,
+    slots: defaultSlots
+  }
+}

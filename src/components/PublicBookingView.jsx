@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package, Timer } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, inferServiceDuration } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, inferServiceDuration, getScheduleForDate, getDayLabelFromDate } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 
 export default function PublicBookingView({
@@ -14,10 +14,6 @@ export default function PublicBookingView({
   onExitPreview
 }) {
   const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 889.26
-
-  const activeSlots = (businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
-    ? businessProfile.bookingSlots
-    : DEFAULT_BOOKING_SLOTS
 
   const catalogProducts = (nicheData?.products || []).filter(p => p.showInCatalog !== false)
 
@@ -35,6 +31,13 @@ export default function PublicBookingView({
   const [selectedService, setSelectedService] = useState(allServices[0]?.name || '')
   const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || 'any')
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
+
+  // Dynamic day-of-week schedule awareness
+  const dateSchedule = getScheduleForDate(businessProfile, selectedDate, DEFAULT_BOOKING_SLOTS)
+  const isDayClosed = !dateSchedule.enabled || dateSchedule.slots.length === 0
+  const activeSlots = isDayClosed ? [] : dateSchedule.slots
+  const selectedDayLabel = getDayLabelFromDate(selectedDate)
+
   const [selectedTime, setSelectedTime] = useState(activeSlots[0] || '10:00 AM')
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
@@ -87,13 +90,14 @@ export default function PublicBookingView({
     })
   }
 
-  // Auto-switch selectedTime if user changes date or staff and current slot is occupied
+  // Auto-switch selectedTime if user changes date or staff and current slot is occupied or unavailable on this day
   useEffect(() => {
-    if (isSlotTaken(selectedTime)) {
+    if (activeSlots.length === 0) return
+    if (!activeSlots.includes(selectedTime) || isSlotTaken(selectedTime)) {
       const firstFree = activeSlots.find(s => !isSlotTaken(s))
       if (firstFree) setSelectedTime(firstFree)
     }
-  }, [selectedDate, selectedStaff, appointments, selectedService])
+  }, [selectedDate, selectedStaff, appointments, selectedService, activeSlots])
 
   const morningSlots = activeSlots.filter(s => timeToMinutes(s) < 720)
   const afternoonSlots = activeSlots.filter(s => timeToMinutes(s) >= 720 && timeToMinutes(s) < 1020)
@@ -122,6 +126,11 @@ export default function PublicBookingView({
   const handleConfirmBooking = (e) => {
     e.preventDefault()
     if (!clientName.trim()) return
+
+    if (isDayClosed || activeSlots.length === 0) {
+      alert(`⚠️ El local no labora los ${selectedDayLabel}s. Por favor selecciona otra fecha disponible.`)
+      return
+    }
 
     const normTime = normalizeTimeSlot(selectedTime)
     if (isSlotTaken(selectedTime)) {
@@ -645,63 +654,77 @@ export default function PublicBookingView({
                   />
                 </div>
 
-                {/* Selector de Horarios Móvil-Friendly (Mañana / Tarde / Noche) */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar">
-                  {[
-                    { id: 'all', label: 'Todos', count: activeSlots.filter(s => !isSlotTaken(s)).length },
-                    { id: 'morning', label: '☀️ Mañana', count: morningFree },
-                    { id: 'afternoon', label: '⛅ Tarde', count: afternoonFree },
-                    { id: 'evening', label: '🌙 Noche', count: eveningFree }
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setTimePeriodFilter(tab.id)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold shrink-0 border transition-all flex items-center gap-1.5 ${
-                        timePeriodFilter === tab.id
-                          ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                          : 'bg-dark-850 text-slate-400 border-dark-750 hover:text-white hover:border-dark-700'
-                      }`}
-                    >
-                      <span>{tab.label}</span>
-                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                        timePeriodFilter === tab.id ? 'bg-black/30 text-white' : 'bg-dark-900 text-slate-500'
-                      }`}>
-                        {tab.count}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Grid de Horas Disponibles (Adaptable a 15, 30, 45, 60m) */}
-                {displayedSlots.length === 0 ? (
-                  <div className="text-center py-4 text-xs text-slate-500 bg-dark-900/50 rounded-xl border border-dark-800">
-                    No hay turnos registrados en este horario
+                {/* Horas disponibles o aviso si el día está cerrado */}
+                {isDayClosed ? (
+                  <div className="p-4 rounded-xl bg-dark-950 border border-dark-800 text-center space-y-1.5 mt-2">
+                    <p className="text-xs font-bold text-slate-300">
+                      💈 El local permanece cerrado los {selectedDayLabel}s
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Por favor selecciona otra fecha arriba para consultar los horarios disponibles.
+                    </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
-                    {displayedSlots.map(slot => {
-                      const taken = isSlotTaken(slot)
-                      const active = selectedTime === slot && !taken
-                      return (
+                  <>
+                    {/* Selector de Horarios Móvil-Friendly (Mañana / Tarde / Noche) */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar">
+                      {[
+                        { id: 'all', label: 'Todos', count: activeSlots.filter(s => !isSlotTaken(s)).length },
+                        { id: 'morning', label: '☀️ Mañana', count: morningFree },
+                        { id: 'afternoon', label: '⛅ Tarde', count: afternoonFree },
+                        { id: 'evening', label: '🌙 Noche', count: eveningFree }
+                      ].map(tab => (
                         <button
+                          key={tab.id}
                           type="button"
-                          key={slot}
-                          disabled={taken}
-                          onClick={() => setSelectedTime(slot)}
-                          className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold border transition-all text-center ${
-                            taken
-                              ? 'bg-dark-950/80 text-slate-600 border-dark-850/60 line-through cursor-not-allowed opacity-50'
-                              : active
-                              ? 'bg-gold-500 text-black border-gold-400 shadow-md font-black scale-[1.02]'
-                              : 'bg-dark-850 text-slate-300 border-dark-750 hover:border-gold-500/40 hover:text-white'
+                          onClick={() => setTimePeriodFilter(tab.id)}
+                          className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold shrink-0 border transition-all flex items-center gap-1.5 ${
+                            timePeriodFilter === tab.id
+                              ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                              : 'bg-dark-850 text-slate-400 border-dark-750 hover:text-white hover:border-dark-700'
                           }`}
                         >
-                          {taken ? 'Ocupado' : slot}
+                          <span>{tab.label}</span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                            timePeriodFilter === tab.id ? 'bg-black/30 text-white' : 'bg-dark-900 text-slate-500'
+                          }`}>
+                            {tab.count}
+                          </span>
                         </button>
-                      )
-                    })}
-                  </div>
+                      ))}
+                    </div>
+
+                    {/* Grid de Horas Disponibles (Adaptable a 15, 30, 45, 60m) */}
+                    {displayedSlots.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-slate-500 bg-dark-900/50 rounded-xl border border-dark-800">
+                        No hay turnos registrados en este horario
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
+                        {displayedSlots.map(slot => {
+                          const taken = isSlotTaken(slot)
+                          const active = selectedTime === slot && !taken
+                          return (
+                            <button
+                              type="button"
+                              key={slot}
+                              disabled={taken}
+                              onClick={() => setSelectedTime(slot)}
+                              className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold border transition-all text-center ${
+                                taken
+                                  ? 'bg-dark-950/80 text-slate-600 border-dark-850/60 line-through cursor-not-allowed opacity-50'
+                                  : active
+                                  ? 'bg-gold-500 text-black border-gold-400 shadow-md font-black scale-[1.02]'
+                                  : 'bg-dark-850 text-slate-300 border-dark-750 hover:border-gold-500/40 hover:text-white'
+                              }`}
+                            >
+                              {taken ? 'Ocupado' : slot}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -737,9 +760,14 @@ export default function PublicBookingView({
               {/* Botón Confirmar */}
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-sm shadow-xl shadow-gold-500/20 active:scale-98 transition-all"
+                disabled={isDayClosed || activeSlots.length === 0}
+                className={`w-full py-3.5 rounded-2xl font-black text-sm shadow-xl transition-all ${
+                  isDayClosed || activeSlots.length === 0
+                    ? 'bg-dark-800 text-slate-500 border border-dark-700 cursor-not-allowed opacity-60'
+                    : 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/20 active:scale-98'
+                }`}
               >
-                Confirmar Mi Turno Ahora
+                {isDayClosed ? `Cerrado los ${selectedDayLabel}s` : 'Confirmar Mi Turno Ahora'}
               </button>
             </form>
           )}

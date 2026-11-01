@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
-import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2, Settings } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration } from '../lib/dateUtils'
+import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2, Settings, DollarSign } from 'lucide-react'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, getScheduleForDate } from '../lib/dateUtils'
 
-export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {}, onOpenSettings }) {
+export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {}, onOpenSettings, onChargeAppointment }) {
   // Today's ISO date string strictly in local timezone
   const getTodayStr = () => getLocalDateIso()
 
@@ -224,8 +224,20 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                   </div>
                 </div>
 
-                {/* Actions: Anti-No-Show WhatsApp + Status Toggle Button */}
-                <div className="flex items-center gap-2 shrink-0">
+                {/* Actions: Cobro directo + WhatsApp + Status Toggle Button */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {apt.status !== 'completada' && onChargeAppointment && (
+                    <button
+                      type="button"
+                      onClick={() => onChargeAppointment(apt)}
+                      className="px-2.5 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs flex items-center gap-1 shadow-md shadow-gold-500/20 active:scale-95 transition-all"
+                      title="Cobrar cita en Caja con 1 toque"
+                    >
+                      <DollarSign className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span className="hidden sm:inline">Cobrar</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -321,21 +333,24 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Hora Estimada</label>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-1.5 max-h-28 overflow-y-auto p-1 bg-dark-900 rounded-xl border border-dark-750">
-                  {((businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
-                    ? businessProfile.bookingSlots
-                    : ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM']
-                  ).map(h => (
-                    <button
-                      type="button"
-                      key={h}
-                      onClick={() => setNewTime(h)}
-                      className={`py-1 text-[11px] rounded-lg border font-mono transition-all text-center ${
-                        newTime === h ? 'bg-purple-600 text-white border-purple-500 font-bold shadow-sm' : 'bg-dark-800 text-slate-400 border-dark-700 hover:text-white'
-                      }`}
-                    >
-                      {h}
-                    </button>
-                  ))}
+                  {(() => {
+                    const sched = getScheduleForDate(businessProfile, newDate)
+                    const slotsList = (sched.enabled && sched.slots.length > 0)
+                      ? sched.slots
+                      : (businessProfile?.bookingSlots || ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM'])
+                    return slotsList.map(h => (
+                      <button
+                        type="button"
+                        key={h}
+                        onClick={() => setNewTime(h)}
+                        className={`py-1 text-[11px] rounded-lg border font-mono transition-all text-center ${
+                          newTime === h ? 'bg-purple-600 text-white border-purple-500 font-bold shadow-sm' : 'bg-dark-800 text-slate-400 border-dark-700 hover:text-white'
+                        }`}
+                      >
+                        {h}
+                      </button>
+                    ))
+                  })()}
                 </div>
                 <input
                   type="text"

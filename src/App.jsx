@@ -238,6 +238,7 @@ export default function App() {
 
   // Modals
   const [isCashModalOpen, setIsCashModalOpen] = useState(false)
+  const [cashModalPrefill, setCashModalPrefill] = useState(null)
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false)
   const [isRateModalOpen, setIsRateModalOpen] = useState(false)
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false)
@@ -858,14 +859,25 @@ export default function App() {
     }
   }
 
-  const handleToggleAppointmentStatus = (id) => {
+  const handleToggleAppointmentStatus = (id, forcedStatus = null) => {
     setAppointments(prev => prev.map(a => {
       if (a.id === id) {
-        const nextStatus = a.status === 'pendiente' ? 'en_atencion' : a.status === 'en_atencion' ? 'completada' : 'pendiente'
+        const nextStatus = forcedStatus || (a.status === 'pendiente' ? 'en_atencion' : a.status === 'en_atencion' ? 'completada' : 'pendiente')
         return { ...a, status: nextStatus }
       }
       return a
     }))
+  }
+
+  const handleChargeAppointment = (apt) => {
+    setCashModalPrefill({
+      appointmentId: apt.id,
+      clientName: apt.client_name,
+      clientPhone: apt.client_phone || '',
+      staffId: apt.staff_id,
+      serviceName: apt.service
+    })
+    setIsCashModalOpen(true)
   }
 
   const handleDeleteAppointment = (id) => {
@@ -875,6 +887,12 @@ export default function App() {
   // Transactions CRUD
   const handleRegisterTransaction = async (newTx) => {
     setTransactions(prev => [newTx, ...prev])
+
+    // If this transaction came directly from an appointment, mark that appointment completed!
+    if (newTx.appointment_id) {
+      handleToggleAppointmentStatus(newTx.appointment_id, 'completada')
+    }
+    setCashModalPrefill(null)
 
     // If products from inventory were sold, subtract exact quantities from stock
     if (Array.isArray(newTx.product_items) && newTx.product_items.length > 0) {
@@ -1294,6 +1312,7 @@ export default function App() {
               clients={clients}
               businessProfile={businessProfile}
               onOpenSettings={() => setIsSettingsModalOpen(true)}
+              onChargeAppointment={handleChargeAppointment}
             />
           )}
 
@@ -1330,11 +1349,15 @@ export default function App() {
       {/* Modals */}
       <QuickCashModal
         isOpen={isCashModalOpen}
-        onClose={() => setIsCashModalOpen(false)}
+        onClose={() => {
+          setIsCashModalOpen(false)
+          setCashModalPrefill(null)
+        }}
         nicheData={nicheData}
         exchangeRate={exchangeRate}
         onRegisterTransaction={handleRegisterTransaction}
         clients={clients}
+        prefillData={cashModalPrefill}
       />
 
       <QuickExpenseModal

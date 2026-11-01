@@ -883,6 +883,16 @@ export const DEFAULT_BOOKING_SLOTS = [
   '06:00 PM', '07:00 PM'
 ]
 
+export const DEFAULT_WEEKLY_SCHEDULE = {
+  lunes: { enabled: true, slots: DEFAULT_BOOKING_SLOTS },
+  martes: { enabled: true, slots: DEFAULT_BOOKING_SLOTS },
+  miercoles: { enabled: true, slots: DEFAULT_BOOKING_SLOTS },
+  jueves: { enabled: true, slots: DEFAULT_BOOKING_SLOTS },
+  viernes: { enabled: true, slots: DEFAULT_BOOKING_SLOTS },
+  sabado: { enabled: true, slots: DEFAULT_BOOKING_SLOTS },
+  domingo: { enabled: false, slots: [] }
+}
+
 export const INITIAL_BUSINESS_PROFILE = {
   businessName: 'Barbería & Studio El Fino',
   slogan: 'Cortes degradé de primera, barba con toalla caliente y atención VIP sin esperar de pie.',
@@ -892,7 +902,8 @@ export const INITIAL_BUSINESS_PROFILE = {
   instagram: '@barberiaelfino',
   paymentMethods: ['Pago Móvil BCV', 'Efectivo ($)', 'Zelle', 'Punto de Venta'],
   promoBanner: '🔥 Promo de la Semana: Combo Corte + Barba + Cejas por solo $10',
-  bookingSlots: DEFAULT_BOOKING_SLOTS
+  bookingSlots: DEFAULT_BOOKING_SLOTS,
+  weeklySchedule: DEFAULT_WEEKLY_SCHEDULE
 }
 
 export const INITIAL_SAAS_CONFIG = {
