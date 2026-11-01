@@ -282,62 +282,77 @@ export default function BusinessSettingsModal({
               </div>
 
               {/* Selector de Horas de Agenda y Turnos Disponibles */}
-              <div className="pt-3 border-t border-dark-800 space-y-2">
+              <div className="pt-3 border-t border-dark-800 space-y-2.5">
+                {/* Header limpio: Título + Badge de activas */}
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-xs font-bold text-white flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Horas Disponibles en la Agenda (Turnos)</span>
+                      <span>Horarios Disponibles para Reservar</span>
                     </label>
                     <p className="text-[11px] text-slate-400">
-                      Toca para encender o apagar las horas que ofreces a tus clientes
+                      Configura las horas que verán tus clientes en tu enlace
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={set15MinSlots}
-                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-cyan-400 border border-cyan-500/40 font-bold"
-                      title="Turnos dinámicos cada 15 minutos (ideal si atiendes cortes de 45m, 30m o express de 15m sin huecos)"
-                    >
-                      ⚡ Cada 15m
-                    </button>
-                    <button
-                      type="button"
-                      onClick={set30MinSlots}
-                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
-                      title="Turnos cada 30 minutos (ej. 9:00, 9:30, 10:00...)"
-                    >
-                      ⏱️ 30 min
-                    </button>
-                    <button
-                      type="button"
-                      onClick={set45MinSlots}
-                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-gold-400 border border-gold-500/40 font-bold"
-                      title="Turnos cada 45 minutos (ej. 9:00, 9:45, 10:30, 11:15...)"
-                    >
-                      ⏱️ 45 min
-                    </button>
-                    <button
-                      type="button"
-                      onClick={set60MinSlots}
-                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
-                      title="Turnos cada 1 hora (ej. 9:00, 10:00, 11:00...)"
-                    >
-                      ⏱️ 1 hora
-                    </button>
-                    <button
-                      type="button"
-                      onClick={setAllSlots}
-                      className="text-[10px] px-2 py-0.5 rounded bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-medium"
-                      title="Activar todas las horas desde 8 AM hasta 8:30 PM"
-                    >
-                      Todas
-                    </button>
-                  </div>
+                  <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-300 border border-purple-500/30 shrink-0">
+                    {(form.bookingSlots || DEFAULT_BOOKING_SLOTS).length} activas
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-36 overflow-y-auto p-2 bg-dark-950 rounded-xl border border-dark-800">
+                {/* Barra de Plantillas Rápidas (Horizontal Scroll / Wrap sin apretarse) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                  <span className="text-[10px] text-slate-400 font-semibold shrink-0">Plantillas:</span>
+                  <button
+                    type="button"
+                    onClick={set15MinSlots}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 font-bold shrink-0 transition-all active:scale-95 flex items-center gap-1"
+                    title="Turnos cada 15 minutos (dinámico)"
+                  >
+                    ⚡ Cada 15m
+                  </button>
+                  <button
+                    type="button"
+                    onClick={set30MinSlots}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700 font-semibold shrink-0 transition-all active:scale-95"
+                    title="Turnos cada 30 minutos"
+                  >
+                    ⏱️ 30m
+                  </button>
+                  <button
+                    type="button"
+                    onClick={set45MinSlots}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold shrink-0 transition-all active:scale-95"
+                    title="Turnos cada 45 minutos"
+                  >
+                    ⏱️ 45m
+                  </button>
+                  <button
+                    type="button"
+                    onClick={set60MinSlots}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-dark-800 text-slate-300 border border-dark-700 font-semibold shrink-0 transition-all active:scale-95"
+                    title="Turnos cada 1 hora"
+                  >
+                    ⏱️ 1 hora
+                  </button>
+                  <button
+                    type="button"
+                    onClick={setAllSlots}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-semibold shrink-0 transition-all active:scale-95"
+                    title="Activar todas las horas"
+                  >
+                    Todas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, bookingSlots: [] })}
+                    className="text-[10px] px-2 py-1 rounded-lg bg-dark-850 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 border border-dark-750 shrink-0 transition-all active:scale-95 ml-auto"
+                    title="Desmarcar todas las horas"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-44 overflow-y-auto p-2 bg-dark-950 rounded-xl border border-dark-800">
                   {MASTER_BOOKING_SLOTS.map(slot => {
                     const active = (form.bookingSlots || DEFAULT_BOOKING_SLOTS).includes(slot)
                     return (
@@ -345,10 +360,10 @@ export default function BusinessSettingsModal({
                         type="button"
                         key={slot}
                         onClick={() => toggleBookingSlot(slot)}
-                        className={`py-1.5 px-1 rounded-lg text-[10px] font-mono font-bold transition-all text-center ${
+                        className={`py-2 px-1 rounded-lg text-[10px] font-mono font-bold transition-all text-center ${
                           active
-                            ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30 border border-purple-500 scale-[1.02]'
-                            : 'bg-dark-900 text-slate-500 border border-dark-800 hover:border-dark-700 hover:text-slate-400'
+                            ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/30 border border-purple-500 font-black'
+                            : 'bg-dark-900 text-slate-500 border border-dark-800/80 hover:border-dark-700 hover:text-slate-400'
                         }`}
                       >
                         {slot}
@@ -356,9 +371,6 @@ export default function BusinessSettingsModal({
                     )
                   })}
                 </div>
-                <p className="text-[10px] text-slate-500 italic">
-                  * {(form.bookingSlots || DEFAULT_BOOKING_SLOTS).length} horas habilitadas para que tus clientes aparten turno.
-                </p>
               </div>
             </div>
           )}
