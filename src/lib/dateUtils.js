@@ -61,3 +61,36 @@ export function isDigitalMethod(method) {
 export function isFiadoMethod(method) {
   return method === 'fiado'
 }
+
+/**
+ * Normalizes time strings to canonical "HH:MM AM/PM" format.
+ * Examples:
+ *  "9:00 AM" -> "09:00 AM"
+ *  "09:00 am" -> "09:00 AM"
+ *  "10:30pm" -> "10:30 PM"
+ *  "14:00" -> "02:00 PM"
+ */
+export function normalizeTimeSlot(rawTime) {
+  if (!rawTime || typeof rawTime !== 'string') return ''
+  let clean = rawTime.trim().toUpperCase()
+
+  // Match 12-hour: H:MM or HH:MM followed optionally by AM/PM
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/)
+  if (match12) {
+    let hours = parseInt(match12[1], 10)
+    const minutes = match12[2]
+    const ampm = match12[3]
+
+    if (ampm) {
+      return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`
+    } else {
+      // 24-hour format: e.g. 14:00 or 09:00 without AM/PM
+      const period = hours >= 12 ? 'PM' : 'AM'
+      if (hours > 12) hours -= 12
+      if (hours === 0) hours = 12
+      return `${hours.toString().padStart(2, '0')}:${minutes} ${period}`
+    }
+  }
+
+  return clean
+}

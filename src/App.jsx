@@ -50,15 +50,22 @@ export default function App() {
       }
     } catch (e) {}
 
-    // 2. Fetch from VPS server
-    fetch(`/api/workspace/${encodeURIComponent(publicTenantParam)}`, { cache: 'no-store' })
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.workspace) {
-          setPublicTenantWs(data.workspace)
-        }
-      })
-      .catch(() => {})
+    // 2. Fetch from VPS server and keep fresh with auto-poll
+    const fetchPublicWs = () => {
+      fetch(`/api/workspace/${encodeURIComponent(publicTenantParam)}`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.workspace) {
+            setPublicTenantWs(data.workspace)
+          }
+        })
+        .catch(() => {})
+    }
+
+    fetchPublicWs()
+    // Check every 10 seconds so slots & BCV rate update in live time
+    const pollInterval = setInterval(fetchPublicWs, 10000)
+    return () => clearInterval(pollInterval)
   }, [publicTenantParam])
   // Admin ONLY allowed on ingeniodigital.shop domain (or localhost during dev) — completely blocked on barber.ingenioos.online!
   const isAdminDomain = hostname.includes('ingeniodigital.shop') || ((hostname === 'localhost' || hostname === '127.0.0.1') && searchParams.includes('admin=1'))
@@ -135,8 +142,24 @@ export default function App() {
 
   const activeTenant = tenants.find(t => t.id === activeTenantId) || (cachedActiveTenant && cachedActiveTenant.id === activeTenantId ? cachedActiveTenant : null)
 
-  // Local-first persistent state
+  // Scoped workspace helper: reads isolated data for active tenant if available
+  const getInitialWorkspace = () => {
+    try {
+      const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+      if (loggedId) {
+        const scoped = localStorage.getItem(`barber_ws_${loggedId}`)
+        if (scoped) return JSON.parse(scoped)
+      }
+    } catch (e) {}
+    return null
+  }
+  const initWs = getInitialWorkspace()
+
+  // Local-first persistent state (reads from scoped tenant workspace if present)
   const [exchangeRate, setExchangeRate] = useState(() => {
+    if (initWs && initWs.exchangeRate && !isNaN(Number(initWs.exchangeRate))) {
+      return Number(initWs.exchangeRate)
+    }
     const saved = localStorage.getItem('barber_rate')
     return saved ? parseFloat(saved) : 53.00
   })
@@ -168,19 +191,6 @@ export default function App() {
       mixto: NICHES.mixto.products
     }
   })
-
-  // Scoped workspace helper: reads isolated data for active tenant if available
-  const getInitialWorkspace = () => {
-    try {
-      const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
-      if (loggedId) {
-        const scoped = localStorage.getItem(`barber_ws_${loggedId}`)
-        if (scoped) return JSON.parse(scoped)
-      }
-    } catch (e) {}
-    return null
-  }
-  const initWs = getInitialWorkspace()
 
   const [transactions, setTransactions] = useState(() => {
     const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
@@ -301,7 +311,8 @@ export default function App() {
       businessProfile,
       staffByNiche,
       servicesByNiche,
-      productsByNiche
+      productsByNiche,
+      exchangeRate
     }
     // 1. Save in local browser storage isolated for this tenant
     try {
@@ -311,6 +322,7 @@ export default function App() {
       localStorage.setItem('barber_clients_v2', JSON.stringify(clients))
       localStorage.setItem('barber_appointments', JSON.stringify(appointments))
       localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
+      localStorage.setItem('barber_rate', exchangeRate.toString())
     } catch (storageErr) {
       console.warn('Storage quota warning, continuing with in-memory state:', storageErr)
     }
@@ -329,7 +341,33 @@ export default function App() {
     }, 1200)
 
     return () => clearTimeout(timeout)
-  }, [activeTenantId, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche])
+  }, [activeTenantId, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate])
+
+  // Real-time auto-sync for active barber: polls for new web bookings without overwriting local changes
+  useEffect(() => {
+    if (!activeTenantId || isPublicPreview) return
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, { cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json()
+          if (data && data.workspace && Array.isArray(data.workspace.appointments)) {
+            const serverApts = data.workspace.appointments
+            setAppointments(prev => {
+              const prevIds = new Set((prev || []).map(a => a.id))
+              const newIncoming = serverApts.filter(a => !prevIds.has(a.id))
+              if (newIncoming.length > 0) {
+                return [...newIncoming, ...prev]
+              }
+              return prev
+            })
+          }
+        }
+      } catch (e) {}
+    }, 12000)
+
+    return () => clearInterval(pollTimer)
+  }, [activeTenantId, isPublicPreview])
 
   useEffect(() => {
     localStorage.setItem('barber_retargeting_config', JSON.stringify(retargetingConfig))
@@ -572,6 +610,10 @@ export default function App() {
           if (ws.staffByNiche) setStaffByNiche(ws.staffByNiche)
           if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
           if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
+          if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
+            setExchangeRate(Number(ws.exchangeRate))
+            localStorage.setItem('barber_rate', String(ws.exchangeRate))
+          }
           try {
             localStorage.setItem(`barber_ws_${tid}`, JSON.stringify(ws))
           } catch (e) {}
@@ -962,6 +1004,9 @@ export default function App() {
     const bookingServices = (publicTenantWs && publicTenantWs.servicesByNiche && publicTenantWs.servicesByNiche[currentNiche]) || currentServices
     const bookingStaff = (publicTenantWs && publicTenantWs.staffByNiche && publicTenantWs.staffByNiche[currentNiche]) || currentStaff
     const bookingAppointments = (publicTenantWs && publicTenantWs.appointments) || appointments
+    const bookingExchangeRate = (publicTenantWs && publicTenantWs.exchangeRate && !isNaN(Number(publicTenantWs.exchangeRate)))
+      ? Number(publicTenantWs.exchangeRate)
+      : exchangeRate
 
     const bookingNicheData = {
       ...nicheData,
@@ -976,7 +1021,10 @@ export default function App() {
           await fetch(`/api/workspace/${encodeURIComponent(publicTenantParam)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ appointments: nextAppointments })
+            body: JSON.stringify({
+              newAppointment: newApt,
+              appointments: nextAppointments
+            })
           })
           setPublicTenantWs(prev => ({
             ...(prev || {}),
@@ -999,7 +1047,7 @@ export default function App() {
         businessProfile={bookingProfile}
         nicheData={bookingNicheData}
         customServices={[]}
-        exchangeRate={exchangeRate}
+        exchangeRate={bookingExchangeRate}
         appointments={bookingAppointments}
         onBookAppointment={handlePublicBookAppointment}
         isOwnerPreview={!isDirectClientLink}

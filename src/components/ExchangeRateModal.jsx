@@ -1,8 +1,14 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Check, RefreshCw, DollarSign } from 'lucide-react'
 
 export default function ExchangeRateModal({ isOpen, onClose, currentRate, onSaveRate }) {
   const [rate, setRate] = useState(currentRate)
+
+  useEffect(() => {
+    if (isOpen) {
+      setRate(currentRate)
+    }
+  }, [isOpen, currentRate])
 
   if (!isOpen) return null
 

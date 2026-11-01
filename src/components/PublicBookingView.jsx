@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 
 export default function PublicBookingView({
@@ -13,6 +13,8 @@ export default function PublicBookingView({
   isOwnerPreview,
   onExitPreview
 }) {
+  const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 53.00
+
   const activeSlots = (businessProfile?.bookingSlots && businessProfile.bookingSlots.length > 0)
     ? businessProfile.bookingSlots
     : DEFAULT_BOOKING_SLOTS
@@ -38,15 +40,51 @@ export default function PublicBookingView({
   const [clientPhone, setClientPhone] = useState('')
   const [bookedTicket, setBookedTicket] = useState(null)
 
-  // Check if a slot is already booked in the owner's calendar
+  // Check if a slot is already booked in the owner's calendar (Multi-barber & Solo aware)
   const isSlotTaken = (timeStr) => {
-    return appointments.some(apt => {
+    if (!Array.isArray(appointments) || appointments.length === 0) return false
+    const normTargetTime = normalizeTimeSlot(timeStr)
+    const staffList = nicheData?.staff || []
+    const totalStaffCount = Math.max(1, staffList.length)
+
+    // Filter appointments for the selected date and target time that are currently active
+    // Active statuses: 'pendiente', 'en_atencion', 'confirmada' (exclude 'cancelada' and 'completada')
+    const activeAptsAtTime = appointments.filter(apt => {
+      if (!apt || !apt.date || !apt.time) return false
       const sameDate = apt.date === selectedDate
-      const sameTime = apt.time === timeStr
-      const sameStaff = selectedStaff === 'any' ? false : apt.staff_id === selectedStaff
-      return sameDate && sameTime && sameStaff && apt.status !== 'completada'
+      const sameTime = normalizeTimeSlot(apt.time) === normTargetTime
+      const isNotCancelled = apt.status !== 'cancelada' && apt.status !== 'completada'
+      return sameDate && sameTime && isNotCancelled
+    })
+
+    if (activeAptsAtTime.length === 0) return false
+
+    // Case 1: Solo business (1 barber/worker or no workers defined)
+    // Any active appointment blocks this time slot completely!
+    if (totalStaffCount <= 1) {
+      return true
+    }
+
+    // Case 2: Customer selected "El 1ro Libre" ('any')
+    // Slot is taken ONLY if all barbers/workers are busy at this exact time
+    if (selectedStaff === 'any') {
+      return activeAptsAtTime.length >= totalStaffCount
+    }
+
+    // Case 3: Customer selected a specific staff member
+    // Slot is taken if this staff member is already booked, or if booked with no staff_id specified
+    return activeAptsAtTime.some(apt => {
+      return apt.staff_id === selectedStaff || !apt.staff_id
     })
   }
+
+  // Auto-switch selectedTime if user changes date or staff and current slot is occupied
+  useEffect(() => {
+    if (isSlotTaken(selectedTime)) {
+      const firstFree = activeSlots.find(s => !isSlotTaken(s))
+      if (firstFree) setSelectedTime(firstFree)
+    }
+  }, [selectedDate, selectedStaff, appointments])
 
   const handleSelectServiceFromCatalog = (serviceName) => {
     setSelectedService(serviceName)
@@ -62,13 +100,33 @@ export default function PublicBookingView({
     e.preventDefault()
     if (!clientName.trim()) return
 
+    const normTime = normalizeTimeSlot(selectedTime)
+    if (isSlotTaken(selectedTime)) {
+      alert('⚠️ Este turno acaba de ser reservado por otro cliente. Por favor selecciona otra hora disponible.')
+      return
+    }
+
+    // If 'any' is selected, assign to the first staff member who is ACTUALLY free at that slot
+    let assignedStaffId = selectedStaff
+    const staffList = nicheData?.staff || []
+    if (selectedStaff === 'any') {
+      const busyStaffIds = (appointments || [])
+        .filter(apt => apt && apt.date === selectedDate && normalizeTimeSlot(apt.time) === normTime && apt.status !== 'cancelada' && apt.status !== 'completada')
+        .map(apt => apt.staff_id)
+      
+      const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
+      assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
+    }
+
+    const assignedStaffObj = nicheData.staff.find(s => s.id === assignedStaffId)
+
     const newApt = {
       id: 'web_' + Date.now(),
       client_name: clientName.trim(),
       client_phone: clientPhone.trim(),
       date: selectedDate,
-      time: selectedTime,
-      staff_id: selectedStaff === 'any' ? (nicheData.staff[0]?.id || 'e1') : selectedStaff,
+      time: normTime,
+      staff_id: assignedStaffId,
       service: selectedService,
       status: 'pendiente',
       source: 'web'
@@ -77,9 +135,9 @@ export default function PublicBookingView({
     onBookAppointment(newApt)
     setBookedTicket({
       ...newApt,
-      staffName: currentStaffObj ? currentStaffObj.name : 'Cualquiera Disponible',
+      staffName: assignedStaffObj ? assignedStaffObj.name : 'Equipo Disponible',
       priceUsd: currentServiceObj?.price_usd || 0,
-      priceBs: ((currentServiceObj?.price_usd || 0) * exchangeRate).toFixed(2)
+      priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toFixed(2)
     })
   }
 
@@ -101,7 +159,7 @@ export default function PublicBookingView({
 
   const handleOrderProductWhatsApp = (prod) => {
     const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
-    const bs = (prod.price_usd * exchangeRate).toFixed(2)
+    const bs = (prod.price_usd * safeRate).toFixed(2)
     const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* ($${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
@@ -188,7 +246,7 @@ export default function PublicBookingView({
           {/* Accepted Payment Methods & BCV Rate */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
             <span className="text-[10px] px-2.5 py-1 rounded-lg bg-dark-800 text-slate-300 border border-dark-700 font-semibold">
-              💵 Tasa BCV Hoy: <strong className="text-gold-400">Bs. {exchangeRate.toFixed(2)}</strong>
+              💵 Tasa BCV Hoy: <strong className="text-gold-400">Bs. {safeRate.toFixed(2)}</strong>
             </span>
             {(businessProfile.paymentMethods || []).map(pm => (
               <span
@@ -243,7 +301,7 @@ export default function PublicBookingView({
             <div className="grid grid-cols-1 gap-2.5">
               {allServices.map(svc => {
                 const isSelected = selectedService === svc.name
-                const priceBs = (svc.price_usd * exchangeRate).toFixed(2)
+                const priceBs = (svc.price_usd * safeRate).toFixed(2)
                 return (
                   <div
                     key={svc.id}
@@ -313,7 +371,7 @@ export default function PublicBookingView({
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {catalogProducts.map(prod => {
-                  const priceBs = (prod.price_usd * exchangeRate).toFixed(2)
+                  const priceBs = (prod.price_usd * safeRate).toFixed(2)
                   return (
                     <div
                       key={prod.id}
@@ -457,7 +515,7 @@ export default function PublicBookingView({
                 >
                   {allServices.map(s => (
                     <option key={s.id} value={s.name}>
-                      {s.name} — ${s.price_usd} (Bs. {(s.price_usd * exchangeRate).toFixed(2)})
+                      {s.name} — ${s.price_usd} (Bs. {(s.price_usd * safeRate).toFixed(2)})
                     </option>
                   ))}
                 </select>

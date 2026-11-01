@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2, Settings } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot } from '../lib/dateUtils'
 
 export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {}, onOpenSettings }) {
   // Today's ISO date string strictly in local timezone
@@ -32,11 +32,13 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
     e.preventDefault()
     if (!newClient.trim()) return
 
+    const canonicalTime = normalizeTimeSlot(newTime) || newTime.trim()
+
     const newItem = {
       id: 'app_' + Date.now(),
       client_name: newClient.trim(),
       date: newDate,
-      time: newTime,
+      time: canonicalTime,
       staff_id: newStaff,
       service: newService,
       status: 'pendiente'

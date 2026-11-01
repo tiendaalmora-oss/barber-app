@@ -263,9 +263,23 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST') {
       const body = await parseBody(req)
+      const currentWs = db.workspaces[tenantId] || {}
+
+      let finalAppointments = Array.isArray(body.appointments) ? body.appointments : (currentWs.appointments || [])
+
+      // If a single new appointment is provided (e.g. from public client booking)
+      if (body.newAppointment && body.newAppointment.id) {
+        const existingApts = currentWs.appointments || []
+        const exists = existingApts.some(a => a.id === body.newAppointment.id)
+        if (!exists) {
+          finalAppointments = [body.newAppointment, ...existingApts]
+        }
+      }
+
       db.workspaces[tenantId] = {
-        ...(db.workspaces[tenantId] || {}),
+        ...currentWs,
         ...(body || {}),
+        appointments: finalAppointments,
         updatedAt: Date.now()
       }
       saveDb()
