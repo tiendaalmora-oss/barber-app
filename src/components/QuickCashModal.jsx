@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, Check, DollarSign, User, Scissors, CreditCard, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react'
+import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react'
 
 export default function QuickCashModal({
   isOpen,
@@ -10,48 +10,110 @@ export default function QuickCashModal({
   clients = []
 }) {
   const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || '')
-  const [selectedItem, setSelectedItem] = useState(nicheData.services[0]?.id || '')
-  const [customPrice, setCustomPrice] = useState('')
+  const [activeItemTab, setActiveItemTab] = useState('servicios') // 'servicios' | 'productos'
   const [paymentMethod, setPaymentMethod] = useState('pago_movil')
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
+
+  // Multi-item cart: holds services and products on the same bill
+  const [cart, setCart] = useState(() => {
+    const firstSvc = nicheData.services[0]
+    return firstSvc ? [{
+      id: firstSvc.id,
+      name: firstSvc.name,
+      price_usd: firstSvc.price_usd,
+      isProduct: false,
+      qty: 1
+    }] : []
+  })
 
   if (!isOpen) return null
 
   // Resolve staff
   const staffObj = nicheData.staff.find(s => s.id === selectedStaff) || nicheData.staff[0]
-  
-  // Resolve item (service or product)
-  const allItems = [...nicheData.services, ...nicheData.products]
-  const itemObj = allItems.find(i => i.id === selectedItem) || nicheData.services[0]
-  
-  // Price resolution
-  const finalPriceUSD = customPrice !== '' ? parseFloat(customPrice) || 0 : (itemObj?.price_usd || 0)
-  const finalPriceBs = (finalPriceUSD * exchangeRate).toFixed(2)
-
-  // Commission math
   const commissionPct = staffObj?.commission_pct || 50
-  const staffCommissionUSD = itemObj?.cost_usd 
-    ? 0 // products usually don't give percentage
-    : (finalPriceUSD * (commissionPct / 100))
-  const businessProfitUSD = finalPriceUSD - staffCommissionUSD
+
+  const servicesList = nicheData.services || []
+  const productsList = nicheData.products || []
+
+  // Add or increment item
+  const handleAddItem = (item, isProduct) => {
+    setCart(prev => {
+      const idx = prev.findIndex(ci => ci.id === item.id)
+      if (idx >= 0) {
+        return prev.map((ci, i) => i === idx ? { ...ci, qty: ci.qty + 1 } : ci)
+      } else {
+        return [...prev, {
+          id: item.id,
+          name: item.name,
+          price_usd: item.price_usd,
+          isProduct: isProduct,
+          cost_usd: item.cost_usd,
+          stock: item.stock,
+          qty: 1
+        }]
+      }
+    })
+  }
+
+  // Adjust quantity
+  const handleUpdateQty = (itemId, delta) => {
+    setCart(prev => {
+      return prev.map(ci => {
+        if (ci.id === itemId) {
+          const nextQty = ci.qty + delta
+          return nextQty > 0 ? { ...ci, qty: nextQty } : null
+        }
+        return ci
+      }).filter(Boolean)
+    })
+  }
+
+  // Remove single item
+  const handleRemoveItem = (itemId) => {
+    setCart(prev => prev.filter(ci => ci.id !== itemId))
+  }
+
+  // Clear all items
+  const handleClearCart = () => {
+    setCart([])
+  }
+
+  // Totals & Commission math
+  const totalUSD = cart.reduce((sum, ci) => sum + (ci.price_usd * ci.qty), 0)
+  const totalBs = (totalUSD * exchangeRate).toFixed(2)
+
+  // Commission is earned strictly on services
+  const servicesTotalUSD = cart.filter(ci => !ci.isProduct).reduce((sum, ci) => sum + (ci.price_usd * ci.qty), 0)
+  const staffCommissionUSD = servicesTotalUSD * (commissionPct / 100)
+  const businessProfitUSD = totalUSD - staffCommissionUSD
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (finalPriceUSD <= 0) return
+    if (totalUSD <= 0 || cart.length === 0) {
+      alert('Por favor agrega al menos un servicio o producto para registrar el cobro.')
+      return
+    }
+
+    const combinedItemName = cart.map(ci => ci.qty > 1 ? `${ci.qty}x ${ci.name}` : ci.name).join(' + ')
+    const productItems = cart.filter(ci => ci.isProduct).map(ci => ({ id: ci.id, qty: ci.qty }))
 
     const transaction = {
       id: 'tx_' + Date.now(),
       type: 'ingreso',
-      item_name: itemObj?.name || 'Servicio Personalizado',
-      product_id: itemObj?.stock !== undefined ? itemObj.id : null,
-      category: itemObj?.category || 'Cortes',
+      item_name: combinedItemName,
+      product_id: productItems[0]?.id || null, // backward compatibility
+      product_items: productItems,
+      items: cart,
+      category: cart.some(ci => ci.isProduct) && cart.some(ci => !ci.isProduct) 
+        ? 'Corte + Producto' 
+        : cart.some(ci => ci.isProduct) ? 'Venta Productos' : 'Cortes',
       staff_name: staffObj?.name || 'Venta del Local',
       staff_id: staffObj?.id,
       client_name: clientName.trim() || 'Cliente Mostrador',
       client_phone: clientPhone.trim() || '',
-      monto_usd: finalPriceUSD,
-      monto_bs: parseFloat(finalPriceBs),
+      monto_usd: totalUSD,
+      monto_bs: parseFloat(totalBs),
       tasa_bcv: exchangeRate,
       metodo_pago: paymentMethod,
       comision_usd: staffCommissionUSD,
@@ -66,17 +128,17 @@ export default function QuickCashModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn overflow-y-auto">
-      <div className="bg-dark-900 border border-dark-700 w-full max-w-lg rounded-2xl shadow-2xl p-5 my-auto">
+      <div className="bg-dark-900 border border-dark-700 w-full max-w-lg rounded-2xl shadow-2xl p-5 my-auto max-h-[92vh] flex flex-col">
         
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-dark-800">
+        <div className="flex items-center justify-between pb-3 border-b border-dark-800 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2.5 rounded-xl bg-gold-500/10 text-gold-400 border border-gold-500/20">
               <Scissors className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-bold text-white text-base">Anotar Cobro en Caja</h3>
-              <p className="text-xs text-slate-400">Registra el corte y divide la comisión de una vez</p>
+              <p className="text-xs text-slate-400">Agrega cortes y productos a la misma factura</p>
             </div>
           </div>
           <button 
@@ -87,7 +149,7 @@ export default function QuickCashModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4 overflow-y-auto pr-1 flex-1">
           
           {/* 1. Seleccionar Barbero / Personal */}
           <div>
@@ -118,45 +180,178 @@ export default function QuickCashModal({
             </div>
           </div>
 
-          {/* 2. Seleccionar Servicio o Producto */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
-              2. ¿Qué servicio se hizo o qué producto compró?
-            </label>
-            <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
-              {allItems.map((item) => {
-                const isProduct = item.stock !== undefined
-                return (
-                  <button
-                    type="button"
-                    key={item.id}
-                    onClick={() => { setSelectedItem(item.id); setCustomPrice(''); }}
-                    className={`p-2.5 rounded-xl border text-left transition-all ${
-                      selectedItem === item.id && customPrice === ''
-                        ? 'bg-emerald-500/15 border-emerald-500/60 text-white'
-                        : 'bg-dark-800 border-dark-700/60 text-slate-300 hover:border-dark-600'
-                    }`}
-                  >
-                    <div className="text-xs font-medium truncate flex items-center gap-1">
-                      <span>{isProduct ? '🧴' : '✂️'}</span>
-                      <span className="truncate">{item.name}</span>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-1 mt-1">
-                      <div>
-                        <span className="text-sm font-bold text-emerald-400">${item.price_usd}</span>
-                        <span className="text-[10px] text-slate-400 font-mono ml-1">
-                          (Bs. {(item.price_usd * exchangeRate).toFixed(1)})
+          {/* 2. Seleccionar Servicios y Productos Múltiples */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                2. Elige los Servicios y Productos:
+              </label>
+              <div className="flex items-center gap-1 bg-dark-800 p-0.5 rounded-lg border border-dark-750">
+                <button
+                  type="button"
+                  onClick={() => setActiveItemTab('servicios')}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all flex items-center gap-1 ${
+                    activeItemTab === 'servicios'
+                      ? 'bg-gold-500 text-black shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Scissors className="w-3 h-3" />
+                  <span>Servicios ({servicesList.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveItemTab('productos')}
+                  className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all flex items-center gap-1 ${
+                    activeItemTab === 'productos'
+                      ? 'bg-gold-500 text-black shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <ShoppingBag className="w-3 h-3" />
+                  <span>Productos ({productsList.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Grid de Ítems según la pestaña activa */}
+            <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1 bg-dark-950 rounded-xl border border-dark-800">
+              {activeItemTab === 'servicios' ? (
+                servicesList.map(item => {
+                  const inCart = cart.find(ci => ci.id === item.id)
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => handleAddItem(item, false)}
+                      className={`cursor-pointer p-2 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                        inCart
+                          ? 'bg-gold-500/15 border-gold-500 text-white shadow-sm'
+                          : 'bg-dark-850 border-dark-750 text-slate-300 hover:border-dark-600'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="text-xs font-bold leading-tight line-clamp-1">{item.name}</span>
+                        {inCart && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gold-500 text-black font-black shrink-0">
+                            {inCart.qty}x
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-dark-800/60">
+                        <span className="text-xs font-black text-emerald-400">${item.price_usd}</span>
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          Bs. {(item.price_usd * exchangeRate).toFixed(0)}
                         </span>
                       </div>
-                      {isProduct && (
-                        <span className="text-[9px] text-blue-400 font-mono">
-                          Stock: {item.stock}
-                        </span>
-                      )}
                     </div>
-                  </button>
+                  )
+                })
+              ) : (
+                productsList.length === 0 ? (
+                  <div className="col-span-2 py-4 text-center text-xs text-slate-500">
+                    No tienes productos registrados en tu Inventario.
+                  </div>
+                ) : (
+                  productsList.map(item => {
+                    const inCart = cart.find(ci => ci.id === item.id)
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => handleAddItem(item, true)}
+                        className={`cursor-pointer p-2 rounded-xl border text-left transition-all relative flex flex-col justify-between ${
+                          inCart
+                            ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-sm'
+                            : 'bg-dark-850 border-dark-750 text-slate-300 hover:border-dark-600'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-1">
+                          <span className="text-xs font-bold leading-tight line-clamp-1">{item.name}</span>
+                          {inCart && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500 text-black font-black shrink-0">
+                              {inCart.qty}x
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-dark-800/60">
+                          <div>
+                            <span className="text-xs font-black text-emerald-400">${item.price_usd}</span>
+                            <span className="text-[9px] text-blue-400 ml-1 font-mono">
+                              (Disp: {item.stock})
+                            </span>
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-mono">
+                            Bs. {(item.price_usd * exchangeRate).toFixed(0)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })
                 )
-              })}
+              )}
+            </div>
+
+            {/* Ticket de la Cuenta (Carrito Interactivo) */}
+            <div className="p-2.5 rounded-xl bg-dark-850 border border-dark-750 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-dark-800">
+                <span>Factura / Cuenta ({cart.reduce((s, ci) => s + ci.qty, 0)} ítems):</span>
+                {cart.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearCart}
+                    className="text-[10px] text-red-400 hover:underline flex items-center gap-0.5"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Vaciar</span>
+                  </button>
+                )}
+              </div>
+
+              {cart.length === 0 ? (
+                <div className="py-2 text-center text-xs text-slate-500 italic">
+                  Toca arriba para agregar cortes y productos a la factura
+                </div>
+              ) : (
+                <div className="space-y-1 max-h-24 overflow-y-auto pr-0.5">
+                  {cart.map(ci => (
+                    <div key={ci.id} className="flex items-center justify-between text-xs py-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0 pr-1">
+                        <span className="text-xs">{ci.isProduct ? '🧴' : '✂️'}</span>
+                        <span className="font-semibold text-white truncate text-[11px]">{ci.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1 bg-dark-900 border border-dark-750 rounded-lg px-1 py-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQty(ci.id, -1)}
+                            className="w-4 h-4 rounded text-slate-400 hover:text-white flex items-center justify-center font-bold text-xs"
+                          >
+                            -
+                          </button>
+                          <span className="text-xs font-mono font-bold text-gold-400 px-1">{ci.qty}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateQty(ci.id, 1)}
+                            className="w-4 h-4 rounded text-slate-400 hover:text-white flex items-center justify-center font-bold text-xs"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <span className="font-mono font-bold text-emerald-400 text-xs w-14 text-right">
+                          ${(ci.price_usd * ci.qty).toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(ci.id)}
+                          className="text-slate-500 hover:text-red-400 p-0.5"
+                          title="Eliminar de la cuenta"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -226,11 +421,11 @@ export default function QuickCashModal({
           {/* Caja con la división de la plata */}
           <div className="p-3.5 rounded-xl bg-dark-850 border border-dark-700/80 space-y-2">
             <div className="flex items-center justify-between pb-2 border-b border-dark-750">
-              <span className="text-xs text-slate-400">Total a Cobrar:</span>
+              <span className="text-xs text-slate-400">Total Factura:</span>
               <div className="text-right">
-                <span className="text-lg font-black text-white">${finalPriceUSD.toFixed(2)}</span>
-                <span className="text-xs text-gold-400 font-mono ml-2">
-                  (Bs. {finalPriceBs})
+                <span className="text-xl font-black text-white">${totalUSD.toFixed(2)}</span>
+                <span className="text-xs text-gold-400 font-mono ml-2 font-bold">
+                  (Bs. {totalBs})
                 </span>
               </div>
             </div>
@@ -239,7 +434,7 @@ export default function QuickCashModal({
             <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
               <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
                 <span className="text-[10px] text-slate-400 block truncate">
-                  Para {staffObj?.name.split(' ')[0]} ({commissionPct}%):
+                  Para {staffObj?.name.split(' ')[0]} ({commissionPct}% cortes):
                 </span>
                 <span className="text-sm font-bold text-amber-400">
                   ${staffCommissionUSD.toFixed(2)} USD
@@ -247,7 +442,7 @@ export default function QuickCashModal({
               </div>
               <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
                 <span className="text-[10px] text-slate-400 block truncate">
-                  Para el Local (Ganancia Limpia):
+                  Para el Local (Limpio + Productos):
                 </span>
                 <span className="text-sm font-bold text-emerald-400">
                   ${businessProfitUSD.toFixed(2)} USD
@@ -259,10 +454,15 @@ export default function QuickCashModal({
           {/* Submit CTA */}
           <button
             type="submit"
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs uppercase tracking-wide flex items-center justify-center gap-2 shadow-xl shadow-gold-500/25 active:scale-[0.99] transition-all"
+            disabled={totalUSD <= 0}
+            className={`w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-wide flex items-center justify-center gap-2 shadow-xl transition-all ${
+              totalUSD > 0
+                ? 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/25 active:scale-[0.99]'
+                : 'bg-dark-800 text-slate-500 cursor-not-allowed border border-dark-750'
+            }`}
           >
             <Check className="w-5 h-5 stroke-[3]" />
-            GUARDAR COBRO Y DIVIDIR PLATA
+            <span>GUARDAR COBRO (${totalUSD.toFixed(2)}) Y DIVIDIR PLATA</span>
           </button>
 
         </form>

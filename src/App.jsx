@@ -876,8 +876,20 @@ export default function App() {
   const handleRegisterTransaction = async (newTx) => {
     setTransactions(prev => [newTx, ...prev])
 
-    // If a product from inventory was sold, subtract 1 from stock
-    if (newTx.product_id) {
+    // If products from inventory were sold, subtract exact quantities from stock
+    if (Array.isArray(newTx.product_items) && newTx.product_items.length > 0) {
+      setProductsByNiche(prev => ({
+        ...prev,
+        [currentNiche]: (prev[currentNiche] || []).map(p => {
+          const matchedItem = newTx.product_items.find(pi => pi.id === p.id)
+          if (matchedItem) {
+            const qtySold = Number(matchedItem.qty) || 1
+            return { ...p, stock: Math.max(0, (p.stock || 0) - qtySold) }
+          }
+          return p
+        })
+      }))
+    } else if (newTx.product_id) {
       setProductsByNiche(prev => ({
         ...prev,
         [currentNiche]: (prev[currentNiche] || []).map(p =>
