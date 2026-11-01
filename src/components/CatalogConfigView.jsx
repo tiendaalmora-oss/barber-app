@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram, Pencil, X } from 'lucide-react'
-import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN } from '../lib/mockData'
+import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN } from '../lib/mockData'
 import { inferServiceDuration } from '../lib/dateUtils'
 
 export default function CatalogConfigView({
@@ -107,6 +107,10 @@ export default function CatalogConfigView({
 
   const setDefaultSlots = () => {
     setForm({ ...form, bookingSlots: DEFAULT_BOOKING_SLOTS })
+  }
+
+  const set15MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_15_MIN })
   }
 
   const set30MinSlots = () => {
@@ -316,6 +320,14 @@ export default function CatalogConfigView({
                 <div className="flex flex-wrap items-center gap-1 shrink-0">
                   <button
                     type="button"
+                    onClick={set15MinSlots}
+                    className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-cyan-400 border border-cyan-500/40 font-bold"
+                    title="Turnos dinámicos cada 15 minutos (ideal si atiendes cortes de 45m, 30m o express de 15m sin huecos)"
+                  >
+                    ⚡ Cada 15m
+                  </button>
+                  <button
+                    type="button"
                     onClick={set30MinSlots}
                     className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
                     title="Turnos cada 30 minutos (ej. 9:00, 9:30, 10:00...)"
@@ -476,7 +488,7 @@ export default function CatalogConfigView({
               {/* Selector de Duración del Servicio */}
               <div className="flex items-center gap-1.5 pt-0.5">
                 <span className="text-[10px] text-slate-400 font-semibold shrink-0">⏱️ Tiempo estimado:</span>
-                {[30, 45, 60].map(dur => (
+                {[15, 30, 45, 60].map(dur => (
                   <button
                     key={dur}
                     type="button"
@@ -487,7 +499,7 @@ export default function CatalogConfigView({
                         : 'bg-dark-900 text-slate-400 border-dark-700 hover:text-white'
                     }`}
                   >
-                    {dur === 60 ? '1 hora (60m)' : `${dur} min`}
+                    {dur === 60 ? '1 hora' : `${dur} min`}
                   </button>
                 ))}
               </div>

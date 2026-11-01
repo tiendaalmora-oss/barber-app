@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { X, Store, Upload, Image, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck } from 'lucide-react'
-import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN } from '../lib/mockData'
+import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN } from '../lib/mockData'
 
 const LOGO_PRESETS = [
   { id: 'p1', label: '💈 Navaja Dorada', url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200&h=200&fit=crop&crop=faces&q=80' },
@@ -97,6 +97,10 @@ export default function BusinessSettingsModal({
 
   const setDefaultSlots = () => {
     setForm({ ...form, bookingSlots: DEFAULT_BOOKING_SLOTS })
+  }
+
+  const set15MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_15_MIN })
   }
 
   const set30MinSlots = () => {
@@ -290,6 +294,14 @@ export default function BusinessSettingsModal({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={set15MinSlots}
+                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-cyan-400 border border-cyan-500/40 font-bold"
+                      title="Turnos dinámicos cada 15 minutos (ideal si atiendes cortes de 45m, 30m o express de 15m sin huecos)"
+                    >
+                      ⚡ Cada 15m
+                    </button>
                     <button
                       type="button"
                       onClick={set30MinSlots}

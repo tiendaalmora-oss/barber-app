@@ -127,5 +127,8 @@ export function inferServiceDuration(service) {
   if (name.includes('degradé') || name.includes('degrade') || name.includes('fade') || name.includes('pigmentaci') || name.includes('tinte')) {
     return 45
   }
+  if (name.includes('ceja') || name.includes('cejas') || name.includes('masaje') || name.includes('perfilado') || name.includes('express') || name.includes('rapido') || name.includes('rápido')) {
+    return 15
+  }
   return 30
 }

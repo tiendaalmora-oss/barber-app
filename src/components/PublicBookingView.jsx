@@ -39,6 +39,7 @@ export default function PublicBookingView({
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [bookedTicket, setBookedTicket] = useState(null)
+  const [timePeriodFilter, setTimePeriodFilter] = useState('all') // 'all' | 'morning' | 'afternoon' | 'evening'
 
   const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
   const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff)
@@ -93,6 +94,23 @@ export default function PublicBookingView({
       if (firstFree) setSelectedTime(firstFree)
     }
   }, [selectedDate, selectedStaff, appointments, selectedService])
+
+  const morningSlots = activeSlots.filter(s => timeToMinutes(s) < 720)
+  const afternoonSlots = activeSlots.filter(s => timeToMinutes(s) >= 720 && timeToMinutes(s) < 1020)
+  const eveningSlots = activeSlots.filter(s => timeToMinutes(s) >= 1020)
+
+  const morningFree = morningSlots.filter(s => !isSlotTaken(s)).length
+  const afternoonFree = afternoonSlots.filter(s => !isSlotTaken(s)).length
+  const eveningFree = eveningSlots.filter(s => !isSlotTaken(s)).length
+
+  const displayedSlots = activeSlots.filter(slot => {
+    if (timePeriodFilter === 'all') return true
+    const mins = timeToMinutes(slot)
+    if (timePeriodFilter === 'morning') return mins < 720
+    if (timePeriodFilter === 'afternoon') return mins >= 720 && mins < 1020
+    if (timePeriodFilter === 'evening') return mins >= 1020
+    return true
+  })
 
   const handleSelectServiceFromCatalog = (serviceName) => {
     setSelectedService(serviceName)
@@ -627,30 +645,64 @@ export default function PublicBookingView({
                   />
                 </div>
 
-                {/* Horas disponibles (sincronizadas con las citas ocupadas) */}
-                <div className="grid grid-cols-4 gap-2 pt-1">
-                  {activeSlots.map(slot => {
-                    const taken = isSlotTaken(slot)
-                    const active = selectedTime === slot && !taken
-                    return (
-                      <button
-                        type="button"
-                        key={slot}
-                        disabled={taken}
-                        onClick={() => setSelectedTime(slot)}
-                        className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold border transition-all ${
-                          taken
-                            ? 'bg-dark-950 text-slate-600 border-dark-850 line-through cursor-not-allowed'
-                            : active
-                            ? 'bg-gold-500 text-black border-gold-400 shadow-md'
-                            : 'bg-dark-850 text-slate-300 border-dark-750 hover:border-gold-500/40'
-                        }`}
-                      >
-                        {taken ? 'Ocupado' : slot}
-                      </button>
-                    )
-                  })}
+                {/* Selector de Horarios Móvil-Friendly (Mañana / Tarde / Noche) */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar">
+                  {[
+                    { id: 'all', label: 'Todos', count: activeSlots.filter(s => !isSlotTaken(s)).length },
+                    { id: 'morning', label: '☀️ Mañana', count: morningFree },
+                    { id: 'afternoon', label: '⛅ Tarde', count: afternoonFree },
+                    { id: 'evening', label: '🌙 Noche', count: eveningFree }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setTimePeriodFilter(tab.id)}
+                      className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold shrink-0 border transition-all flex items-center gap-1.5 ${
+                        timePeriodFilter === tab.id
+                          ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                          : 'bg-dark-850 text-slate-400 border-dark-750 hover:text-white hover:border-dark-700'
+                      }`}
+                    >
+                      <span>{tab.label}</span>
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        timePeriodFilter === tab.id ? 'bg-black/30 text-white' : 'bg-dark-900 text-slate-500'
+                      }`}>
+                        {tab.count}
+                      </span>
+                    </button>
+                  ))}
                 </div>
+
+                {/* Grid de Horas Disponibles (Adaptable a 15, 30, 45, 60m) */}
+                {displayedSlots.length === 0 ? (
+                  <div className="text-center py-4 text-xs text-slate-500 bg-dark-900/50 rounded-xl border border-dark-800">
+                    No hay turnos registrados en este horario
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
+                    {displayedSlots.map(slot => {
+                      const taken = isSlotTaken(slot)
+                      const active = selectedTime === slot && !taken
+                      return (
+                        <button
+                          type="button"
+                          key={slot}
+                          disabled={taken}
+                          onClick={() => setSelectedTime(slot)}
+                          className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold border transition-all text-center ${
+                            taken
+                              ? 'bg-dark-950/80 text-slate-600 border-dark-850/60 line-through cursor-not-allowed opacity-50'
+                              : active
+                              ? 'bg-gold-500 text-black border-gold-400 shadow-md font-black scale-[1.02]'
+                              : 'bg-dark-850 text-slate-300 border-dark-750 hover:border-gold-500/40 hover:text-white'
+                          }`}
+                        >
+                          {taken ? 'Ocupado' : slot}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Paso 4: Datos del Cliente */}
