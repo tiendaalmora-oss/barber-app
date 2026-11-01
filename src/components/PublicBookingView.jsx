@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot } from '../lib/dateUtils'
+import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package, Timer } from 'lucide-react'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, inferServiceDuration } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 
 export default function PublicBookingView({
@@ -40,40 +40,48 @@ export default function PublicBookingView({
   const [clientPhone, setClientPhone] = useState('')
   const [bookedTicket, setBookedTicket] = useState(null)
 
-  // Check if a slot is already booked in the owner's calendar (Multi-barber & Solo aware)
+  const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
+  const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff)
+  const selectedDuration = currentServiceObj?.duration_min || inferServiceDuration(currentServiceObj)
+
+  // Check if a slot is already booked in the owner's calendar (duration-aware & staff-aware)
   const isSlotTaken = (timeStr) => {
     if (!Array.isArray(appointments) || appointments.length === 0) return false
-    const normTargetTime = normalizeTimeSlot(timeStr)
+    const reqStart = timeToMinutes(timeStr)
+    const reqEnd = reqStart + (selectedDuration || 30)
     const staffList = nicheData?.staff || []
     const totalStaffCount = Math.max(1, staffList.length)
 
-    // Filter appointments for the selected date and target time that are currently active
-    // Active statuses: 'pendiente', 'en_atencion', 'confirmada' (exclude 'cancelada' and 'completada')
-    const activeAptsAtTime = appointments.filter(apt => {
+    // Find all active appointments that overlap with [reqStart, reqEnd)
+    const overlappingApts = appointments.filter(apt => {
       if (!apt || !apt.date || !apt.time) return false
-      const sameDate = apt.date === selectedDate
-      const sameTime = normalizeTimeSlot(apt.time) === normTargetTime
-      const isNotCancelled = apt.status !== 'cancelada' && apt.status !== 'completada'
-      return sameDate && sameTime && isNotCancelled
+      if (apt.date !== selectedDate) return false
+      if (apt.status === 'cancelada' || apt.status === 'completada') return false
+
+      const aptStart = timeToMinutes(apt.time)
+      const aptDur = apt.duration_min || inferServiceDuration(apt.service)
+      const aptEnd = aptStart + aptDur
+
+      // Check if intervals [reqStart, reqEnd) and [aptStart, aptEnd) overlap
+      return Math.max(reqStart, aptStart) < Math.min(reqEnd, aptEnd)
     })
 
-    if (activeAptsAtTime.length === 0) return false
+    if (overlappingApts.length === 0) return false
 
     // Case 1: Solo business (1 barber/worker or no workers defined)
-    // Any active appointment blocks this time slot completely!
+    // Any overlapping active appointment blocks this time slot completely!
     if (totalStaffCount <= 1) {
       return true
     }
 
     // Case 2: Customer selected "El 1ro Libre" ('any')
-    // Slot is taken ONLY if all barbers/workers are busy at this exact time
+    // Slot is taken ONLY if all barbers/workers are busy during this time window
     if (selectedStaff === 'any') {
-      return activeAptsAtTime.length >= totalStaffCount
+      return overlappingApts.length >= totalStaffCount
     }
 
     // Case 3: Customer selected a specific staff member
-    // Slot is taken if this staff member is already booked, or if booked with no staff_id specified
-    return activeAptsAtTime.some(apt => {
+    return overlappingApts.some(apt => {
       return apt.staff_id === selectedStaff || !apt.staff_id
     })
   }
@@ -84,7 +92,7 @@ export default function PublicBookingView({
       const firstFree = activeSlots.find(s => !isSlotTaken(s))
       if (firstFree) setSelectedTime(firstFree)
     }
-  }, [selectedDate, selectedStaff, appointments])
+  }, [selectedDate, selectedStaff, appointments, selectedService])
 
   const handleSelectServiceFromCatalog = (serviceName) => {
     setSelectedService(serviceName)
@@ -92,9 +100,6 @@ export default function PublicBookingView({
       bookingRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }
-
-  const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
-  const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff)
 
   const handleConfirmBooking = (e) => {
     e.preventDefault()
@@ -106,12 +111,22 @@ export default function PublicBookingView({
       return
     }
 
-    // If 'any' is selected, assign to the first staff member who is ACTUALLY free at that slot
+    // If 'any' is selected, assign to the first staff member who is ACTUALLY free during that slot window
     let assignedStaffId = selectedStaff
     const staffList = nicheData?.staff || []
     if (selectedStaff === 'any') {
+      const reqStart = timeToMinutes(normTime)
+      const reqEnd = reqStart + (selectedDuration || 30)
+
       const busyStaffIds = (appointments || [])
-        .filter(apt => apt && apt.date === selectedDate && normalizeTimeSlot(apt.time) === normTime && apt.status !== 'cancelada' && apt.status !== 'completada')
+        .filter(apt => {
+          if (!apt || apt.date !== selectedDate) return false
+          if (apt.status === 'cancelada' || apt.status === 'completada') return false
+          const aStart = timeToMinutes(apt.time)
+          const aDur = apt.duration_min || inferServiceDuration(apt.service)
+          const aEnd = aStart + aDur
+          return Math.max(reqStart, aStart) < Math.min(reqEnd, aEnd)
+        })
         .map(apt => apt.staff_id)
       
       const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
@@ -128,6 +143,7 @@ export default function PublicBookingView({
       time: normTime,
       staff_id: assignedStaffId,
       service: selectedService,
+      duration_min: selectedDuration,
       status: 'pendiente',
       source: 'web'
     }
@@ -137,7 +153,8 @@ export default function PublicBookingView({
       ...newApt,
       staffName: assignedStaffObj ? assignedStaffObj.name : 'Equipo Disponible',
       priceUsd: currentServiceObj?.price_usd || 0,
-      priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toFixed(2)
+      priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toFixed(2),
+      durationMin: selectedDuration
     })
   }
 
@@ -147,6 +164,7 @@ export default function PublicBookingView({
     const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de apartar mi turno por su página web:\n\n` +
       `👤 *Cliente:* ${bookedTicket.client_name}\n` +
       `✂️ *Servicio:* ${bookedTicket.service} ($${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n` +
+      `⏱️ *Tiempo estimado:* ${bookedTicket.durationMin || 30} min\n` +
       `💈 *Atiende:* ${bookedTicket.staffName}\n` +
       `📅 *Fecha:* ${bookedTicket.date}\n` +
       `⏰ *Hora:* ${bookedTicket.time}\n\n` +
@@ -313,8 +331,11 @@ export default function PublicBookingView({
                     }`}
                   >
                     <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-white text-sm">{svc.name}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold">
+                          ⏱️ {svc.duration_min || inferServiceDuration(svc)} min
+                        </span>
                         {svc.category && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-dark-800 text-slate-400 border border-dark-700">
                             {svc.category}
@@ -453,6 +474,10 @@ export default function PublicBookingView({
                   <span className="font-bold text-white">{bookedTicket.service}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-slate-400">Duración estimada:</span>
+                  <span className="font-bold text-purple-300 font-mono">⏱️ ~{bookedTicket.durationMin || 30} minutos</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-slate-400">Profesional:</span>
                   <span className="font-bold text-gold-400">{bookedTicket.staffName}</span>
                 </div>
@@ -513,11 +538,14 @@ export default function PublicBookingView({
                   onChange={(e) => setSelectedService(e.target.value)}
                   className="w-full px-3.5 py-3 rounded-xl bg-dark-850 border border-dark-700 text-xs font-bold text-white focus:outline-none focus:border-gold-500"
                 >
-                  {allServices.map(s => (
-                    <option key={s.id} value={s.name}>
-                      {s.name} — ${s.price_usd} (Bs. {(s.price_usd * safeRate).toFixed(2)})
-                    </option>
-                  ))}
+                  {allServices.map(s => {
+                    const dur = s.duration_min || inferServiceDuration(s)
+                    return (
+                      <option key={s.id} value={s.name}>
+                        {s.name} (⏱️ {dur}m) — ${s.price_usd} (Bs. {(s.price_usd * safeRate).toFixed(2)})
+                      </option>
+                    )
+                  })}
                 </select>
               </div>
 

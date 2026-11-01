@@ -19,12 +19,12 @@ export const NICHES = {
     rolePlural: 'Barberos',
     serviceUnit: 'Corte',
     services: [
-      { id: 's1', name: 'Corte Clásico', price_usd: 5, category: 'Cortes' },
-      { id: 's2', name: 'Corte Degradé + Cejas', price_usd: 7, category: 'Cortes' },
-      { id: 's3', name: 'Arreglo de Barba con Toalla Caliente', price_usd: 4, category: 'Barba' },
-      { id: 's4', name: 'Combo Completo (Corte + Barba + Cejas)', price_usd: 10, category: 'Combos' },
-      { id: 's5', name: 'Pigmentación / Tinte de Barba', price_usd: 6, category: 'Barba' },
-      { id: 's6', name: 'Corte Infantil (Niños)', price_usd: 5, category: 'Cortes' },
+      { id: 's1', name: 'Corte Clásico', price_usd: 5, category: 'Cortes', duration_min: 30 },
+      { id: 's2', name: 'Corte Degradé + Cejas', price_usd: 7, category: 'Cortes', duration_min: 45 },
+      { id: 's3', name: 'Arreglo de Barba con Toalla Caliente', price_usd: 4, category: 'Barba', duration_min: 30 },
+      { id: 's4', name: 'Combo Completo (Corte + Barba + Cejas)', price_usd: 10, category: 'Combos', duration_min: 60 },
+      { id: 's5', name: 'Pigmentación / Tinte de Barba', price_usd: 6, category: 'Barba', duration_min: 45 },
+      { id: 's6', name: 'Corte Infantil (Niños)', price_usd: 5, category: 'Cortes', duration_min: 30 },
     ],
     products: [
       { id: 'p1', name: 'Cera Mate Fijadora (150g)', price_usd: 8, cost_usd: 4, stock: 12, min_stock: 5, category: 'Productos', showInCatalog: true, imageUrl: 'https://images.unsplash.com/photo-1597854710119-a5a8fac0915f?w=200&h=200&fit=crop&q=80' },
@@ -825,12 +825,40 @@ export const MONTHLY_HISTORY = [
   { mes: 'Octubre (Actual)', facturacion: 2850, gastos: 540, comisiones: 1390, lucro: 920 },
 ]
 
-export const MASTER_BOOKING_SLOTS = [
+export const SLOTS_PRESET_30_MIN = [
   '08:00 AM', '08:30 AM', '09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM',
   '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM', '01:00 PM', '01:30 PM',
   '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM', '04:00 PM', '04:30 PM',
   '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM',
-  '08:00 PM', '08:30 PM'
+  '08:00 PM'
+]
+
+export const SLOTS_PRESET_45_MIN = [
+  '08:00 AM', '08:45 AM', '09:30 AM', '10:15 AM', '11:00 AM', '11:45 AM',
+  '12:30 PM', '01:15 PM', '02:00 PM', '02:45 PM', '03:30 PM', '04:15 PM',
+  '05:00 PM', '05:45 PM', '06:30 PM', '07:15 PM', '08:00 PM'
+]
+
+export const SLOTS_PRESET_60_MIN = [
+  '08:00 AM', '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
+  '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM',
+  '06:00 PM', '07:00 PM', '08:00 PM'
+]
+
+export const MASTER_BOOKING_SLOTS = [
+  '08:00 AM', '08:30 AM', '08:45 AM',
+  '09:00 AM', '09:30 AM', '09:45 AM',
+  '10:00 AM', '10:15 AM', '10:30 AM',
+  '11:00 AM', '11:15 AM', '11:30 AM', '11:45 AM',
+  '12:00 PM', '12:30 PM', '12:45 PM',
+  '01:00 PM', '01:15 PM', '01:30 PM',
+  '02:00 PM', '02:15 PM', '02:30 PM', '02:45 PM',
+  '03:00 PM', '03:30 PM', '03:45 PM',
+  '04:00 PM', '04:15 PM', '04:30 PM',
+  '05:00 PM', '05:15 PM', '05:30 PM', '05:45 PM',
+  '06:00 PM', '06:30 PM', '06:45 PM',
+  '07:00 PM', '07:15 PM', '07:30 PM',
+  '08:00 PM', '08:15 PM', '08:30 PM'
 ]
 
 export const DEFAULT_BOOKING_SLOTS = [

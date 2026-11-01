@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2, Settings } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration } from '../lib/dateUtils'
 
 export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {}, onOpenSettings }) {
   // Today's ISO date string strictly in local timezone
@@ -33,6 +33,8 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
     if (!newClient.trim()) return
 
     const canonicalTime = normalizeTimeSlot(newTime) || newTime.trim()
+    const matchedService = (nicheData?.services || []).find(s => s.name === newService)
+    const dur = matchedService?.duration_min || inferServiceDuration(newService)
 
     const newItem = {
       id: 'app_' + Date.now(),
@@ -41,6 +43,7 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
       time: canonicalTime,
       staff_id: newStaff,
       service: newService,
+      duration_min: dur,
       status: 'pendiente'
     }
 
@@ -203,7 +206,12 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5">{apt.service}</p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                      <span className="text-xs text-slate-300 font-medium">{apt.service}</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 font-bold border border-purple-500/30 shrink-0">
+                        ⏱️ {apt.duration_min || inferServiceDuration(apt.service)} min
+                      </span>
+                    </div>
                     <div className="flex items-center gap-1.5 mt-1 text-[11px] text-slate-400">
                       <span>{staffObj?.avatar || '✂️'}</span>
                       <span>{staffObj?.name || 'Cualquiera'}</span>

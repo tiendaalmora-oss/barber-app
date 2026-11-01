@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram, Pencil, X } from 'lucide-react'
-import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
+import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN } from '../lib/mockData'
+import { inferServiceDuration } from '../lib/dateUtils'
 
 export default function CatalogConfigView({
   businessProfile,
@@ -24,6 +25,7 @@ export default function CatalogConfigView({
   // New / Edit service state
   const [newSvcName, setNewSvcName] = useState('')
   const [newSvcPrice, setNewSvcPrice] = useState('')
+  const [newSvcDuration, setNewSvcDuration] = useState(30)
   const [newSvcCategory, setNewSvcCategory] = useState('Servicios')
   const [editingSvcId, setEditingSvcId] = useState(null)
 
@@ -61,12 +63,15 @@ export default function CatalogConfigView({
     e.preventDefault()
     if (!newSvcName.trim() || !newSvcPrice) return
 
+    const finalDur = Number(newSvcDuration) || 30
+
     if (editingSvcId) {
       onUpdateService({
         id: editingSvcId,
         name: newSvcName.trim(),
         price_usd: parseFloat(newSvcPrice) || 5,
-        category: newSvcCategory
+        category: newSvcCategory,
+        duration_min: finalDur
       })
       setEditingSvcId(null)
     } else {
@@ -74,11 +79,13 @@ export default function CatalogConfigView({
         id: 'svc_' + Date.now(),
         name: newSvcName.trim(),
         price_usd: parseFloat(newSvcPrice) || 5,
-        category: newSvcCategory
+        category: newSvcCategory,
+        duration_min: finalDur
       })
     }
     setNewSvcName('')
     setNewSvcPrice('')
+    setNewSvcDuration(30)
   }
 
   const toggleBookingSlot = (slot) => {
@@ -102,11 +109,24 @@ export default function CatalogConfigView({
     setForm({ ...form, bookingSlots: DEFAULT_BOOKING_SLOTS })
   }
 
+  const set30MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_30_MIN })
+  }
+
+  const set45MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_45_MIN })
+  }
+
+  const set60MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_60_MIN })
+  }
+
   const startEditService = (svc) => {
     setEditingSvcId(svc.id)
     setNewSvcName(svc.name)
     setNewSvcPrice(String(svc.price_usd))
     setNewSvcCategory(svc.category || 'Servicios')
+    setNewSvcDuration(svc.duration_min || inferServiceDuration(svc))
   }
 
   return (
@@ -293,14 +313,30 @@ export default function CatalogConfigView({
                     Toca para activar o desactivar las horas que salen en tu Link de Reserva
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex flex-wrap items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onClick={setDefaultSlots}
+                    onClick={set30MinSlots}
                     className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
-                    title="Activar de 9 AM a 7 PM"
+                    title="Turnos cada 30 minutos (ej. 9:00, 9:30, 10:00...)"
                   >
-                    Típicas
+                    ⏱️ 30 min
+                  </button>
+                  <button
+                    type="button"
+                    onClick={set45MinSlots}
+                    className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-gold-400 border border-gold-500/40 font-bold"
+                    title="Turnos cada 45 minutos (ej. 9:00, 9:45, 10:30, 11:15...)"
+                  >
+                    ⏱️ 45 min
+                  </button>
+                  <button
+                    type="button"
+                    onClick={set60MinSlots}
+                    className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
+                    title="Turnos cada 1 hora (ej. 9:00, 10:00, 11:00...)"
+                  >
+                    ⏱️ 1 hora
                   </button>
                   <button
                     type="button"
@@ -436,6 +472,26 @@ export default function CatalogConfigView({
                   className="px-3 py-2 rounded-lg bg-dark-900 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
                 />
               </div>
+
+              {/* Selector de Duración del Servicio */}
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] text-slate-400 font-semibold shrink-0">⏱️ Tiempo estimado:</span>
+                {[30, 45, 60].map(dur => (
+                  <button
+                    key={dur}
+                    type="button"
+                    onClick={() => setNewSvcDuration(dur)}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                      newSvcDuration === dur
+                        ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                        : 'bg-dark-900 text-slate-400 border-dark-700 hover:text-white'
+                    }`}
+                  >
+                    {dur === 60 ? '1 hora (60m)' : `${dur} min`}
+                  </button>
+                ))}
+              </div>
+
               <button
                 type="submit"
                 className="w-full py-2 rounded-lg bg-gold-500 hover:bg-gold-400 text-black text-xs font-black transition-all"
@@ -457,7 +513,12 @@ export default function CatalogConfigView({
                     className="flex items-center justify-between p-3 rounded-xl bg-dark-850 border border-dark-750 hover:border-dark-700 transition-all"
                   >
                     <div className="min-w-0 pr-2">
-                      <span className="font-bold text-white text-xs block truncate">{svc.name}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-white text-xs truncate">{svc.name}</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 border border-purple-500/25 font-bold shrink-0">
+                          ⏱️ {svc.duration_min || inferServiceDuration(svc)}m
+                        </span>
+                      </div>
                       <span className="text-[10px] text-slate-400">
                         Bs. {(svc.price_usd * exchangeRate).toFixed(2)}
                       </span>

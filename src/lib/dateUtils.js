@@ -94,3 +94,38 @@ export function normalizeTimeSlot(rawTime) {
 
   return clean
 }
+
+/**
+ * Converts a 12-hour or 24-hour time string (e.g. "09:30 AM", "02:00 PM") to minutes from midnight (0..1439).
+ */
+export function timeToMinutes(timeStr) {
+  if (!timeStr) return 0
+  const norm = normalizeTimeSlot(timeStr)
+  const match = norm.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/)
+  if (!match) return 0
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2], 10)
+  const ampm = match[3]
+  if (ampm === 'PM' && hours < 12) hours += 12
+  if (ampm === 'AM' && hours === 12) hours = 0
+  return hours * 60 + minutes
+}
+
+/**
+ * Infers service duration in minutes (30, 45, or 60 min)
+ * Respects explicit duration_min if present, or deduces by service name.
+ */
+export function inferServiceDuration(service) {
+  if (!service) return 30
+  if (typeof service === 'object' && service.duration_min && !isNaN(Number(service.duration_min))) {
+    return Number(service.duration_min)
+  }
+  const name = (typeof service === 'string' ? service : service.name || '').toLowerCase()
+  if (name.includes('combo') || name.includes('completo') || name.includes('alisado') || name.includes('quimic') || name.includes('spa')) {
+    return 60
+  }
+  if (name.includes('degradé') || name.includes('degrade') || name.includes('fade') || name.includes('pigmentaci') || name.includes('tinte')) {
+    return 45
+  }
+  return 30
+}

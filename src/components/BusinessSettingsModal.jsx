@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react'
 import { X, Store, Upload, Image, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck } from 'lucide-react'
-import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
+import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN } from '../lib/mockData'
 
 const LOGO_PRESETS = [
   { id: 'p1', label: '💈 Navaja Dorada', url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200&h=200&fit=crop&crop=faces&q=80' },
@@ -97,6 +97,18 @@ export default function BusinessSettingsModal({
 
   const setDefaultSlots = () => {
     setForm({ ...form, bookingSlots: DEFAULT_BOOKING_SLOTS })
+  }
+
+  const set30MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_30_MIN })
+  }
+
+  const set45MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_45_MIN })
+  }
+
+  const set60MinSlots = () => {
+    setForm({ ...form, bookingSlots: SLOTS_PRESET_60_MIN })
   }
 
   const handleSubmit = (e) => {
@@ -277,20 +289,36 @@ export default function BusinessSettingsModal({
                       Toca para encender o apagar las horas que ofreces a tus clientes
                     </p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1 shrink-0">
                     <button
                       type="button"
-                      onClick={setDefaultSlots}
+                      onClick={set30MinSlots}
                       className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
-                      title="Activar de 9 AM a 7 PM"
+                      title="Turnos cada 30 minutos (ej. 9:00, 9:30, 10:00...)"
                     >
-                      Típicas
+                      ⏱️ 30 min
+                    </button>
+                    <button
+                      type="button"
+                      onClick={set45MinSlots}
+                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-gold-400 border border-gold-500/40 font-bold"
+                      title="Turnos cada 45 minutos (ej. 9:00, 9:45, 10:30, 11:15...)"
+                    >
+                      ⏱️ 45 min
+                    </button>
+                    <button
+                      type="button"
+                      onClick={set60MinSlots}
+                      className="text-[10px] px-2 py-0.5 rounded bg-dark-800 hover:bg-dark-750 text-slate-300 border border-dark-700 font-medium"
+                      title="Turnos cada 1 hora (ej. 9:00, 10:00, 11:00...)"
+                    >
+                      ⏱️ 1 hora
                     </button>
                     <button
                       type="button"
                       onClick={setAllSlots}
                       className="text-[10px] px-2 py-0.5 rounded bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-medium"
-                      title="Activar todas desde 8 AM hasta 8:30 PM"
+                      title="Activar todas las horas desde 8 AM hasta 8:30 PM"
                     >
                       Todas
                     </button>
