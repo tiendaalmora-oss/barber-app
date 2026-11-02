@@ -29,7 +29,7 @@ import {
   INITIAL_SAAS_TENANTS
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck } from 'lucide-react'
 import { getLocalDateIso, isDateToday } from './lib/dateUtils'
 import { getActiveBrand } from './lib/brandConfig'
 
@@ -457,6 +457,38 @@ export default function App() {
     }
   }, [activeTenant])
 
+  // Dynamic Page Title & PWA App Name based on active brand (GlamOS vs BarberOS)
+  useEffect(() => {
+    const brand = getActiveBrand(activeTenant)
+    document.title = `${brand.name} · ${brand.code === 'glamos' ? 'Salones de Belleza, Uñas & Spas' : 'Control Financiero & Caja'}`
+
+    const appNameMeta = document.querySelector('meta[name="application-name"]')
+    if (appNameMeta) appNameMeta.setAttribute('content', brand.name)
+    const appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+    if (appleTitleMeta) appleTitleMeta.setAttribute('content', brand.name)
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]')
+    if (themeColorMeta) themeColorMeta.setAttribute('content', brand.code === 'glamos' ? '#ec4899' : '#090a0d')
+  }, [activeTenant])
+
+  // Handle auto-expiration of 24h trial cleanly via effect
+  useEffect(() => {
+    if (activeTenant && activeTenant.isTrial24h && activeTenant.trialExpiresAt && activeTenant.status === 'activo') {
+      const isExpired = new Date(activeTenant.trialExpiresAt).getTime() <= Date.now()
+      if (isExpired) {
+        const expiredTenant = {
+          ...activeTenant,
+          status: 'vencido',
+          isTrial24h: false,
+          daysRemaining: 0,
+          wasTrial: true
+        }
+        setTenants(prev => prev.map(t => t.id === activeTenant.id ? expiredTenant : t))
+        setCachedActiveTenant(expiredTenant)
+        pushTenantUpsertToServer(expiredTenant)
+      }
+    }
+  }, [nowTick, activeTenant?.id, activeTenant?.status, activeTenant?.trialExpiresAt])
+
   // --- REAL-TIME MULTI-DEVICE SERVER SYNC (Phone <-> PC) WITH TOMBSTONE PROTECTION ---
   const fetchServerBootstrap = async () => {
     try {
@@ -857,6 +889,12 @@ export default function App() {
     setClients([])
     setAppointments([])
     setBusinessProfile(freshWorkspace.businessProfile)
+    if (newTenant.niche && NICHES[newTenant.niche]) {
+      setCurrentNiche(newTenant.niche)
+    }
+    if (freshWorkspace.staffByNiche) setStaffByNiche(freshWorkspace.staffByNiche)
+    if (freshWorkspace.servicesByNiche) setServicesByNiche(freshWorkspace.servicesByNiche)
+    if (freshWorkspace.productsByNiche) setProductsByNiche(freshWorkspace.productsByNiche)
 
     setTenants(prev => [newTenant, ...prev.filter(t => t.id !== newTenant.id && (t.email || '').toLowerCase().trim() !== cleanEmail)])
     setActiveTenantId(newTenant.id)
@@ -1351,19 +1389,6 @@ export default function App() {
   const isTrial = Boolean(activeTenant?.isTrial24h || activeTenant?.subscriptionType === 'trial_24h')
   const isTrialExpired = isTrial && activeTenant?.trialExpiresAt && new Date(activeTenant.trialExpiresAt).getTime() <= now
 
-  if (activeTenant && isTrialExpired && activeTenant.status === 'activo') {
-    const expiredTenant = {
-      ...activeTenant,
-      status: 'vencido',
-      isTrial24h: false,
-      daysRemaining: 0,
-      wasTrial: true
-    }
-    setTenants(prev => prev.map(t => t.id === activeTenant.id ? expiredTenant : t))
-    setCachedActiveTenant(expiredTenant)
-    pushTenantUpsertToServer(expiredTenant)
-  }
-
   let trialCountdownStr = ''
   if (isTrial && activeTenant?.trialExpiresAt && !isTrialExpired) {
     const diffMs = Math.max(0, new Date(activeTenant.trialExpiresAt).getTime() - now)
@@ -1373,7 +1398,7 @@ export default function App() {
     trialCountdownStr = `${h}h ${m.toString().padStart(2, '0')}m`
   }
 
-  if (activeTenant.status !== 'activo' || isTrialExpired) {
+  if (activeTenant?.status !== 'activo' || isTrialExpired) {
     return (
       <SubscriptionLockView
         tenant={isTrialExpired ? { ...activeTenant, status: 'vencido', wasTrial: true } : activeTenant}

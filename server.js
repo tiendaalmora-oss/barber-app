@@ -484,7 +484,102 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // --- DYNAMIC PWA MANIFEST (BarberOS vs GlamOS) ---
+  if (pathname === '/manifest.webmanifest' || pathname === '/manifest.json') {
+    const host = (req.headers.host || '').toLowerCase()
+    const queryBrand = parsedUrl.searchParams.get('brand') || ''
+    const isGlam = host.includes('glam') || queryBrand.includes('glam')
+    const manifest = isGlam
+      ? {
+          name: 'GlamOS · Salones de Belleza, Uñas & Spas',
+          short_name: 'GlamOS',
+          description: 'Sistema de Citas, Caja y Comisiones para Salones de Belleza, Uñas & Spas',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          orientation: 'portrait-primary',
+          background_color: '#090a0d',
+          theme_color: '#ec4899',
+          icons: [
+            {
+              src: '/icon-glamos.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any maskable'
+            }
+          ]
+        }
+      : {
+          name: 'BarberOS · Control Financiero & Caja',
+          short_name: 'BarberOS',
+          description: 'Sistema de Control de Caja, Comisiones, Radar de Clientes y Catálogo para Barberías y Salones',
+          start_url: '/',
+          scope: '/',
+          display: 'standalone',
+          orientation: 'portrait-primary',
+          background_color: '#090a0d',
+          theme_color: '#090a0d',
+          icons: [
+            {
+              src: '/icon.svg',
+              sizes: 'any',
+              type: 'image/svg+xml',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/icon-192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/icon-512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any maskable'
+            }
+          ]
+        }
+
+    res.writeHead(200, {
+      'Content-Type': 'application/manifest+json; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Access-Control-Allow-Origin': '*'
+    })
+    return res.end(JSON.stringify(manifest, null, 2))
+  }
+
   // --- STATIC SPA SERVING ---
+  const serveHtml = (htmlFilePath) => {
+    const host = (req.headers.host || '').toLowerCase()
+    const queryBrand = parsedUrl.searchParams.get('brand') || ''
+    const isGlam = host.includes('glam') || queryBrand.includes('glam')
+    let html = fs.readFileSync(htmlFilePath, 'utf8')
+    if (isGlam) {
+      html = html.replace(/<title>.*?<\/title>/, '<title>GlamOS · Salones de Belleza, Uñas & Spas</title>')
+      html = html.replace(/content="BarberOS"/g, 'content="GlamOS"')
+      html = html.replace(/content="#090a0d"/g, 'content="#ec4899"')
+      html = html.replace(/\/icon\.svg/g, '/icon-glamos.svg')
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    })
+    res.end(html)
+  }
+
   let targetPath = pathname
   if (targetPath === '/landing' || targetPath === '/v4' || targetPath === '/ventas') {
     targetPath = '/landing.html'
@@ -508,23 +603,22 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    if (filePath.endsWith('.html')) {
+      return serveHtml(filePath)
+    }
     const ext = path.extname(filePath).toLowerCase()
     const contentType = MIME_TYPES[ext] || 'application/octet-stream'
     const isServiceWorker = pathname === '/sw.js'
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Cache-Control': isServiceWorker || ext === '.html' ? 'no-cache, no-store, must-revalidate' : 'public, max-age=31536000, immutable'
+      'Cache-Control': isServiceWorker ? 'no-cache, no-store, must-revalidate' : 'public, max-age=31536000, immutable'
     })
     fs.createReadStream(filePath).pipe(res)
   } else {
     // SPA Fallback to index.html
     const indexHtml = path.join(DIST_DIR, 'index.html')
     if (fs.existsSync(indexHtml)) {
-      res.writeHead(200, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-cache'
-      })
-      fs.createReadStream(indexHtml).pipe(res)
+      return serveHtml(indexHtml)
     } else {
       res.writeHead(404)
       res.end('Build not found')

@@ -13,6 +13,29 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>BarberOS · Control Financiero & Caja</title>
+    <script>
+      (function() {
+        try {
+          var h = window.location.hostname.toLowerCase();
+          var p = new URLSearchParams(window.location.search);
+          var b = (p.get('brand') || p.get('app') || '').toLowerCase();
+          var isGlam = h.includes('glam') || b.includes('glam');
+          if (isGlam) {
+            document.title = 'GlamOS · Salones de Belleza, Uñas & Spas';
+            var appName = document.querySelector('meta[name="application-name"]');
+            if (appName) appName.setAttribute('content', 'GlamOS');
+            var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+            if (appleTitle) appleTitle.setAttribute('content', 'GlamOS');
+            var themeColor = document.querySelector('meta[name="theme-color"]');
+            if (themeColor) themeColor.setAttribute('content', '#ec4899');
+            var iconLink = document.querySelector('link[rel="icon"]');
+            if (iconLink) iconLink.setAttribute('href', '/icon-glamos.svg');
+            var manifestLink = document.querySelector('link[rel="manifest"]');
+            if (manifestLink) manifestLink.setAttribute('href', '/manifest.webmanifest?brand=glamos');
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-dark-950 text-slate-100 antialiased selection:bg-gold-500 selection:text-black">
     <div id="root"></div>
