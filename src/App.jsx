@@ -787,7 +787,7 @@ export default function App() {
 
   const handleClearDemoTenants = () => {
     const demoIds = ['ten_1', 'ten_2', 'ten_3', 'ten_4']
-    setTenants(prev => prev.filter(t => !demoIds.includes(t.id)))
+    setTenants(prev => prev.filter(t => !demoIds.includes(t.id) || t.isShielded))
   }
 
   const handleRestoreDemoTenants = () => {

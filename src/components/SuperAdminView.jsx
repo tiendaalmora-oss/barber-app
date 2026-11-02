@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock, AlertCircle, AlertTriangle } from 'lucide-react'
+import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldAlert, KeyRound } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
@@ -45,6 +45,11 @@ export default function SuperAdminView({
   const [copiedRegLink, setCopiedRegLink] = useState(false)
   const [copiedDemoCreds, setCopiedDemoCreds] = useState(false)
 
+  // Shielded account deletion protection modal
+  const [shieldDeleteModalTenant, setShieldDeleteModalTenant] = useState(null)
+  const [shieldPinInput, setShieldPinInput] = useState('')
+  const [shieldPinError, setShieldPinError] = useState('')
+
   // Manual tenant creation / edit form
   const [newProduct, setNewProduct] = useState('barberia_saas')
   const [newBiz, setNewBiz] = useState('')
@@ -55,6 +60,7 @@ export default function SuperAdminView({
   const [newNiche, setNewNiche] = useState('barberia')
   const [newStatus, setNewStatus] = useState('activo')
   const [newDays, setNewDays] = useState('30')
+  const [newShielded, setNewShielded] = useState(false)
 
   const barberBaseUrl = 'https://barber.ingenioos.online'
   const registrationUrl = `${barberBaseUrl}/?registro=1`
@@ -82,6 +88,7 @@ export default function SuperAdminView({
     setNewNiche('barberia')
     setNewStatus('activo')
     setNewDays('30')
+    setNewShielded(false)
     setShowAddModal(true)
   }
 
@@ -96,6 +103,7 @@ export default function SuperAdminView({
     setNewNiche(t.niche || 'barberia')
     setNewStatus(t.isTrial24h ? 'trial_24h' : t.status)
     setNewDays(String(t.daysRemaining ?? 30))
+    setNewShielded(Boolean(t.isShielded))
     setShowAddModal(true)
   }
 
@@ -129,6 +137,8 @@ export default function SuperAdminView({
     const dayOfSub = getDaysSinceActivation(t.activatedAt)
     const inGuarantee = effectiveStatus === 'activo' && !isTrial24h && dayOfSub <= (saasConfig.guaranteeDays || 7)
     const saasProduct = t.saasProduct || 'barberia_saas'
+    const isShielded = Boolean(t.isShielded)
+
     return {
       ...t,
       status: effectiveStatus,
@@ -138,6 +148,7 @@ export default function SuperAdminView({
       trialMinutesRemaining,
       formattedRemainingTime,
       isUnattended,
+      isShielded,
       saasProduct,
       dayOfSub,
       inGuarantee
@@ -149,6 +160,7 @@ export default function SuperAdminView({
     : allEnrichedTenants.filter(t => t.saasProduct === selectedProduct)
 
   const unattendedTenants = enrichedTenants.filter(t => t.isUnattended)
+  const shieldedTenants = enrichedTenants.filter(t => t.isShielded)
   const activeTenants = enrichedTenants.filter(t => t.status === 'activo')
   const paidActiveTenants = enrichedTenants.filter(t => t.status === 'activo' && !t.isTrial24h)
   const trialTenants = enrichedTenants.filter(t => t.status === 'activo' && t.isTrial24h)
@@ -161,6 +173,7 @@ export default function SuperAdminView({
 
   const filteredList = enrichedTenants.filter(t => {
     if (filter === 'sin_atender') return t.isUnattended
+    if (filter === 'blindados') return t.isShielded
     if (filter === 'pendiente_pago') return t.status === 'pendiente_pago'
     if (filter === 'trials') return t.isTrial24h && t.status === 'activo'
     if (filter === 'guarantee') return t.inGuarantee
@@ -174,6 +187,37 @@ export default function SuperAdminView({
       ...tenant,
       operatorContacted: true
     })
+  }
+
+  const handleToggleShield = (tenant) => {
+    const nextState = !tenant.isShielded
+    onUpdateTenant({
+      ...tenant,
+      isShielded: nextState
+    })
+  }
+
+  const handleDeleteTenantClick = (tenant) => {
+    if (tenant.isShielded) {
+      setShieldDeleteModalTenant(tenant)
+      setShieldPinInput('')
+      setShieldPinError('')
+    } else {
+      if (confirm(`¿Seguro que deseas eliminar la cuenta de "${tenant.businessName}" (${tenant.email})?`)) {
+        onDeleteTenant(tenant.id)
+      }
+    }
+  }
+
+  const handleConfirmShieldedDelete = (e) => {
+    e.preventDefault()
+    const masterPin = saasConfig?.adminPin || '2026'
+    if (shieldPinInput.trim() !== masterPin) {
+      setShieldPinError('PIN Maestro incorrecto. La cuenta sigue blindada.')
+      return
+    }
+    onDeleteTenant(shieldDeleteModalTenant.id)
+    setShieldDeleteModalTenant(null)
   }
 
   const handleExtend24Hours = (tenant) => {
@@ -221,6 +265,7 @@ export default function SuperAdminView({
       isTrial24h: false,
       trialExpiresAt: null,
       operatorContacted: true,
+      isShielded: true, // Auto-blindaje al pagar los 30 días
       activatedAt: todayStr,
       daysRemaining: saasConfig.subscriptionDays || 30,
       amountPaidUsd: saasConfig.monthlyPriceUsd || 10,
@@ -319,6 +364,7 @@ export default function SuperAdminView({
         status: actualStatus,
         subscriptionType: isTrial ? 'trial_24h' : (actualStatus === 'activo' ? 'mes_30d' : null),
         isTrial24h: isTrial,
+        isShielded: newShielded,
         trialExpiresAt: isTrial ? (editingTenant.trialExpiresAt || new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()) : null,
         daysRemaining: actualStatus === 'activo' ? (isTrial ? 1 : (parseInt(newDays) || 30)) : 0
       })
@@ -335,6 +381,7 @@ export default function SuperAdminView({
         status: actualStatus,
         subscriptionType: isTrial ? 'trial_24h' : (actualStatus === 'activo' ? 'mes_30d' : null),
         isTrial24h: isTrial,
+        isShielded: newShielded,
         trialExpiresAt: isTrial ? new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString() : null,
         isCleanAccount: true, // Starts 100% clean without demo data!
         activatedAt: actualStatus === 'activo' ? todayStr : null,
@@ -826,7 +873,7 @@ export default function SuperAdminView({
         )}
 
         {/* Top SaaS Revenue & Status Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
           <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-emerald-500/20 to-dark-900 border border-emerald-500/40 rounded-2xl p-3">
             <span className="text-[11px] font-black text-emerald-400 uppercase">💰 MRR Mensual</span>
             <div className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">${mrrUsd} USD</div>
@@ -851,6 +898,20 @@ export default function SuperAdminView({
             <span className="text-[10px] text-slate-400">
               {unattendedTenants.length > 0 ? '⚠️ Requieren atención' : 'Al día'}
             </span>
+          </button>
+
+          <button
+            onClick={() => setFilter('blindados')}
+            className={`p-3 rounded-2xl border text-left transition-all ${
+              filter === 'blindados' ? 'bg-emerald-500/20 border-emerald-400 shadow-sm shadow-emerald-500/10' : 'bg-dark-900 border-dark-800'
+            }`}
+          >
+            <span className="text-[11px] font-bold text-emerald-400 uppercase flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Blindadas</span>
+            </span>
+            <div className="text-xl sm:text-2xl font-black text-emerald-300 mt-0.5">{shieldedTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Protegidas (VIP)</span>
           </button>
 
           <button
@@ -969,9 +1030,23 @@ export default function SuperAdminView({
                       {(SAAS_PRODUCTS.find(p => p.id === (tenant.saasProduct || 'barberia_saas')) || SAAS_PRODUCTS[1]).label}
                     </span>
 
-                    <h3 className="font-black text-white text-base">
-                      {tenant.businessName}
-                    </h3>
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="font-black text-white text-base">
+                        {tenant.businessName}
+                      </h3>
+                      {tenant.isShielded && (
+                        <span title="Cuenta blindada contra borrado accidental (Cliente pagado)">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 inline-block" />
+                        </span>
+                      )}
+                    </div>
+
+                    {tenant.isShielded && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase flex items-center gap-1 shadow-sm">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        <span>🛡️ Blindada (VIP)</span>
+                      </span>
+                    )}
 
                     {tenant.isCleanAccount && (
                       <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-black uppercase">
@@ -1041,6 +1116,28 @@ export default function SuperAdminView({
 
                 {/* Right 1-Click Actions */}
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleToggleShield(tenant)}
+                    className={`px-3 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 ${
+                      tenant.isShielded
+                        ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/50'
+                        : 'bg-dark-800 hover:bg-emerald-500/15 text-slate-400 hover:text-emerald-300 border border-dark-700 hover:border-emerald-500/30'
+                    }`}
+                    title={tenant.isShielded ? 'Cuenta blindada contra borrado accidental. Toca para desblindar.' : 'Blindar esta cuenta para protegerla y exigir clave antes de borrar'}
+                  >
+                    {tenant.isShielded ? (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Blindada</span>
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="w-3.5 h-3.5" />
+                        <span>Blindar</span>
+                      </>
+                    )}
+                  </button>
+
                   {tenant.isUnattended && (
                     <button
                       onClick={() => handleMarkAttended(tenant)}
@@ -1147,13 +1244,13 @@ export default function SuperAdminView({
 
                   {onDeleteTenant && (
                     <button
-                      onClick={() => {
-                        if (confirm(`¿Seguro que deseas eliminar la cuenta de "${tenant.businessName}" (${tenant.email})?`)) {
-                          onDeleteTenant(tenant.id)
-                        }
-                      }}
-                      className="p-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
-                      title="Eliminar cuenta"
+                      onClick={() => handleDeleteTenantClick(tenant)}
+                      className={`p-2 rounded-xl border transition-all ${
+                        tenant.isShielded
+                          ? 'bg-dark-850 hover:bg-amber-500/20 text-slate-500 hover:text-amber-400 border-dark-750 hover:border-amber-500/40'
+                          : 'bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border-dark-750'
+                      }`}
+                      title={tenant.isShielded ? 'Cuenta blindada (requiere PIN maestro para eliminar)' : 'Eliminar cuenta'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1298,6 +1395,23 @@ export default function SuperAdminView({
                 </div>
               </div>
 
+              {/* Blindar Cuenta Checkbox */}
+              <label className="p-3 rounded-2xl bg-dark-850 border border-dark-750 flex items-center justify-between gap-3 cursor-pointer hover:border-emerald-500/40 transition-all">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className={`w-5 h-5 ${newShielded ? 'text-emerald-400' : 'text-slate-500'}`} />
+                  <div>
+                    <div className="text-xs font-bold text-white">Blindar Cuenta (Cliente VIP Pagado)</div>
+                    <div className="text-[10px] text-slate-400">Protege contra borrado accidental y exige PIN Maestro</div>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newShielded}
+                  onChange={(e) => setNewShielded(e.target.checked)}
+                  className="w-4 h-4 rounded text-emerald-500 bg-dark-900 border-dark-700 focus:ring-emerald-400 cursor-pointer"
+                />
+              </label>
+
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
@@ -1311,6 +1425,80 @@ export default function SuperAdminView({
                   className="flex-1 py-2.5 rounded-xl bg-emerald-500 text-black text-xs font-black"
                 >
                   {editingTenant ? 'Guardar Cambios' : 'Crear Cuenta Limpia'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmación con PIN Maestro para Cuenta Blindada */}
+      {shieldDeleteModalTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-dark-900 border-2 border-red-500/70 w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-3 rounded-2xl bg-red-500/20 border border-red-500/40 text-red-400 shrink-0">
+                <ShieldAlert className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-black uppercase tracking-wider">
+                  Acción Protegida • Cuenta Blindada
+                </span>
+                <h3 className="font-black text-white text-lg">
+                  ¿Eliminar a {shieldDeleteModalTenant.businessName}?
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Esta cuenta está <strong>BLINDADA</strong> como cliente pagado activo. Para evitar pérdidas accidentales, debes ingresar el <strong>PIN Maestro de Administrador</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-dark-850 border border-dark-800 text-xs space-y-1 text-slate-300">
+              <div>👤 Dueño: <strong className="text-white">{shieldDeleteModalTenant.ownerName}</strong></div>
+              <div>📧 Correo: <strong className="text-gold-400">{shieldDeleteModalTenant.email}</strong></div>
+              <div>📱 Teléfono: <span className="font-mono">{shieldDeleteModalTenant.phone}</span></div>
+            </div>
+
+            <form onSubmit={handleConfirmShieldedDelete} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-gold-400" />
+                  <span>Introduce tu PIN / Clave Maestra de Admin</span>
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  required
+                  placeholder="PIN Maestro (ej. 2026)"
+                  value={shieldPinInput}
+                  onChange={(e) => {
+                    setShieldPinInput(e.target.value)
+                    setShieldPinError('')
+                  }}
+                  className="w-full px-4 py-3 rounded-2xl bg-dark-950 border border-dark-700 text-white font-mono text-center text-lg tracking-widest focus:border-red-500 focus:outline-none"
+                />
+                {shieldPinError && (
+                  <p className="text-xs text-red-400 font-bold mt-1.5 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{shieldPinError}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShieldDeleteModalTenant(null)}
+                  className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 text-xs font-bold transition-all"
+                >
+                  Cancelar (No Borrar)
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition-all active:scale-95"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Desbloquear y Eliminar</span>
                 </button>
               </div>
             </form>
