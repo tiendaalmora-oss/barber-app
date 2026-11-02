@@ -248,6 +248,15 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [showReconnectedBanner, setShowReconnectedBanner] = useState(false)
   const [offlineToast, setOfflineToast] = useState(null)
+  const [nowTick, setNowTick] = useState(Date.now())
+
+  // Heartbeat timer to monitor 24-hour trial expiration in real-time
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTick(Date.now())
+    }, 20000)
+    return () => clearInterval(timer)
+  }, [])
 
   // Listen for Network Status (Online / Offline)
   useEffect(() => {
@@ -1105,20 +1114,30 @@ export default function App() {
   }
 
   // 4. If Active Tenant has NOT paid upfront ('pendiente_pago') or is expired ('vencido') -> Lock Screen with 7-Day Guarantee
-  const now = Date.now()
+  const now = nowTick
   const isTrial = Boolean(activeTenant?.isTrial24h || activeTenant?.subscriptionType === 'trial_24h')
   const isTrialExpired = isTrial && activeTenant?.trialExpiresAt && new Date(activeTenant.trialExpiresAt).getTime() <= now
 
   if (activeTenant && isTrialExpired && activeTenant.status === 'activo') {
-    activeTenant.status = 'vencido'
-    activeTenant.isTrial24h = false
-    activeTenant.daysRemaining = 0
-    pushTenantUpsertToServer({
+    const expiredTenant = {
       ...activeTenant,
       status: 'vencido',
       isTrial24h: false,
-      daysRemaining: 0
-    })
+      daysRemaining: 0,
+      wasTrial: true
+    }
+    setTenants(prev => prev.map(t => t.id === activeTenant.id ? expiredTenant : t))
+    setCachedActiveTenant(expiredTenant)
+    pushTenantUpsertToServer(expiredTenant)
+  }
+
+  let trialCountdownStr = ''
+  if (isTrial && activeTenant?.trialExpiresAt && !isTrialExpired) {
+    const diffMs = Math.max(0, new Date(activeTenant.trialExpiresAt).getTime() - now)
+    const totalMins = Math.floor(diffMs / (1000 * 60))
+    const h = Math.floor(totalMins / 60)
+    const m = totalMins % 60
+    trialCountdownStr = `${h}h ${m.toString().padStart(2, '0')}m`
   }
 
   if (activeTenant.status !== 'activo' || isTrialExpired) {
@@ -1154,8 +1173,33 @@ export default function App() {
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         isOnline={isOnline}
+        syncStatus={syncStatus}
+        overdueClientsCount={overdueClientsCount}
         showReconnectedBanner={showReconnectedBanner}
       />
+
+      {/* Top Banner: Período de Prueba de 24 Horas Activo */}
+      {isTrial && !isTrialExpired && (
+        <div className="bg-gradient-to-r from-amber-950/70 via-dark-900 to-purple-950/70 border-b border-amber-500/30 px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span className="text-amber-200">
+              ⚡ <strong>Acceso de Prueba (24h)</strong> • Tiempo restante: <strong className="text-white font-mono bg-dark-950 px-2 py-0.5 rounded border border-amber-500/30">{trialCountdownStr}</strong>
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
+              const msg = `👋 ¡Hola! Estoy probando BarberOS con mi negocio *${activeTenant?.businessName}* y quiero activar mi mes completo de 30 días ($${saasConfig.monthlyPriceUsd || 6} USD / ${saasConfig.monthlyPriceBsFixed || '6.024'} Bs). ¿Me indican los datos para transferir?`
+              window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank')
+            }}
+            className="px-3 py-1 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black font-black text-[11px] shadow-md shadow-gold-500/20 active:scale-95 transition-all flex items-center gap-1.5 ml-auto sm:ml-0"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Activar Mes Completo ($6)</span>
+          </button>
+        </div>
+      )}
 
       {/* Main Container */}
       <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-5 flex-1 flex flex-col md:flex-row gap-6">

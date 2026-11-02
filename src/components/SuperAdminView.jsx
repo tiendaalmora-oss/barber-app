@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock } from 'lucide-react'
+import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock, AlertCircle, AlertTriangle } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
@@ -113,9 +113,18 @@ export default function SuperAdminView({
     const effectiveStatus = trialExpired ? 'vencido' : t.status
 
     let trialHoursRemaining = 0
+    let trialMinutesRemaining = 0
+    let formattedRemainingTime = ''
     if (isTrial24h && t.trialExpiresAt && !trialExpired) {
-      trialHoursRemaining = Math.max(1, Math.ceil((new Date(t.trialExpiresAt).getTime() - now) / (1000 * 60 * 60)))
+      const diffMs = Math.max(0, new Date(t.trialExpiresAt).getTime() - now)
+      const totalMins = Math.floor(diffMs / (1000 * 60))
+      trialHoursRemaining = Math.floor(totalMins / 60)
+      trialMinutesRemaining = totalMins % 60
+      formattedRemainingTime = `${trialHoursRemaining}h ${trialMinutesRemaining.toString().padStart(2, '0')}m`
     }
+
+    // Lead is unattended if operatorContacted is false, or if undefined on a trial/pending lead
+    const isUnattended = t.operatorContacted === false || (t.operatorContacted === undefined && (isTrial24h || t.status === 'pendiente_pago'))
 
     const dayOfSub = getDaysSinceActivation(t.activatedAt)
     const inGuarantee = effectiveStatus === 'activo' && !isTrial24h && dayOfSub <= (saasConfig.guaranteeDays || 7)
@@ -126,6 +135,9 @@ export default function SuperAdminView({
       isTrial24h,
       trialExpired,
       trialHoursRemaining,
+      trialMinutesRemaining,
+      formattedRemainingTime,
+      isUnattended,
       saasProduct,
       dayOfSub,
       inGuarantee
@@ -136,6 +148,7 @@ export default function SuperAdminView({
     ? allEnrichedTenants
     : allEnrichedTenants.filter(t => t.saasProduct === selectedProduct)
 
+  const unattendedTenants = enrichedTenants.filter(t => t.isUnattended)
   const activeTenants = enrichedTenants.filter(t => t.status === 'activo')
   const paidActiveTenants = enrichedTenants.filter(t => t.status === 'activo' && !t.isTrial24h)
   const trialTenants = enrichedTenants.filter(t => t.status === 'activo' && t.isTrial24h)
@@ -147,13 +160,39 @@ export default function SuperAdminView({
   const mrrBs = (mrrUsd * exchangeRate).toFixed(2)
 
   const filteredList = enrichedTenants.filter(t => {
+    if (filter === 'sin_atender') return t.isUnattended
     if (filter === 'pendiente_pago') return t.status === 'pendiente_pago'
     if (filter === 'trials') return t.isTrial24h && t.status === 'activo'
     if (filter === 'guarantee') return t.inGuarantee
-    if (filter === 'activo') return t.status === 'activo'
+    if (filter === 'activo') return t.status === 'activo' && !t.isTrial24h
     if (filter === 'vencido') return t.status === 'vencido'
     return true
   })
+
+  const handleMarkAttended = (tenant) => {
+    onUpdateTenant({
+      ...tenant,
+      operatorContacted: true
+    })
+  }
+
+  const handleExtend24Hours = (tenant) => {
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+    const todayStr = now.toISOString().split('T')[0]
+    onUpdateTenant({
+      ...tenant,
+      status: 'activo',
+      subscriptionType: 'trial_24h',
+      isTrial24h: true,
+      trialExpiresAt: expiresAt,
+      operatorContacted: true,
+      activatedAt: todayStr,
+      daysRemaining: 1,
+      amountPaidUsd: 0,
+      lastPaymentRef: 'Prueba +24h Extendida'
+    })
+  }
 
   const handleActivate24Hours = (tenant) => {
     const now = new Date()
@@ -165,6 +204,7 @@ export default function SuperAdminView({
       subscriptionType: 'trial_24h',
       isTrial24h: true,
       trialExpiresAt: expiresAt,
+      operatorContacted: true,
       activatedAt: todayStr,
       daysRemaining: 1,
       amountPaidUsd: 0,
@@ -180,6 +220,7 @@ export default function SuperAdminView({
       subscriptionType: 'mes_30d',
       isTrial24h: false,
       trialExpiresAt: null,
+      operatorContacted: true,
       activatedAt: todayStr,
       daysRemaining: saasConfig.subscriptionDays || 30,
       amountPaidUsd: saasConfig.monthlyPriceUsd || 10,
@@ -234,6 +275,13 @@ export default function SuperAdminView({
         msg = `👋 ¡Épale *${tenant.ownerName}*! Te escribo para avisarte que se cumplieron los 30 días de suscripción del sistema de *${tenant.businessName}*.\n\n` +
           `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*$${price} USDT / ${priceBs} Bs*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
       }
+    }
+
+    if (tenant.isUnattended) {
+      onUpdateTenant({
+        ...tenant,
+        operatorContacted: true
+      })
     }
 
     const url = cleanPhone
@@ -778,38 +826,36 @@ export default function SuperAdminView({
         )}
 
         {/* Top SaaS Revenue & Status Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-emerald-500/20 to-dark-900 border border-emerald-500/40 rounded-2xl p-3.5">
-            <span className="text-[11px] font-black text-emerald-400 uppercase">💰 Ingreso Mensual</span>
-            <div className="text-xl sm:text-2xl font-black text-white font-mono mt-1">${mrrUsd} USD</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-emerald-500/20 to-dark-900 border border-emerald-500/40 rounded-2xl p-3">
+            <span className="text-[11px] font-black text-emerald-400 uppercase">💰 MRR Mensual</span>
+            <div className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5">${mrrUsd} USD</div>
             <span className="text-[10px] text-slate-300 font-mono">Bs. {mrrBs} ({paidActiveTenants.length} pagados)</span>
           </div>
 
           <button
-            onClick={() => setFilter('all')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
-              filter === 'all' ? 'bg-dark-800 border-gold-500' : 'bg-dark-900 border-dark-800'
+            onClick={() => setFilter('sin_atender')}
+            className={`p-3 rounded-2xl border text-left transition-all relative overflow-hidden ${
+              filter === 'sin_atender'
+                ? 'bg-amber-500/25 border-amber-400 shadow-lg shadow-amber-500/20'
+                : unattendedTenants.length > 0
+                ? 'bg-amber-500/10 border-amber-500/60 animate-pulse'
+                : 'bg-dark-900 border-dark-800'
             }`}
           >
-            <span className="text-[11px] font-bold text-slate-400 uppercase">Todas</span>
-            <div className="text-xl sm:text-2xl font-black text-white mt-1">{enrichedTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Total negocios</span>
-          </button>
-
-          <button
-            onClick={() => setFilter('pendiente_pago')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
-              filter === 'pendiente_pago' ? 'bg-amber-500/15 border-amber-500' : 'bg-dark-900 border-dark-800'
-            }`}
-          >
-            <span className="text-[11px] font-bold text-amber-400 uppercase">⏳ Por Pagar</span>
-            <div className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{pendingTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Esperando pago</span>
+            <span className="text-[11px] font-bold text-amber-300 uppercase flex items-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Sin Atender</span>
+            </span>
+            <div className="text-xl sm:text-2xl font-black text-amber-300 mt-0.5">{unattendedTenants.length}</div>
+            <span className="text-[10px] text-slate-400">
+              {unattendedTenants.length > 0 ? '⚠️ Requieren atención' : 'Al día'}
+            </span>
           </button>
 
           <button
             onClick={() => setFilter('trials')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
+            className={`p-3 rounded-2xl border text-left transition-all ${
               filter === 'trials' ? 'bg-amber-500/20 border-amber-400 shadow-sm shadow-amber-500/10' : 'bg-dark-900 border-dark-800'
             }`}
           >
@@ -817,30 +863,52 @@ export default function SuperAdminView({
               <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
               <span>Pruebas 24h</span>
             </span>
-            <div className="text-xl sm:text-2xl font-black text-amber-300 mt-1">{trialTenants.length}</div>
+            <div className="text-xl sm:text-2xl font-black text-amber-300 mt-0.5">{trialTenants.length}</div>
             <span className="text-[10px] text-slate-400">Probando gratis</span>
           </button>
 
           <button
-            onClick={() => setFilter('guarantee')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
-              filter === 'guarantee' ? 'bg-blue-500/15 border-blue-500' : 'bg-dark-900 border-dark-800'
+            onClick={() => setFilter('pendiente_pago')}
+            className={`p-3 rounded-2xl border text-left transition-all ${
+              filter === 'pendiente_pago' ? 'bg-amber-500/15 border-amber-500' : 'bg-dark-900 border-dark-800'
             }`}
           >
-            <span className="text-[11px] font-bold text-blue-400 uppercase">🛡️ En Garantía</span>
-            <div className="text-xl sm:text-2xl font-black text-blue-400 mt-1">{guaranteeTenants.length}</div>
-            <span className="text-[10px] text-slate-400">Primeros {saasConfig.guaranteeDays} días</span>
+            <span className="text-[11px] font-bold text-amber-400 uppercase">⏳ Por Pagar</span>
+            <div className="text-xl sm:text-2xl font-black text-amber-400 mt-0.5">{pendingTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Esperando pago</span>
+          </button>
+
+          <button
+            onClick={() => setFilter('activo')}
+            className={`p-3 rounded-2xl border text-left transition-all ${
+              filter === 'activo' ? 'bg-emerald-500/15 border-emerald-500' : 'bg-dark-900 border-dark-800'
+            }`}
+          >
+            <span className="text-[11px] font-bold text-emerald-400 uppercase">💎 Pagados</span>
+            <div className="text-xl sm:text-2xl font-black text-emerald-400 mt-0.5">{paidActiveTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Suscripción activa</span>
           </button>
 
           <button
             onClick={() => setFilter('vencido')}
-            className={`p-3.5 rounded-2xl border text-left transition-all ${
+            className={`p-3 rounded-2xl border text-left transition-all ${
               filter === 'vencido' ? 'bg-red-500/15 border-red-500' : 'bg-dark-900 border-dark-800'
             }`}
           >
             <span className="text-[11px] font-bold text-red-400 uppercase">🔴 Vencidos</span>
-            <div className="text-xl sm:text-2xl font-black text-red-400 mt-1">{expiredTenants.length}</div>
+            <div className="text-xl sm:text-2xl font-black text-red-400 mt-0.5">{expiredTenants.length}</div>
             <span className="text-[10px] text-slate-400">Toca renovación</span>
+          </button>
+
+          <button
+            onClick={() => setFilter('all')}
+            className={`p-3 rounded-2xl border text-left transition-all ${
+              filter === 'all' ? 'bg-dark-800 border-gold-500' : 'bg-dark-900 border-dark-800'
+            }`}
+          >
+            <span className="text-[11px] font-bold text-slate-400 uppercase">Todas</span>
+            <div className="text-xl sm:text-2xl font-black text-white mt-0.5">{enrichedTenants.length}</div>
+            <span className="text-[10px] text-slate-400">Total negocios</span>
           </button>
         </div>
 
@@ -888,10 +956,14 @@ export default function SuperAdminView({
             {filteredList.map(tenant => (
               <div
                 key={tenant.id}
-                className="bg-dark-900 border border-dark-800 hover:border-dark-700 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all"
+                className={`rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 transition-all ${
+                  tenant.isUnattended
+                    ? 'bg-gradient-to-r from-amber-950/40 via-dark-900 to-dark-900 border-2 border-amber-500/90 shadow-xl shadow-amber-500/10'
+                    : 'bg-dark-900 border border-dark-800 hover:border-dark-700'
+                }`}
               >
                 {/* Left info */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-black">
                       {(SAAS_PRODUCTS.find(p => p.id === (tenant.saasProduct || 'barberia_saas')) || SAAS_PRODUCTS[1]).label}
@@ -907,10 +979,23 @@ export default function SuperAdminView({
                       </span>
                     )}
 
+                    {tenant.isUnattended && (
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500 text-black text-[10px] font-black uppercase flex items-center gap-1 shadow-md shadow-amber-500/30 animate-pulse">
+                        <AlertTriangle className="w-3 h-3 stroke-[3]" />
+                        <span>🚨 NUEVO LEAD SIN ATENDER</span>
+                      </span>
+                    )}
+
                     {tenant.status === 'activo' && tenant.isTrial24h && (
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase flex items-center gap-1">
-                        <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
-                        <span>⚡ Prueba 24h Activa ({tenant.trialHoursRemaining}h restantes)</span>
+                      <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-black uppercase flex items-center gap-1 ${
+                        tenant.trialHoursRemaining < 2
+                          ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                          : tenant.trialHoursRemaining < 12
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                          : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                      }`}>
+                        <Zap className="w-3 h-3 fill-current" />
+                        <span>⏱️ Tiempo restante: {tenant.formattedRemainingTime || `${tenant.trialHoursRemaining}h`}</span>
                       </span>
                     )}
 
@@ -956,6 +1041,17 @@ export default function SuperAdminView({
 
                 {/* Right 1-Click Actions */}
                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {tenant.isUnattended && (
+                    <button
+                      onClick={() => handleMarkAttended(tenant)}
+                      className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all active:scale-95"
+                      title="Marcar este lead como atendido por el asesor comercial"
+                    >
+                      <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                      <span>✓ Marcar Atendido</span>
+                    </button>
+                  )}
+
                   {tenant.status !== 'activo' ? (
                     <>
                       <button
@@ -978,6 +1074,15 @@ export default function SuperAdminView({
                     </>
                   ) : tenant.isTrial24h ? (
                     <>
+                      <button
+                        onClick={() => handleExtend24Hours(tenant)}
+                        className="px-3 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center gap-1 transition-all"
+                        title="Extender 24 horas más de prueba al cliente"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        <span>+24h</span>
+                      </button>
+
                       <button
                         onClick={() => handleActivate30Days(tenant)}
                         className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all active:scale-95"

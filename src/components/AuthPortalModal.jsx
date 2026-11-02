@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2, MessageSquare } from 'lucide-react'
+import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2, MessageSquare, Zap } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
@@ -193,6 +193,10 @@ export default function AuthPortalModal({
       }
     }
 
+    const nowMs = Date.now()
+    const trialExpiresIso = new Date(nowMs + 24 * 60 * 60 * 1000).toISOString()
+    const nowIso = new Date(nowMs).toISOString()
+
     const newTenant = {
       id: tenantId,
       saasProduct: 'barberia_saas',
@@ -206,10 +210,15 @@ export default function AuthPortalModal({
       phone: regPhone.trim(),
       niche: regNiche,
       isCleanAccount: true,
-      status: 'pendiente_pago',
-      activatedAt: null,
-      daysRemaining: 0,
-      lastPaymentRef: 'Esperando Pago Inicial',
+      status: 'activo',
+      subscriptionType: 'trial_24h',
+      isTrial24h: true,
+      trialExpiresAt: trialExpiresIso,
+      registeredAt: nowIso,
+      activatedAt: nowIso,
+      operatorContacted: false,
+      daysRemaining: 1,
+      lastPaymentRef: 'Prueba 24 Horas (Auto-Activada)',
       amountPaidUsd: 0
     }
 
@@ -471,10 +480,10 @@ export default function AuthPortalModal({
         {/* TAB 2: REGISTRO NUEVO CLIENTE (+ PIN DE SEGURIDAD + HUELLA) */}
         {tab === 'register' && (
           <form onSubmit={handleRegister} className="mt-4 space-y-3">
-            <div className="p-3 rounded-xl bg-gold-500/10 border border-gold-500/30 text-[11px] text-gold-300 flex items-start gap-2">
-              <ShieldCheck className="w-4 h-4 text-gold-400 shrink-0 mt-0.5" />
+            <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-emerald-500/10 border border-gold-500/30 text-[11px] text-gold-300 flex items-start gap-2">
+              <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
               <span>
-                <strong>Garantía de {saasConfig.guaranteeDays} Días:</strong> Registra tu negocio, activa tu mes (<strong>${priceUsd} USD / {priceBs} Bs</strong>) y pruébalo por {saasConfig.guaranteeDays} días con devolución 100% garantizada.
+                <strong>⚡ Acceso Inmediato por 24 Horas:</strong> Registra tu negocio y entra de inmediato a probar todo el sistema sin esperas. Tienes 24 horas de prueba completa y luego activas tu mes por solo <strong>${priceUsd} USD ({priceBs} Bs)</strong> con {saasConfig.guaranteeDays} días de garantía total.
               </span>
             </div>
 
