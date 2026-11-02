@@ -31,6 +31,7 @@ import {
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff } from 'lucide-react'
 import { getLocalDateIso, isDateToday } from './lib/dateUtils'
+import { getActiveBrand } from './lib/brandConfig'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -88,7 +89,8 @@ export default function App() {
   }
 
   // Global state
-  const [currentNiche, setCurrentNiche] = useState('barberia')
+  const initialBrand = getActiveBrand()
+  const [currentNiche, setCurrentNiche] = useState(initialBrand.code === 'glamos' ? 'estetica' : 'barberia')
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
   const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isAdminDomain)
@@ -1179,27 +1181,35 @@ export default function App() {
       />
 
       {/* Top Banner: Período de Prueba de 24 Horas Activo */}
-      {isTrial && !isTrialExpired && (
-        <div className="bg-gradient-to-r from-amber-950/70 via-dark-900 to-purple-950/70 border-b border-amber-500/30 px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span className="text-amber-200">
-              ⚡ <strong>Acceso de Prueba (24h)</strong> • Tiempo restante: <strong className="text-white font-mono bg-dark-950 px-2 py-0.5 rounded border border-amber-500/30">{trialCountdownStr}</strong>
-            </span>
+      {isTrial && !isTrialExpired && (() => {
+        const brand = getActiveBrand(activeTenant)
+        const isGlamBrand = brand.code === 'glamos'
+        return (
+          <div className={`bg-gradient-to-r ${isGlamBrand ? 'from-pink-950/70 via-dark-900 to-purple-950/70 border-pink-500/30' : 'from-amber-950/70 via-dark-900 to-purple-950/70 border-amber-500/30'} border-b px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${isGlamBrand ? 'bg-pink-400' : 'bg-amber-400'} animate-ping`} />
+              <span className={isGlamBrand ? 'text-pink-200' : 'text-amber-200'}>
+                {isGlamBrand ? '✨' : '⚡'} <strong>Acceso de Prueba {brand.name} (24h)</strong> • Tiempo restante: <strong className={`text-white font-mono bg-dark-950 px-2 py-0.5 rounded border ${isGlamBrand ? 'border-pink-500/30' : 'border-amber-500/30'}`}>{trialCountdownStr}</strong>
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
+                const msg = `👋 ¡Hola! Estoy probando ${brand.name} con mi negocio *${activeTenant?.businessName}* y quiero activar mi mes completo de 30 días ($${saasConfig.monthlyPriceUsd || 6} USD / ${saasConfig.monthlyPriceBsFixed || '6.024'} Bs). ¿Me indican los datos para transferir?`
+                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank')
+              }}
+              className={`px-3 py-1 rounded-xl font-black text-[11px] shadow-md active:scale-95 transition-all flex items-center gap-1.5 ml-auto sm:ml-0 ${
+                isGlamBrand
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white shadow-pink-500/20'
+                  : 'bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black shadow-gold-500/20'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Activar Mes Completo ($6)</span>
+            </button>
           </div>
-          <button
-            onClick={() => {
-              const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
-              const msg = `👋 ¡Hola! Estoy probando BarberOS con mi negocio *${activeTenant?.businessName}* y quiero activar mi mes completo de 30 días ($${saasConfig.monthlyPriceUsd || 6} USD / ${saasConfig.monthlyPriceBsFixed || '6.024'} Bs). ¿Me indican los datos para transferir?`
-              window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank')
-            }}
-            className="px-3 py-1 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black font-black text-[11px] shadow-md shadow-gold-500/20 active:scale-95 transition-all flex items-center gap-1.5 ml-auto sm:ml-0"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
-            <span>Activar Mes Completo ($6)</span>
-          </button>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Main Container */}
       <div className="max-w-7xl w-full mx-auto px-3 sm:px-6 py-5 flex-1 flex flex-col md:flex-row gap-6">

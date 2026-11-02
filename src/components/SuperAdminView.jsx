@@ -5,7 +5,8 @@ import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 const SAAS_PRODUCTS = [
   { id: 'all', label: '🌐 Todos los Productos', icon: '🌐', domain: 'ingeniodigital.shop', status: 'Hub Central' },
-  { id: 'barberia_saas', label: '💈 BarberOS & Salones', icon: '💈', domain: 'barber.ingenioos.online', status: 'En Vivo' },
+  { id: 'barberia_saas', label: '💈 BarberOS (Barberías)', icon: '💈', domain: 'barber.ingenioos.online', status: 'En Vivo' },
+  { id: 'glamos_saas', label: '💅 GlamOS (Salones & Uñas)', icon: '💅', domain: 'glamos.ingenioos.online', status: 'En Vivo' },
   { id: 'licoreria_saas', label: '🍾 Licorería & Bodegón', icon: '🍾', domain: 'licoreria.ingenioos.online', status: 'Próximo' },
   { id: 'indumentaria_saas', label: '👕 Indumentaria & Ropa', icon: '👕', domain: 'tiendas.ingenioos.online', status: 'Próximo' },
   { id: 'gastronomia_saas', label: '🍔 Gastronomía & Food', icon: '🍔', domain: 'food.ingenioos.online', status: 'Próximo' },
@@ -63,17 +64,35 @@ export default function SuperAdminView({
   const [newShielded, setNewShielded] = useState(false)
 
   const barberBaseUrl = 'https://barber.ingenioos.online'
-  const registrationUrl = `${barberBaseUrl}/?registro=1`
+  const glamosBaseUrl = 'https://glamos.ingenioos.online'
+  const barberRegUrl = `${barberBaseUrl}/?registro=1`
+  const glamosRegUrl = `${glamosBaseUrl}/?registro=1`
+  const [copiedBarberLink, setCopiedBarberLink] = useState(false)
+  const [copiedGlamLink, setCopiedGlamLink] = useState(false)
 
-  const handleCopyRegistrationLink = () => {
-    navigator.clipboard.writeText(registrationUrl)
-    setCopiedRegLink(true)
-    setTimeout(() => setCopiedRegLink(false), 2500)
+  const handleCopyBarberLink = () => {
+    navigator.clipboard.writeText(barberRegUrl)
+    setCopiedBarberLink(true)
+    setTimeout(() => setCopiedBarberLink(false), 2500)
   }
 
-  const handleShareRegLinkWhatsApp = () => {
-    const price = saasConfig.monthlyPriceUsd || 10
-    const text = `💈🚀 ¡Hola! Aquí tienes el enlace oficial para registrar tu Barbería / Salón en nuestro Sistema de Gestión, Caja y Agenda Online.\n\n🛡️ *Incluye ${saasConfig.guaranteeDays} días de Garantía Total de Reembolso* ($${price}/mes):\n👉 ${registrationUrl}\n\nCrea tu cuenta con tu correo y envíanos el comprobante para activarte de inmediato.`
+  const handleCopyGlamLink = () => {
+    navigator.clipboard.writeText(glamosRegUrl)
+    setCopiedGlamLink(true)
+    setTimeout(() => setCopiedGlamLink(false), 2500)
+  }
+
+  const handleShareBarberWhatsApp = () => {
+    const price = saasConfig.monthlyPriceUsd || 6
+    const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
+    const text = `💈🚀 ¡Hola! Aquí tienes el enlace oficial para registrar tu Barbería en *BarberOS* (Caja en Bs/$, Comisiones de Barberos, Turnos y Catálogo Online).\n\n⚡ *Incluye 24 horas de prueba completa y ${saasConfig.guaranteeDays} días de Garantía Total* ($${price}/mes - ${priceBs} Bs):\n👉 ${barberRegUrl}\n\nCrea tu cuenta en 1 minuto y pruébalo con calma.`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const handleShareGlamWhatsApp = () => {
+    const price = saasConfig.monthlyPriceUsd || 6
+    const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
+    const text = `💅✨ ¡Hola! Aquí tienes el enlace oficial para registrar tu Salón de Belleza / Peluquería / Uñas en *GlamOS* (Caja en Bs/$, Comisiones de Manicuristas/Estilistas, Agenda y Catálogo Online).\n\n⚡ *Incluye 24 horas de prueba completa y ${saasConfig.guaranteeDays} días de Garantía Total* ($${price}/mes - ${priceBs} Bs):\n👉 ${glamosRegUrl}\n\nCrea tu cuenta en 1 minuto y pruébalo con calma.`
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
   }
 
@@ -287,16 +306,19 @@ export default function SuperAdminView({
     const cleanPhone = normalizeWhatsAppPhone(tenant.phone || '')
     const price = saasConfig.monthlyPriceUsd || 6
     const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
+    const isGlamTenant = tenant.saasProduct === 'glamos_saas' || tenant.niche === 'estetica'
+    const brandName = isGlamTenant ? 'GlamOS' : 'BarberOS'
+    const brandUrl = isGlamTenant ? `${glamosBaseUrl}/?login=1` : `${barberBaseUrl}/?login=1`
     let msg = ''
 
     if (tenant.status === 'activo' && tenant.isTrial24h) {
-      msg = `⚡ ¡Listo *${tenant.ownerName}*! Ya te activamos tu *Prueba de 24 Horas* para *${tenant.businessName}*.\n\n` +
-        `👉 *Entra aquí:* ${barberBaseUrl}/?login=1\n` +
+      msg = `${isGlamTenant ? '✨' : '⚡'} ¡Listo *${tenant.ownerName}*! Ya te activamos tu *Prueba de 24 Horas de ${brandName}* para *${tenant.businessName}*.\n\n` +
+        `👉 *Entra aquí:* ${brandUrl}\n` +
         `📧 *Correo:* ${tenant.email}\n` +
         `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
         `Tienes acceso completo durante las próximas 24 horas para registrar cobros, probar la caja, turnos y tu catálogo online. ¡Pruébalo con calma y cualquier duda me escribes por aquí!`
     } else if (tenant.status === 'pendiente_pago') {
-      msg = `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* con el correo *${tenant.email}*.\n\n` +
+      msg = `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* en *${brandName}* con el correo *${tenant.email}*.\n\n` +
         `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${price} USDT* (${priceBs} Bs).\n\n` +
         `🏦 *Banco:* ${saasConfig.pagoMovilBank || 'Banco de Venezuela (0102)'}\n` +
         `👤 *Titular:* ${saasConfig.pagoMovilHolder || 'Carlos Rojas'}\n` +
@@ -307,8 +329,8 @@ export default function SuperAdminView({
         `⛓️ *BNB Smart Chain (BEP20):* ${saasConfig.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa'}\n\n` +
         `Apenas me pases el capture por aquí te activo el acceso de inmediato.`
     } else if (tenant.status === 'activo') {
-      msg = `✅ ¡Listo *${tenant.ownerName}*! Ya verificamos tu pago y activamos los *30 días* de *${tenant.businessName}*.\n\n` +
-        `👉 *Entra aquí:* ${barberBaseUrl}/?login=1\n` +
+      msg = `✅ ¡Listo *${tenant.ownerName}*! Ya verificamos tu pago y activamos los *30 días* de *${tenant.businessName}* en *${brandName}*.\n\n` +
+        `👉 *Entra aquí:* ${brandUrl}\n` +
         `📧 *Correo:* ${tenant.email}\n` +
         `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
         `🛡️ Recuerda que cuentas con tus *${saasConfig.guaranteeDays} días de garantía total* y soporte directo por este WhatsApp. ¡A sacarle provecho!`
@@ -647,35 +669,80 @@ export default function SuperAdminView({
           </div>
         </div>
 
-        {/* Shareable Registration Link Banner for Real Clients */}
-        <div className="bg-gradient-to-r from-purple-950/40 via-dark-900 to-dark-900 border border-purple-500/30 rounded-2xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div>
-            <span className="text-[10px] font-black uppercase tracking-wider text-purple-400">
-              🔗 Link de Venta y Registro Directo para Clientes Reales
-            </span>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Envía este link a los barberos que quieran comprar. Les abrirá directo el formulario para registrar su correo y pagar con la Garantía de {saasConfig.guaranteeDays} Días (y su cuenta nacerá 100% limpia en cero):
-            </p>
+        {/* Shareable Registration Link Banner for Real Clients (BarberOS & GlamOS) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* BarberOS Registration Card */}
+          <div className="bg-gradient-to-r from-amber-950/30 via-dark-900 to-dark-900 border border-gold-500/30 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-gold-400 flex items-center gap-1.5">
+                  <span>💈 Link Oficial BarberOS (Barberías)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-gold-500/15 text-gold-300 text-[9px] font-black uppercase">
+                  Caballeros
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Para anuncios o clientes de barbería. Activa 24h de prueba gratis y acceso limpio.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-dark-800">
+              <code className="px-2.5 py-1.5 rounded-xl bg-dark-950 border border-dark-800 text-[11px] text-emerald-400 font-mono truncate flex-1">
+                {barberRegUrl}
+              </code>
+              <button
+                onClick={handleCopyBarberLink}
+                className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-white border border-dark-700 text-xs font-bold flex items-center gap-1.5"
+              >
+                {copiedBarberLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-gold-400" />}
+                <span>{copiedBarberLink ? 'Copiado' : 'Copiar'}</span>
+              </button>
+              <button
+                onClick={handleShareBarberWhatsApp}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <code className="px-3 py-2 rounded-xl bg-dark-950 border border-dark-800 text-xs text-emerald-400 font-mono">
-              {registrationUrl}
-            </code>
-            <button
-              onClick={handleCopyRegistrationLink}
-              className="px-3.5 py-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-white border border-dark-700 text-xs font-bold flex items-center gap-1.5"
-            >
-              {copiedRegLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-gold-400" />}
-              <span>{copiedRegLink ? '¡Link Copiado!' : 'Copiar Link'}</span>
-            </button>
-            <button
-              onClick={handleShareRegLinkWhatsApp}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Enviar por WhatsApp</span>
-            </button>
+          {/* GlamOS Registration Card */}
+          <div className="bg-gradient-to-r from-pink-950/30 via-dark-900 to-dark-900 border border-pink-500/30 rounded-2xl p-4 flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-pink-400 flex items-center gap-1.5">
+                  <span>💅 Link Oficial GlamOS (Salones & Uñas)</span>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-pink-500/15 text-pink-300 text-[9px] font-black uppercase">
+                  Belleza & Estética
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Para publicidad de salones, peluquerías, estéticas y uñas. Cero menciones a barbería.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-dark-800">
+              <code className="px-2.5 py-1.5 rounded-xl bg-dark-950 border border-dark-800 text-[11px] text-pink-400 font-mono truncate flex-1">
+                {glamosRegUrl}
+              </code>
+              <button
+                onClick={handleCopyGlamLink}
+                className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-white border border-dark-700 text-xs font-bold flex items-center gap-1.5"
+              >
+                {copiedGlamLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-pink-400" />}
+                <span>{copiedGlamLink ? 'Copiado' : 'Copiar'}</span>
+              </button>
+              <button
+                onClick={handleShareGlamWhatsApp}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-pink-600/20"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1009,7 +1076,7 @@ export default function SuperAdminView({
           <div className="bg-dark-900 border border-dark-800 rounded-2xl p-10 text-center space-y-3">
             <h3 className="font-bold text-white text-base">No hay cuentas en esta vista</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              Usa el botón verde "+ Crear Cuenta Limpia a Cliente" arriba o envía tu link de registro ({registrationUrl}) a tus clientes.
+              Usa el botón verde "+ Crear Cuenta Limpia a Cliente" arriba o envía tus links oficiales de registro a tus clientes.
             </p>
           </div>
         ) : (
@@ -1026,8 +1093,12 @@ export default function SuperAdminView({
                 {/* Left info */}
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-black">
-                      {(SAAS_PRODUCTS.find(p => p.id === (tenant.saasProduct || 'barberia_saas')) || SAAS_PRODUCTS[1]).label}
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                      tenant.saasProduct === 'glamos_saas' || tenant.niche === 'estetica'
+                        ? 'bg-pink-500/20 border border-pink-500/30 text-pink-300'
+                        : 'bg-purple-500/20 border border-purple-500/30 text-purple-300'
+                    }`}>
+                      {(SAAS_PRODUCTS.find(p => p.id === (tenant.saasProduct || (tenant.niche === 'estetica' ? 'glamos_saas' : 'barberia_saas'))) || SAAS_PRODUCTS[1]).label}
                     </span>
 
                     <div className="flex items-center gap-1.5">

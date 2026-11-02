@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2, MessageSquare, Zap } from 'lucide-react'
+import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fingerprint, KeyRound, CheckCircle2, MessageSquare, Zap, Sparkles } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getActiveBrand } from '../lib/brandConfig'
 
 export default function AuthPortalModal({
   isOpen,
@@ -43,6 +44,9 @@ export default function AuthPortalModal({
   const [loginEmail, setLoginEmail] = useState(savedBioBinding?.email || '')
   const [loginPass, setLoginPass] = useState('')
 
+  const activeBrand = getActiveBrand()
+  const isGlam = activeBrand.code === 'glamos'
+
   // Register form
   const [regBusiness, setRegBusiness] = useState('')
   const [regOwner, setRegOwner] = useState('')
@@ -50,7 +54,7 @@ export default function AuthPortalModal({
   const [regPass, setRegPass] = useState('')
   const [regPhone, setRegPhone] = useState('')
   const [regPin, setRegPin] = useState('')
-  const [regNiche, setRegNiche] = useState('barberia')
+  const [regNiche, setRegNiche] = useState(isGlam ? 'estetica' : 'barberia')
   const [enrollBioOnRegister, setEnrollBioOnRegister] = useState(true)
 
   // Recover password form
@@ -199,7 +203,7 @@ export default function AuthPortalModal({
 
     const newTenant = {
       id: tenantId,
-      saasProduct: 'barberia_saas',
+      saasProduct: isGlam ? 'glamos_saas' : 'barberia_saas',
       businessName: regBusiness.trim(),
       ownerName: regOwner.trim(),
       email: cleanEmail,
@@ -281,7 +285,7 @@ export default function AuthPortalModal({
   const handleWhatsAppRecoveryHelp = () => {
     const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
     const targetEmail = recEmail.trim() || loginEmail.trim() || 'No especificado'
-    const msg = `👋 ¡Hola soporte de Ingenio OS! Se me olvidó la clave de mi cuenta de BarberOS.\n\n` +
+    const msg = `👋 ¡Hola soporte de Ingenio OS! Se me olvidó la clave de mi cuenta de ${activeBrand.name}.\n\n` +
       `📧 *Mi Correo Registrado:* ${targetEmail}\n` +
       `🔑 ¿Me podrían indicar o restablecer mi contraseña para poder ingresar? ¡Gracias!`
     const url = cleanPhone
@@ -297,15 +301,17 @@ export default function AuthPortalModal({
         {/* Brand Header */}
         <div className="flex items-center justify-between pb-4 border-b border-dark-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gold-500/15 border border-gold-500/30 flex items-center justify-center text-gold-400">
-              <Scissors className="w-5 h-5" />
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+              isGlam ? 'bg-pink-500/15 border border-pink-500/30 text-pink-400' : 'bg-gold-500/15 border border-gold-500/30 text-gold-400'
+            }`}>
+              {isGlam ? <Sparkles className="w-5 h-5" /> : <Scissors className="w-5 h-5" />}
             </div>
             <div>
               <h3 className="font-black text-white text-base tracking-tight">
-                Ingenio OS • Barberías & Salones
+                {isGlam ? 'GlamOS • Salones, Uñas & Spas' : 'Ingenio OS • Barberías & Salones'}
               </h3>
               <p className="text-[11px] text-slate-400">
-                Acceso Seguro con Correo o Huella Digital
+                {isGlam ? 'Sistema de Citas, Caja & Comisiones' : 'Acceso Seguro con Correo o Huella Digital'}
               </p>
             </div>
           </div>
@@ -325,7 +331,11 @@ export default function AuthPortalModal({
             type="button"
             onClick={() => { setTab('login'); setErrorMsg(''); setSuccessMsg('') }}
             className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
-              tab === 'login' || tab === 'recover' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
+              tab === 'login' || tab === 'recover'
+                ? isGlam
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                  : 'bg-gold-500 text-black shadow-md'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <LogIn className="w-3.5 h-3.5" />
@@ -336,7 +346,11 @@ export default function AuthPortalModal({
             type="button"
             onClick={() => { setTab('register'); setErrorMsg(''); setSuccessMsg('') }}
             className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
-              tab === 'register' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
+              tab === 'register'
+                ? isGlam
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white shadow-md'
+                  : 'bg-gold-500 text-black shadow-md'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <UserPlus className="w-3.5 h-3.5" />
@@ -456,18 +470,22 @@ export default function AuthPortalModal({
 
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 transition-all"
+                className={`w-full py-3.5 rounded-xl font-black text-xs shadow-lg transition-all ${
+                  isGlam
+                    ? 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white shadow-pink-500/20'
+                    : 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/20'
+                }`}
               >
                 Entrar a Mi Sistema
               </button>
 
               <div className="pt-3 border-t border-dark-800 text-center">
                 <p className="text-[11px] text-slate-400">
-                  ¿Aún no tienes cuenta para tu Barbería o Salón?{' '}
+                  ¿Aún no tienes cuenta para tu {isGlam ? 'Salón o Estudio de Uñas' : 'Barbería o Salón'}?{' '}
                   <button
                     type="button"
                     onClick={() => { setTab('register'); setErrorMsg('') }}
-                    className="text-gold-400 font-bold underline hover:text-gold-300"
+                    className={`${isGlam ? 'text-pink-400 hover:text-pink-300' : 'text-gold-400 hover:text-gold-300'} font-bold underline`}
                   >
                     Regístrate aquí
                   </button>
@@ -480,25 +498,31 @@ export default function AuthPortalModal({
         {/* TAB 2: REGISTRO NUEVO CLIENTE (+ PIN DE SEGURIDAD + HUELLA) */}
         {tab === 'register' && (
           <form onSubmit={handleRegister} className="mt-4 space-y-3">
-            <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-emerald-500/10 border border-gold-500/30 text-[11px] text-gold-300 flex items-start gap-2">
-              <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5 fill-amber-400" />
+            <div className={`p-3 rounded-xl border text-[11px] flex items-start gap-2 ${
+              isGlam
+                ? 'bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-dark-850 border-pink-500/30 text-pink-200'
+                : 'bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-emerald-500/10 border-gold-500/30 text-gold-300'
+            }`}>
+              <Zap className={`w-4 h-4 shrink-0 mt-0.5 ${isGlam ? 'text-pink-400 fill-pink-400' : 'text-amber-400 fill-amber-400'}`} />
               <span>
-                <strong>⚡ Acceso Inmediato por 24 Horas:</strong> Registra tu negocio y entra de inmediato a probar todo el sistema sin esperas. Tienes 24 horas de prueba completa y luego activas tu mes por solo <strong>${priceUsd} USD ({priceBs} Bs)</strong> con {saasConfig.guaranteeDays} días de garantía total.
+                <strong>⚡ Acceso Inmediato por 24 Horas a {activeBrand.name}:</strong> Registra tu negocio y entra de inmediato a probar todo el sistema sin esperas. Tienes 24 horas de prueba completa y luego activas tu mes por solo <strong>${priceUsd} USD ({priceBs} Bs)</strong> con {saasConfig.guaranteeDays} días de garantía total.
               </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Nombre de tu Barbería / Salón
+                  {isGlam ? 'Nombre de tu Salón / Estudio de Uñas / Spa' : 'Nombre de tu Barbería / Salón'}
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Barbería Imperio"
+                  placeholder={isGlam ? 'Ej. Glamour Studio & Spa' : 'Ej. Barbería Imperio'}
                   value={regBusiness}
                   onChange={(e) => setRegBusiness(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                  className={`w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none ${
+                    isGlam ? 'focus:border-pink-500' : 'focus:border-gold-500'
+                  }`}
                 />
               </div>
               <div>
@@ -511,7 +535,9 @@ export default function AuthPortalModal({
                   placeholder="Ej. Luis Martínez"
                   value={regOwner}
                   onChange={(e) => setRegOwner(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                  className={`w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none ${
+                    isGlam ? 'focus:border-pink-500' : 'focus:border-gold-500'
+                  }`}
                 />
               </div>
             </div>
@@ -606,9 +632,13 @@ export default function AuthPortalModal({
 
             <button
               type="submit"
-              className="w-full py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs shadow-lg shadow-emerald-500/20 transition-all"
+              className={`w-full py-3.5 rounded-xl font-black text-xs shadow-lg transition-all ${
+                isGlam
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white shadow-pink-500/20'
+                  : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
+              }`}
             >
-              Crear Mi Cuenta y Ver Datos de Pago (${priceUsd} / {priceBs} Bs)
+              Comenzar Prueba de 24 Horas en {activeBrand.name} (Gratis)
             </button>
           </form>
         )}

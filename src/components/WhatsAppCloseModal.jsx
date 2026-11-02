@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { X, MessageSquare, Copy, Check, ExternalLink, Send, Smartphone, ShieldCheck, Share2 } from 'lucide-react'
 import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
+import { getActiveBrand } from '../lib/brandConfig'
 
 export default function WhatsAppCloseModal({
   isOpen,
@@ -90,7 +91,7 @@ export default function WhatsAppCloseModal({
 
   messageLines.push(`────────────────────────`)
   messageLines.push(`⚡ *Total Atenciones:* ${incomeTx.length} clientes`)
-  messageLines.push(`📲 *Reporte generado automáticamente con BarberOS*`)
+  messageLines.push(`📲 *Reporte generado automáticamente con ${getActiveBrand().name}*`)
 
   const fullMessage = messageLines.join('\n')
 

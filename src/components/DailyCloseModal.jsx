@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
 import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
+import { getActiveBrand } from '../lib/brandConfig'
 
 export default function DailyCloseModal({
   isOpen,
@@ -143,7 +144,7 @@ export default function DailyCloseModal({
       }
     }
 
-    msg += `\nGenerado con BarberOS • Ingenio Digital`
+    msg += `\nGenerado con ${getActiveBrand().name} • Ingenio Digital`
     return msg
   }
 

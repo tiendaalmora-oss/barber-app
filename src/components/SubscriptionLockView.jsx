@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2, Zap } from 'lucide-react'
+import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2, Zap, Sparkles } from 'lucide-react'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getActiveBrand } from '../lib/brandConfig'
 
 export default function SubscriptionLockView({
   tenant,
@@ -14,6 +15,8 @@ export default function SubscriptionLockView({
   const [copiedField, setCopiedField] = useState('')
   const [reported, setReported] = useState(false)
 
+  const brand = getActiveBrand(tenant)
+  const isGlam = brand.code === 'glamos'
   const priceUsd = saasConfig.monthlyPriceUsd || 6
   const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
   const isTrialFinished = Boolean(tenant?.wasTrial || tenant?.lastPaymentRef === 'Prueba 24 Horas' || tenant?.subscriptionType === 'trial_24h')
@@ -35,23 +38,23 @@ export default function SubscriptionLockView({
 
     const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
     const msg = isTrialFinished
-      ? `⚡ *¡Hola equipo de IngenioOS!* Finalicé mi prueba de 24 horas en *${tenant?.businessName}* y quiero activar mi mes completo de 30 días:\n\n` +
-        `💈 *Negocio:* ${tenant?.businessName}\n` +
+      ? `⚡ *¡Hola equipo de IngenioOS!* Finalicé mi prueba de 24 horas de *${brand.name}* en *${tenant?.businessName}* y quiero activar mi mes completo de 30 días:\n\n` +
+        `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName}\n` +
         `📧 *Correo de Acceso:* ${tenant?.email}\n` +
         `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
         `🧾 *Referencia:* ${refText}\n\n` +
         `Adjunto mi comprobante para reactivar mi acceso. ¡Muchas gracias!`
       : isNewAccount
-      ? `🚀 *¡Hola equipo de IngenioOS!* Acabo de registrar mi negocio y realicé el pago para activar mi cuenta (con la Garantía de ${saasConfig.guaranteeDays} días):\n\n` +
-        `💈 *Negocio:* ${tenant?.businessName}\n` +
+      ? `🚀 *¡Hola equipo de IngenioOS!* Acabo de registrar mi negocio en *${brand.name}* y realicé el pago para activar mi cuenta (con la Garantía de ${saasConfig.guaranteeDays} días):\n\n` +
+        `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName}\n` +
         `📧 *Correo de Acceso:* ${tenant?.email}\n` +
         `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
         `🧾 *Referencia:* ${refText}\n\n` +
         `Aquí envío mi capture para que me activen los 30 días de acceso. ¡Gracias!`
-      : `⚡ *¡Hola equipo de IngenioOS!* Realicé el pago de renovación mensual (+30 días) de mi sistema:\n\n` +
-        `💈 *Negocio:* ${tenant?.businessName}\n` +
+      : `⚡ *¡Hola equipo de IngenioOS!* Realicé el pago de renovación mensual (+30 días) de mi sistema ${brand.name}:\n\n` +
+        `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `📧 *Correo:* ${tenant?.email}\n` +
         `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
         `🧾 *Referencia:* ${refText}\n\n` +
@@ -69,13 +72,13 @@ export default function SubscriptionLockView({
       {/* Top Bar */}
       <div className="max-w-3xl w-full mx-auto flex items-center justify-between gap-2 pb-4 border-b border-dark-800">
         <div className="flex items-center gap-2 text-xs text-slate-400">
-          <Lock className="w-3.5 h-3.5 text-gold-400" />
+          <Lock className={`w-3.5 h-3.5 ${isGlam ? 'text-pink-400' : 'text-gold-400'}`} />
           <span>Cuenta: <strong className="text-white">{tenant?.email}</strong></span>
         </div>
 
         <button
           onClick={onLogout}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-800 border border-dark-700 text-xs font-bold text-gold-400 transition-all"
+          className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-dark-900 hover:bg-dark-800 border border-dark-700 text-xs font-bold ${isGlam ? 'text-pink-400' : 'text-gold-400'} transition-all`}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Cerrar Sesión / Cambiar Correo</span>
@@ -86,12 +89,14 @@ export default function SubscriptionLockView({
       <div className="max-w-3xl w-full mx-auto my-6 space-y-5 animate-fadeIn">
         
         {/* Hero Guarantee Card */}
-        <div className="bg-gradient-to-b from-dark-900 to-dark-950 border-2 border-gold-500/40 rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden">
-          <div className="w-16 h-16 rounded-2xl bg-gold-500/15 border border-gold-500/40 text-gold-400 mx-auto flex items-center justify-center mb-3">
+        <div className={`bg-gradient-to-b from-dark-900 to-dark-950 border-2 ${isGlam ? 'border-pink-500/40' : 'border-gold-500/40'} rounded-3xl p-6 text-center shadow-2xl relative overflow-hidden`}>
+          <div className={`w-16 h-16 rounded-2xl ${isGlam ? 'bg-pink-500/15 border-pink-500/40 text-pink-400' : 'bg-gold-500/15 border-gold-500/40 text-gold-400'} border mx-auto flex items-center justify-center mb-3`}>
             {isTrialFinished ? <Zap className="w-9 h-9 text-amber-400 fill-amber-400" /> : isNewAccount ? <ShieldCheck className="w-9 h-9" /> : <Lock className="w-8 h-8" />}
           </div>
 
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gold-500/15 text-gold-400 border border-gold-500/30 text-[11px] font-black uppercase tracking-wider">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-black uppercase tracking-wider ${
+            isGlam ? 'bg-pink-500/15 text-pink-300 border-pink-500/30' : 'bg-gold-500/15 text-gold-400 border-gold-500/30'
+          }`}>
             {isTrialFinished
               ? '⚡ Tu Prueba Gratuita de 24 Horas ha Finalizado'
               : isNewAccount
@@ -101,7 +106,7 @@ export default function SubscriptionLockView({
 
           <h1 className="text-2xl sm:text-3xl font-black text-white mt-2">
             {isTrialFinished
-              ? `¡Gracias por probar BarberOS con ${tenant?.businessName}!`
+              ? `¡Gracias por probar ${brand.name} con ${tenant?.businessName}!`
               : isNewAccount
               ? `¡Cuenta creada para ${tenant?.businessName}!`
               : `Renueva el acceso de ${tenant?.businessName}`}
