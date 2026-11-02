@@ -581,8 +581,21 @@ const server = http.createServer(async (req, res) => {
   }
 
   let targetPath = pathname
+  const host = (req.headers.host || '').toLowerCase()
+  const queryBrand = parsedUrl.searchParams.get('brand') || ''
+  const isGlamHost = host.includes('glam') || queryBrand.includes('glam')
+
   if (targetPath === '/landing' || targetPath === '/v4' || targetPath === '/ventas') {
-    targetPath = '/landing.html'
+    targetPath = isGlamHost ? '/landing_glamos.html' : '/landing.html'
+  } else if (
+    targetPath === '/landing-glamos' ||
+    targetPath === '/landing_glamos' ||
+    targetPath === '/landing_glamos.html' ||
+    targetPath === '/glam' ||
+    targetPath === '/glamos' ||
+    targetPath === '/salon'
+  ) {
+    targetPath = '/landing_glamos.html'
   }
   if (targetPath === '/manual' || targetPath === '/manual.pdf' || targetPath === '/guia') {
     targetPath = '/bonos/Manual_Oficial_BarberOS.pdf'

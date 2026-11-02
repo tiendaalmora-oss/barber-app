@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="es-VE">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>GlamOS · Control de Caja, Comisiones & Citas para Salones de Belleza, Uñas & Spas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #07080d;
+      --card: #0f121d;
+      --card-card: #151929;
+      --card-border: #232a3f;
+      --card-border-glow: rgba(236, 72, 153, 0.35);
+      --pink: #ec4899;
+      --pink-light: #f472b6;
+      --pink-glow: rgba(236, 72, 153, 0.25);
+      --rose: #f43f5e;
+      --gold: #fbbf24;
+      --gold-light: #fde68a;
+      --gold-glow: rgba(251, 191, 36, 0.2);
+      --green: #10b981;
+      --green-light: #34d399;
+      --green-glow: rgba(16, 185, 129, 0.25);
+      --red: #ef4444;
+      --purple: #a855f7;
+      --txt: #f8fafc;
+      --txt-muted: #94a3b8;
+      --txt-dim: #64748b;
+      --font: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--txt);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 95px;
+      overflow-x: hidden;
+    }
+
+    /* Ambient lighting */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -150px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 650px;
+      height: 650px;
+      background: radial-gradient(circle, rgba(236, 72, 153, 0.15) 0%, rgba(168, 85, 247, 0.06) 45%, rgba(7, 8, 13, 0) 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 580px;
+      margin: 0 auto;
+      padding: 0 18px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Top Urgency Header */
+    .top-bar {
+      background: linear-gradient(90deg, #2b0b1a 0%, #43122b 50%, #2b0b1a 100%);
+      border-bottom: 1px solid rgba(236, 72, 153, 0.35);
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--pink-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      letter-spacing: 0.3px;
+    }
+    .badge-pulse {
+      width: 7px;
+      height: 7px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--green);
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.3; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.2); }
+      100% { opacity: 0.3; transform: scale(0.9); }
+    }
+
+    /* Nav */
+    .nav-header {
+      padding: 14px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 17px;
+      font-weight: 900;
+      color: #fff;
+    }
+    .nav-logo span.pink-text {
+      background: linear-gradient(135deg, #ec4899 0%, #f472b6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .nav-btn {
+      font-size: 11.5px;
+      font-weight: 800;
+      color: var(--pink-light);
+      background: rgba(236, 72, 153, 0.12);
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      padding: 6px 14px;
+      border-radius: 100px;
+      text-decoration: none;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 28px 0 20px;
+    }
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(236, 72, 153, 0.12);
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      color: #f472b6;
+      padding: 9px 14px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-size: 29px;
+      font-weight: 900;
+      line-height: 1.18;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      margin-bottom: 14px;
+    }
+    .hero h1 span.pink {
+      background: linear-gradient(135deg, #ec4899 20%, #f472b6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 14.5px;
+      color: var(--txt-muted);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    /* Hero Pills */
+    .hero-pills {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 7px;
+      margin-top: 18px;
+      margin-bottom: 10px;
+    }
+    .hero-pill {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      padding: 6px 12px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--txt);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Primary CTA */
+    .btn-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #022013;
+      font-size: 15px;
+      font-weight: 900;
+      padding: 16px;
+      border-radius: 16px;
+      text-decoration: none;
+      box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.45);
+      transition: transform 0.15s;
+    }
+    .btn-cta:active {
+      transform: scale(0.98);
+    }
+    .cta-sub {
+      font-size: 11px;
+      color: var(--txt-dim);
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    /* Video Player Showcase Section */
+    .vsl-video-wrap {
+      margin: 18px auto 20px;
+      width: 100%;
+      max-width: 320px;
+    }
+    .video-box {
+      background: #000;
+      border: 2px solid rgba(236, 72, 153, 0.35);
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+      aspect-ratio: 9/16;
+      box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.9), 0 0 25px rgba(236, 72, 153, 0.2);
+      cursor: pointer;
+    }
+    .hero-video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+    .video-play-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+      border: 3px solid #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 0 25px rgba(236, 72, 153, 0.6);
+      transition: transform 0.2s, background 0.2s, opacity 0.2s;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .video-play-btn:hover {
+      transform: translate(-50%, -50%) scale(1.08);
+      background: var(--pink-light);
+    }
+    .video-time-badge {
+      position: absolute;
+      bottom: 12px;
+      right: 12px;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      z-index: 2;
+      transition: opacity 0.2s;
+    }
+    .pulse-cta {
+      animation: pulsePink 2.2s infinite ease-in-out;
+    }
+    @keyframes pulsePink {
+      0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.6); }
+      70% { box-shadow: 0 0 0 16px rgba(236, 72, 153, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0); }
+    }
+
+    /* VSL Steps Grid */
+    .vsl-steps-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 18px 0 32px;
+    }
+    @media (max-width: 600px) {
+      .vsl-steps-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .vsl-step-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px;
+      text-align: left;
+    }
+    .vsl-step-card:hover {
+      border-color: rgba(236, 72, 153, 0.45);
+    }
+    .vsl-step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .vsl-step-num {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+      color: #fff;
+      font-weight: 900;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .vsl-step-card h4 {
+      font-size: 14.5px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 0;
+    }
+    .vsl-step-card p {
+      font-size: 12.8px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+      margin-bottom: 0;
+    }
+
+    /* Salons Logos Infinite Carousel */
+    .logos-section {
+      margin: 26px 0 32px;
+      text-align: center;
+    }
+    .logos-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--txt-dim);
+      margin-bottom: 12px;
+    }
+    .logos-track {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 6px 4px 10px;
+      scrollbar-width: none;
+    }
+    .logos-track::-webkit-scrollbar {
+      display: none;
+    }
+    .logo-badge {
+      flex: 0 0 auto;
+      scroll-snap-align: start;
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+    }
+    .logo-badge .badge-icon {
+      font-size: 16px;
+    }
+    .logo-badge span.city {
+      font-size: 10px;
+      color: var(--txt-dim);
+      font-weight: 600;
+      margin-left: 2px;
+    }
+
+    /* Pain Section */
+    .pain-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    .pain-intro {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 14px;
+    }
+    .pain-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .pain-list li {
+      font-size: 13.5px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+    .pain-list li span.cross {
+      color: var(--red);
+      font-weight: 900;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .pain-outro {
+      font-size: 13px;
+      color: var(--pink-light);
+      font-weight: 700;
+      padding-top: 12px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    /* Section Headers */
+    .section-header {
+      text-align: center;
+      margin-bottom: 18px;
+    }
+    .section-header h2 {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.4px;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .section-header p {
+      font-size: 13.5px;
+      color: var(--txt-muted);
+    }
+
+    /* Features Grid */
+    .grid-features {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin: 24px 0 36px;
+    }
+    .feat-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .feat-card.special {
+      border: 1px solid rgba(236, 72, 153, 0.4);
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, var(--card) 100%);
+    }
+    .feat-icon {
+      width: 42px;
+      height: 42px;
+      background: #090a12;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .feat-body h3 {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .feat-badge {
+      font-size: 9px;
+      background: var(--pink);
+      color: #fff;
+      font-weight: 900;
+      padding: 1px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .feat-body p {
+      font-size: 12.5px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+    }
+
+    /* Testimonials Vertical Carousel */
+    .testimonials-section {
+      margin: 36px 0 34px;
+    }
+    .testimonials-carousel {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 8px 4px 16px;
+      scrollbar-width: none;
+    }
+    .testimonials-carousel::-webkit-scrollbar {
+      display: none;
+    }
+    .dep-card {
+      flex: 0 0 74%;
+      max-width: 270px;
+      scroll-snap-align: center;
+      background: #000;
+      border: 1.5px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(236, 72, 153, 0.15);
+    }
+    .dep-video-slot {
+      width: 100%;
+      aspect-ratio: 9/16;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .dep-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+    .dep-play-icon {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+      border: 2px solid #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 20px;
+      box-shadow: 0 0 15px rgba(236, 72, 153, 0.5);
+      z-index: 3;
+      pointer-events: none;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+
+    /* 3 Bonuses */
+    .bonuses-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 22px 20px;
+      margin-bottom: 34px;
+    }
+    .bonus-tag {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--pink-light);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .bonus-row {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .bonus-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .bonus-num {
+      width: 26px;
+      height: 26px;
+      background: rgba(236, 72, 153, 0.15);
+      border-radius: 8px;
+      color: var(--pink-light);
+      font-size: 12px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .bonus-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 2px;
+    }
+    .bonus-desc {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.4;
+    }
+
+    /* Pricing Section */
+    .pricing-card {
+      background: linear-gradient(180deg, #1f1426 0%, var(--card) 100%);
+      border: 2px solid var(--pink);
+      border-radius: 24px;
+      padding: 28px 22px;
+      text-align: center;
+      margin-bottom: 34px;
+      box-shadow: 0 15px 35px -10px rgba(236, 72, 153, 0.25);
+    }
+    .price-pill {
+      display: inline-block;
+      background: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 4px 14px;
+      border-radius: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+    .price-amount {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .price-del {
+      font-size: 18px;
+      color: var(--txt-dim);
+      text-decoration: line-through;
+    }
+    .price-num {
+      font-size: 44px;
+      font-weight: 900;
+      color: #fff;
+      letter-spacing: -1px;
+    }
+    .price-period {
+      font-size: 14px;
+      color: var(--txt-muted);
+      font-weight: 700;
+    }
+    .price-note-usd {
+      font-size: 13px;
+      color: var(--pink-light);
+      font-weight: 800;
+      margin-bottom: 20px;
+    }
+    .price-features {
+      list-style: none;
+      text-align: left;
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 13px;
+    }
+    .price-features li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--txt);
+    }
+    .price-features li span.check {
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    /* No Excuses Box */
+    .no-excuses-box {
+      background: linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(16, 185, 129, 0.06) 100%);
+      border: 1px solid rgba(236, 72, 153, 0.35);
+      border-radius: 20px;
+      padding: 22px;
+      margin: 26px 0;
+      text-align: center;
+    }
+    .no-excuses-box h3 {
+      font-size: 18px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .no-excuses-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 14px;
+      text-align: left;
+    }
+    @media (max-width: 600px) {
+      .no-excuses-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .no-excuse-item {
+      background: #080911;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .no-excuse-item h5 {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--pink-light);
+      margin-bottom: 4px;
+    }
+    .no-excuse-item p {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.4;
+      margin-bottom: 0;
+    }
+
+    /* Guarantee */
+    .guarantee-box {
+      background: var(--card);
+      border: 1px solid rgba(236, 72, 153, 0.3);
+      border-radius: 20px;
+      padding: 22px;
+      text-align: center;
+      margin-bottom: 34px;
+    }
+    .guarantee-badge {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .guarantee-box h3 {
+      font-size: 16px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .guarantee-box p {
+      font-size: 12.5px;
+      color: var(--txt-muted);
+      line-height: 1.5;
+    }
+
+    /* FAQ */
+    .faq-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 34px;
+    }
+    .faq-item {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .faq-q {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .faq-a {
+      font-size: 12px;
+      color: var(--txt-muted);
+      line-height: 1.45;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 20px 0 10px;
+      font-size: 12px;
+      color: var(--txt-dim);
+      border-top: 1px solid var(--card-border);
+    }
+
+    /* Sticky Bottom Bar */
+    .sticky-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(7, 8, 13, 0.96);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--card-border);
+      padding: 12px 16px;
+      z-index: 999;
+      display: flex;
+      justify-content: center;
+    }
+    .sticky-btn {
+      width: 100%;
+      max-width: 500px;
+      background: var(--green);
+      color: #022013;
+      font-size: 14.5px;
+      font-weight: 900;
+      padding: 13px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-decoration: none;
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Alert -->
+  <div class="top-bar">
+    <div class="badge-pulse"></div>
+    <span>OFERTA LANZAMIENTO VENEZUELA · 7 DÍAS DE GARANTÍA TOTAL</span>
+  </div>
+
+  <!-- Header -->
+  <header class="container nav-header">
+    <div class="nav-logo">
+      <span>✨</span>
+      <span>Glam<span class="pink-text">OS</span></span>
+    </div>
+    <a href="#precios" class="nav-btn">Planes & Precios</a>
+  </header>
+
+  <main class="container">
+    
+    <!-- Hero Section / VSL -->
+    <section class="hero">
+      <div class="badge-top">
+        ⚡ DEMO EN VIVO PASO A PASO
+      </div>
+      <h1>
+        Mira Cómo Funciona GlamOS <br><span class="pink">en 60 Segundos</span>
+      </h1>
+      <p>
+        El paso a paso en pantalla: cómo crear tu cuenta, cobrar manicures, secados y pestañas en 3 segundos, y cuadrar tu Pago Móvil y comisiones sin perder más dinero.
+      </p>
+
+      <!-- Main Video Showcase (Centered VSL) -->
+      <div class="vsl-video-wrap">
+        <div class="video-box" onclick="handleHeroVideo(this)">
+          <video
+            id="heroVideoEl"
+            class="hero-video-player"
+            src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/videos/barberos/1793301891026-ad847fa2-1028__1__1_.mp4#t=0.001"
+            playsinline
+            preload="auto"
+          ></video>
+          <div class="video-play-btn">▶</div>
+        </div>
+      </div>
+
+      <!-- High-Converting CTA Button Directly Under Video -->
+      <a
+        href="https://wa.me/5491164827875?text=Hola!%20Vi%20el%20video%20de%20GlamOS%20y%20quiero%20activar%20mi%20sal%C3%B3n%20por%20Bs.%206.024%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20%F0%9F%92%85%E2%9C%A8"
+        target="_blank"
+        class="btn-cta pulse-cta"
+      >
+        <span>💬</span>
+        <span>ACTIVAR MI SALÓN POR BS. 6.024</span>
+      </a>
+      <div class="cta-sub">
+        🛡️ <strong>Cero Riesgo:</strong> 7 Días de Garantía Total · Devolución por Pago Móvil si no es lo que esperas
+      </div>
+
+      <!-- Key Benefits Pills -->
+      <div class="hero-pills">
+        <div class="hero-pill">⏱️ Cobra en 3 Toques</div>
+        <div class="hero-pill">💅 Comisiones por Especialista</div>
+        <div class="hero-pill">💵 Pago Móvil + USD</div>
+        <div class="hero-pill">📴 Funciona sin Internet</div>
+        <div class="hero-pill">📲 Cierre a WhatsApp</div>
+      </div>
+    </section>
+
+    <!-- The 4 Steps Shown in Video -->
+    <section>
+      <div class="section-header">
+        <h2>El Paso a Paso: Así de Simple es Operarlo</h2>
+        <p>Lo que viste en el video aplicado al mostrador de tu salón o spa</p>
+      </div>
+
+      <div class="vsl-steps-grid">
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">1</span>
+            <h4>Tu Salón Listo en 10 Segundos</h4>
+          </div>
+          <p>Entras desde cualquier celular o PC sin descargas pesadas. Creas el nombre de tu salón, spa o estudio de uñas y ves la Tasa Oficial BCV sincronizada automáticamente cada mañana.</p>
+        </div>
+
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">2</span>
+            <h4>Botón 'Anotar Cobro en Caja'</h4>
+          </div>
+          <p>Tocas la especialista (ej. Daniela Uñas 50%) y marcas el servicio (ej. Manicure Ruso $12 o Secado $10). La app te muestra en pantalla el total en Dólares y en Bolívares al instante.</p>
+        </div>
+
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">3</span>
+            <h4>División de la Plata en Vivo</h4>
+          </div>
+          <p>Eliges si pagó en Pago Móvil, Efectivo en gaveta o Zelle. El sistema te desglosa en tiempo real: <em>$6 para Daniela y $6 limpios para el salón</em>. Cero peleas de comisiones los sábados.</p>
+        </div>
+
+        <div class="vsl-step-card">
+          <div class="vsl-step-header">
+            <span class="vsl-step-num">4</span>
+            <h4>Recibo WhatsApp y Cierre de Turno</h4>
+          </div>
+          <p>Envía el ticket digital con tu logo al WhatsApp de la clienta. Al final de la jornada tocas 'Cierre de Turno' y cuadras billetes físicos en gaveta vs banco en 1 solo clic.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Carousel of Salon Logos using GlamOS -->
+    <section class="logos-section">
+      <div class="logos-title">Salones de belleza y nail spas que usan GlamOS en Venezuela:</div>
+      <div class="logos-track">
+        <div class="logo-badge">
+          <span class="badge-icon">💅</span>
+          <span>Glamour Studio & Spa</span>
+          <span class="city">(Caracas)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">✨</span>
+          <span>Bella Nails & Lashes</span>
+          <span class="city">(Valencia)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">🌸</span>
+          <span>Spa & Belleza Chacao</span>
+          <span class="city">(Chacao)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">💖</span>
+          <span>Diva's Nail Bar</span>
+          <span class="city">(Maracaibo)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">💄</span>
+          <span>Bloom Estética</span>
+          <span class="city">(Maracay)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">👑</span>
+          <span>Venus Hair & Spa</span>
+          <span class="city">(Barquisimeto)</span>
+        </div>
+        <div class="logo-badge">
+          <span class="badge-icon">💅</span>
+          <span>Silueta & Estilo</span>
+          <span class="city">(Lechería)</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pain vs Reality for Salons -->
+    <section>
+      <div class="pain-card">
+        <div class="pain-intro">
+          Si administras o tienes un salón de belleza, seguro pasas por esto:
+        </div>
+        <ul class="pain-list">
+          <li>
+            <span class="cross">❌</span>
+            <span>Atiendes clientas de pie todo el día y al final del mes no sabes cuánto te quedó limpio en el bolsillo.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>El dinero entra... pero se mezcla el efectivo arrugado con el Pago Móvil y se vuelve un despelote en la gaveta.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Pierdes horas con la calculadora los sábados a las 8 PM sacando los porcentajes de cada manicurista y estilista.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Discusiones incómodas con tu equipo por cuántos servicios hizo cada una o qué materiales gastaron.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>Clientas que piden cita por WhatsApp, apartan el turno y luego no asisten, dejándote el espacio vacío.</span>
+          </li>
+          <li>
+            <span class="cross">❌</span>
+            <span>No llevas control de las clientas que se fueron fiadas o dejaron abonos a medias.</span>
+          </li>
+        </ul>
+        <div class="pain-outro">
+          💡 Esto no es falta de dedicación. Es falta de la herramienta correcta en tu salón. Y hoy eso cambia.
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section>
+      <div class="section-header">
+        <h2>Todo lo que Tu Salón Necesita</h2>
+        <p>Control total desde tu celular, tablet o computadora</p>
+      </div>
+
+      <div class="grid-features">
+        <div class="feat-card special">
+          <div class="feat-icon">💅</div>
+          <div class="feat-body">
+            <h3>Caja Rápida Bimoneda <span class="feat-badge">PRO</span></h3>
+            <p>Registra servicios en 3 segundos. Convierte automáticamente Dólares y Bolívares a la Tasa Oficial BCV del día.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">✨</div>
+          <div class="feat-body">
+            <h3>Comisiones Automáticas</h3>
+            <p>Configura porcentajes por especialista (50%, 60%, etc.) y el sistema liquida al centavo sin discusiones.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">🌐</div>
+          <div class="feat-body">
+            <h3>Tu Propio Link de Citas Web</h3>
+            <p>Pégalo en tu Instagram y WhatsApp. Tus clientas reservan manicure, pestañas o secado sin interrumpirte en cabina.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">📝</div>
+          <div class="feat-body">
+            <h3>Control de Fiados y Abonos</h3>
+            <p>Lleva la cuenta exacta de quién te debe, anota pagos parciales y nunca más regales tu trabajo.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">📴</div>
+          <div class="feat-body">
+            <h3>Modo Anti-Apagones (Sin Internet)</h3>
+            <p>Si se va la luz o los datos en el salón, sigues cobrando en tu teléfono y todo se sincroniza solo al volver la señal.</p>
+          </div>
+        </div>
+
+        <div class="feat-card">
+          <div class="feat-icon">📲</div>
+          <div class="feat-body">
+            <h3>Cierre de Turno a WhatsApp</h3>
+            <p>Envía en 1 toque el reporte detallado con facturación, comisiones de las chicas y tu ganancia limpia del día.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 Vertical Video Testimonials -->
+    <section class="testimonials-section">
+      <div class="section-header">
+        <h2>Mira lo que Dicen las Dueñas de Salón</h2>
+        <p>Testimonios reales usando GlamOS en Venezuela 🎥👇</p>
+      </div>
+
+      <div class="testimonials-carousel">
+        <!-- Video 1 -->
+        <div class="dep-card">
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <video 
+              class="dep-video" 
+              src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/videos/barberos/1793223707614-0a4ab8b8-1028.mp4#t=0.001" 
+              playsinline 
+              preload="auto"
+            ></video>
+            <div class="dep-play-icon">▶</div>
+          </div>
+        </div>
+
+        <!-- Video 2 -->
+        <div class="dep-card">
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <video 
+              class="dep-video" 
+              src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/videos/barberos/1793223707614-0a4ab8b8-1028.mp4#t=0.001" 
+              playsinline 
+              preload="auto"
+            ></video>
+            <div class="dep-play-icon">▶</div>
+          </div>
+        </div>
+
+        <!-- Video 3 -->
+        <div class="dep-card">
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <video 
+              class="dep-video" 
+              src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/videos/barberos/1793223707614-0a4ab8b8-1028.mp4#t=0.001" 
+              playsinline 
+              preload="auto"
+            ></video>
+            <div class="dep-play-icon">▶</div>
+          </div>
+        </div>
+
+        <!-- Video 4 -->
+        <div class="dep-card">
+          <div class="dep-video-slot" onclick="handleTestimonialVideo(this)">
+            <video 
+              class="dep-video" 
+              src="https://dqqgwaqbipugmgwysoic.supabase.co/storage/v1/object/public/videos/barberos/1793223707614-0a4ab8b8-1028.mp4#t=0.001" 
+              playsinline 
+              preload="auto"
+            ></video>
+            <div class="dep-play-icon">▶</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 Clean Digital Bonuses -->
+    <section>
+      <div class="bonuses-card">
+        <div class="bonus-tag">🎁 Y ADEMÁS RECIBES 3 BONOS EXCLUSIVOS</div>
+        <h3 style="font-size: 17px; font-weight: 900; color: #fff; margin-bottom: 14px;">
+          Material de Apoyo Listo para tu Salón de Belleza:
+        </h3>
+
+        <div class="bonus-row">
+          <div class="bonus-num">1</div>
+          <div>
+            <div class="bonus-title">Guía "El Ticket Promedio en el Salón"</div>
+            <div class="bonus-desc">
+              Estrategias para que una clienta de manicure también se haga cejas o hidratación sin sonar insistente.
+            </div>
+          </div>
+        </div>
+
+        <div class="bonus-row">
+          <div class="bonus-num">2</div>
+          <div>
+            <div class="bonus-title">Kit de Redes "Salón Lleno en Días Flojos"</div>
+            <div class="bonus-desc">
+              50 estados de WhatsApp y plantillas de Instagram listas para copiar y pegar los lunes y martes.
+            </div>
+          </div>
+        </div>
+
+        <div class="bonus-row">
+          <div class="bonus-num">3</div>
+          <div>
+            <div class="bonus-title">Configuración VIP 1 a 1 por WhatsApp</div>
+            <div class="bonus-desc">
+              Te acompañamos paso a paso para cargar tus especialistas, servicios, precios y tasa BCV en menos de 5 minutos.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="precios">
+      <div class="pricing-card">
+        <div class="price-pill">PLAN ACCESO COMPLETO</div>
+        <h3 style="font-size: 22px; font-weight: 900; color: #fff; margin-bottom: 4px;">
+          GlamOS + 3 Bonos Digitales
+        </h3>
+        <p style="font-size: 13px; color: var(--txt-muted); margin-bottom: 16px;">
+          Todo lo que necesitas para tu salón, spa o estudio de uñas en celular y PC
+        </p>
+
+        <!-- Precio en Bolívares Principal -->
+        <div class="price-amount">
+          <span class="price-del">Bs. 12.000</span>
+          <span class="price-num">Bs. 6.024</span>
+          <span class="price-period">/ mes</span>
+        </div>
+        <div class="price-note-usd">
+          (Equivalente a solo $6 USD / USDT)
+        </div>
+
+        <ul class="price-features">
+          <li><span class="check">✓</span> Aplicación GlamOS completa en celular y PC</li>
+          <li><span class="check">✓</span> Tu propia web de reservas y catálogo para clientas</li>
+          <li><span class="check">✓</span> Radar de clientas ausentes + Recordatorios</li>
+          <li><span class="check">✓</span> Caja rápida bimoneda USD / Bolívares (Tasa BCV)</li>
+          <li><span class="check">✓</span> Cálculo automático de comisiones de especialistas</li>
+          <li><span class="check">✓</span> Cierre diario por WhatsApp en 1 toque</li>
+          <li><span class="check">✓</span> Modo Anti-Apagones (funciona sin internet)</li>
+          <li><span class="check">✓</span> Los 3 Bonos Digitales de regalo</li>
+        </ul>
+
+        <a 
+          href="https://wa.me/5491164827875?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20GlamOS%20y%20quiero%20activar%20mi%20cuenta%20de%206.024%20Bs.%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20sal%C3%B3n%20%F0%9F%92%85%E2%9C%A8" 
+          target="_blank" 
+          class="btn-cta"
+        >
+          <span>💬</span>
+          <span>ACTIVAR MI CUENTA POR WHATSAPP</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Guarantee & No Excuses Box -->
+    <section>
+      <div class="no-excuses-box">
+        <div style="font-size: 32px; margin-bottom: 6px;">🚀</div>
+        <h3>Hoy ya no tienes excusa para no tener tu salón automatizado</h3>
+        <p style="font-size: 13px; color: var(--txt-muted); max-width: 620px; margin: 0 auto 12px;">
+          Diseñado específicamente para la realidad de los salones de belleza venezolanos:
+        </p>
+
+        <div class="no-excuses-grid">
+          <div class="no-excuse-item">
+            <h5>💻 ¿Cero Computación?</h5>
+            <p>Es tan fácil como WhatsApp. Botones grandes táctiles para que cualquier manicurista o estilista cobre en 3 segundos.</p>
+          </div>
+          <div class="no-excuse-item">
+            <h5>⚡ ¿Se va la Luz o WiFi?</h5>
+            <p>Sigue funcionando sin conexión a internet y sincroniza solo al volver la señal. Tu salón nunca se detiene.</p>
+          </div>
+          <div class="no-excuse-item">
+            <h5>💰 ¿El Costo?</h5>
+            <p>Solo Bs. 6.024 / mes ($6 USD). Menos de lo que cobras por un solo manicure o secado en todo el mes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="guarantee-box">
+        <div class="guarantee-badge">🛡️</div>
+        <h3 style="font-size: 18px; color: #fbbf24;">Garantía Total de Cero Riesgo · 7 Días de Reembolso</h3>
+        <p style="font-size: 13.5px; max-width: 640px; margin: 8px auto 14px;">
+          Prueba GlamOS en tu negocio por 7 días completos. Si sientes que no te ahorra horas de dolor de cabeza, no te ayuda a controlar tu plata o simplemente no es lo que esperabas, te devolvemos el <strong>100% de tus 6.024 Bs. por Pago Móvil o Binance</strong> de inmediato. Sin preguntas, sin trabas y sin resentimientos.
+        </p>
+        <p style="font-size: 12px; color: #34d399; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+          ✅ El riesgo es 100% nuestro. Cero riesgo para ti.
+        </p>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section>
+      <div class="section-header">
+        <h2>Preguntas Frecuentes</h2>
+      </div>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-q">¿Cómo pago la mensualidad en Bolívares?</div>
+          <div class="faq-a">Aceptamos Pago Móvil Banco de Venezuela al cambio oficial del día, o Binance Pay (USDT) si prefieres divisas.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Tengo que saber de computadoras o Excel?</div>
+          <div class="faq-a">No. El sistema fue creado para ser tan simple como WhatsApp. Tocas la especialista, tocas el servicio y queda cobrado.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Puedo ver la caja desde mi casa si tengo chicas atendiendo en el salón?</div>
+          <div class="faq-a">Sí. GlamOS sincroniza en tiempo real. Puedes ver desde tu celular en casa lo que cobran en la tablet o PC del salón.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Qué pasa si se va la luz o los datos en el salón?</div>
+          <div class="faq-a">GlamOS tiene arquitectura Local-First: sigue funcionando en tu teléfono sin internet y cuando regresa la señal sincroniza solo.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">¿Mis manicuristas o estilistas van a ver mis ganancias?</div>
+          <div class="faq-a">No. La dueña tiene acceso exclusivo a la ganancia neta y gastos. Las especialistas solo ven sus propios servicios y comisiones.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>GlamOS · Ecosistema IngenioOS · Venezuela</p>
+      <p style="margin-top: 4px;">Hecho para que las profesionales de la belleza crezcan con cuentas claras.</p>
+    </footer>
+
+  </main>
+
+  <!-- Sticky Bottom Bar -->
+  <div class="sticky-bar">
+    <a 
+      href="https://wa.me/5491164827875?text=Hola!%20Estuve%20viendo%20la%20pantalla%20de%20GlamOS%20y%20quiero%20activar%20mi%20cuenta%20de%206.024%20Bs.%2Fmes%20con%20los%207%20d%C3%ADas%20de%20garant%C3%ADa%20para%20mi%20sal%C3%B3n%20%F0%9F%92%85%E2%9C%A8" 
+      target="_blank" 
+      class="sticky-btn"
+    >
+      <span>💬</span>
+      <span>Activar mi Salón por WhatsApp</span>
+    </a>
+  </div>
+
+  <!-- Video Players Controller (Hero & Testimonials) -->
+  <script>
+    function handleTestimonialVideo(slot) {
+      const video = slot.querySelector('video');
+      const playBtn = slot.querySelector('.dep-play-icon');
+
+      if (!video) return;
+
+      const currentSrc = video.getAttribute('src');
+      if (!currentSrc || currentSrc.trim() === '' || currentSrc === '#') {
+        alert('👉 Para reproducir este testimonio, pega el link directo de tu video .mp4 en el atributo src="" del elemento <video>.');
+        return;
+      }
+
+      // Pausar cualquier otro video activo en la página
+      document.querySelectorAll('video').forEach(v => {
+        if (v !== video) {
+          v.pause();
+          const otherSlot = v.closest('.dep-video-slot') || v.closest('.video-box');
+          if (otherSlot) {
+            const btn = otherSlot.querySelector('.dep-play-icon') || otherSlot.querySelector('.video-play-btn');
+            if (btn) btn.style.display = 'flex';
+            v.controls = false;
+          }
+        }
+      });
+
+      if (video.paused) {
+        video.play().then(() => {
+          video.controls = true;
+          if (playBtn) playBtn.style.display = 'none';
+        }).catch(err => {
+          console.log('Error al reproducir video:', err);
+          video.controls = true;
+          if (playBtn) playBtn.style.display = 'none';
+        });
+      } else {
+        video.pause();
+        video.controls = false;
+        if (playBtn) playBtn.style.display = 'flex';
+      }
+    }
+
+    function handleHeroVideo(box) {
+      const video = box.querySelector('video');
+      const playBtn = box.querySelector('.video-play-btn');
+
+      if (!video) return;
+
+      const currentSrc = video.getAttribute('src');
+      if (!currentSrc || currentSrc.trim() === '' || currentSrc === '#') {
+        alert('👉 Para reproducir el video explicativo, pega el link directo de tu video .mp4 en el atributo src="" del <video id="heroVideoEl">.');
+        return;
+      }
+
+      // Pausar otros videos
+      document.querySelectorAll('video').forEach(v => {
+        if (v !== video) {
+          v.pause();
+          const otherSlot = v.closest('.dep-video-slot');
+          if (otherSlot) {
+            const btn = otherSlot.querySelector('.dep-play-icon');
+            if (btn) btn.style.display = 'flex';
+            v.controls = false;
+          }
+        }
+      });
+
+      if (video.paused) {
+        video.play().then(() => {
+          video.controls = true;
+          if (playBtn) playBtn.style.display = 'none';
+        }).catch(err => {
+          console.log('Error al reproducir video:', err);
+          video.controls = true;
+          if (playBtn) playBtn.style.display = 'none';
+        });
+      } else {
+        video.pause();
+        video.controls = false;
+        if (playBtn) playBtn.style.display = 'flex';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('video').forEach(video => {
+        video.addEventListener('ended', () => {
+          video.controls = false;
+          const slot = video.closest('.dep-video-slot') || video.closest('.video-box');
+          if (slot) {
+            const btn = slot.querySelector('.dep-play-icon') || slot.querySelector('.video-play-btn');
+            if (btn) btn.style.display = 'flex';
+          }
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>

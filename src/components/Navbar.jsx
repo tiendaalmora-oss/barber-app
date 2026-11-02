@@ -12,6 +12,7 @@ export default function Navbar({
   onOpenWhatsAppModal,
   onOpenDailyCloseModal,
   onOpenSettingsModal,
+  onOpenPaymentModal,
   onLogout,
   onUpdateTenant,
   activeTenant,
@@ -99,14 +100,18 @@ export default function Navbar({
                   {businessProfile?.businessName || nicheNames[currentNiche] || 'Mi Negocio'}
                 </button>
                 {activeTenant?.isTrial24h ? (
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1 animate-pulse">
+                  <button
+                    onClick={onOpenPaymentModal}
+                    title="Click para ver métodos de pago y activar mes completo"
+                    className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1 animate-pulse transition-all cursor-pointer"
+                  >
                     <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
                     <span>PRUEBA 24H ({
                       activeTenant?.trialExpiresAt
                         ? `${Math.max(1, Math.ceil((new Date(activeTenant.trialExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))}h`
                         : '24h'
-                    })</span>
-                  </span>
+                    }) • Activar $6</span>
+                  </button>
                 ) : (
                   <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
                     <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 30}d)</span>

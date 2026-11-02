@@ -286,6 +286,7 @@ export default function App() {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isDailyCloseModalOpen, setIsDailyCloseModalOpen] = useState(false)
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState('local')
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true)
   const [showReconnectedBanner, setShowReconnectedBanner] = useState(false)
@@ -1424,6 +1425,7 @@ export default function App() {
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
         onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
+        onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
         onLogout={handleLogout}
         onUpdateTenant={handleUpdateTenant}
         activeTenant={activeTenant}
@@ -1449,12 +1451,8 @@ export default function App() {
               </span>
             </div>
             <button
-              onClick={() => {
-                const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
-                const msg = `👋 ¡Hola! Estoy probando ${brand.name} con mi negocio *${activeTenant?.businessName}* y quiero activar mi mes completo de 30 días ($${saasConfig.monthlyPriceUsd || 6} USD / ${saasConfig.monthlyPriceBsFixed || '6.024'} Bs). ¿Me indican los datos para transferir?`
-                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank')
-              }}
-              className={`px-3 py-1 rounded-xl font-black text-[11px] shadow-md active:scale-95 transition-all flex items-center gap-1.5 ml-auto sm:ml-0 ${
+              onClick={() => setIsPaymentModalOpen(true)}
+              className={`px-3 py-1 rounded-xl font-black text-[11px] shadow-md active:scale-95 transition-all flex items-center gap-1.5 ml-auto sm:ml-0 cursor-pointer ${
                 isGlamBrand
                   ? 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-400 hover:to-rose-400 text-white shadow-pink-500/20'
                   : 'bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black shadow-gold-500/20'
@@ -1716,6 +1714,19 @@ export default function App() {
           setTransactions(prev => prev.filter(t => !isDateToday(t.fecha)))
         }}
       />
+
+      {/* Payment / Subscription Modal (When in 24h trial and clicking "Activar mes completo") */}
+      {isPaymentModalOpen && (
+        <SubscriptionLockView
+          isModal={true}
+          onClose={() => setIsPaymentModalOpen(false)}
+          tenant={activeTenant}
+          saasConfig={saasConfig}
+          exchangeRate={exchangeRate}
+          onReportPaymentRef={handleReportPaymentRef}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* Floating Offline Toast Notification for Camera / User Reassurance */}
       {offlineToast && (
