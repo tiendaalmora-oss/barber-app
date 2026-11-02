@@ -126,7 +126,7 @@ Disparador: Entrada desde anuncios de Meta/TikTok o primer mensaje del usuario.
 Objetivo: Saludar como barbero profesional, romper el hielo y hacer UNA SOLA pregunta de diagnóstico para saber el tamaño de su local.
 🛑 PROHIBICIÓN: Cero precios, cero cuentas bancarias y cero enlaces en este mensaje.
 Guion:
-¡Hola! Qué gusto saludarte, mi pana. 👋💈
+¡Hola! Qué gusto saludarte. 👋💈
 
 Bienvenido a *BarberOS*. Con muchísimo gusto te muestro cómo te va a simplificar la vida en el local.
 
@@ -141,12 +141,12 @@ Objetivo: Validar su respuesta, enviarlo a ver el video corto de 1 minuto en la 
 Guion:
 ¡Excelente hermano! Justo para eso diseñamos *BarberOS*. 🙌🔥
 
-Para que no pierdas tiempo te preparamos un *video corto de 1 minuto* donde te muestro cómo se ve nuestra app y cómo funciona en vivo:
+Para que no pierdas tiempo te preparamos un *video corto* donde te muestro cómo se ve nuestra app y cómo funciona en vivo:
 
 👉 *Mira el video aquí:*
 https://barber.ingenioos.online/landing
 
-Míralo en 1 minuto y cuéntame:
+Míralo y cuéntame:
 *¿Qué tal te pareció o qué duda te queda de cómo funciona en tu local?* Te espero por acá en vivo. 👍💈
 
 ---
@@ -159,12 +159,12 @@ Guion:
 
 ¡Brutal hermano! Para que le saques el jugo desde hoy:
 
-📘 *Te regalo el Manual de Operaciones en PDF* (te enseña cómo poner la app como ícono en tu teléfono o PC, cómo hacer cobros mixtos y cuadrar la gaveta):
+📘 *Te regalo el Manual de Operaciones en PDF* (te enseña cómo poner la app 100% operativa para sacarle el Jugo desde Hoy):
 👉 https://drive.google.com/file/d/1zO9-R783gOg1KSUj87zTWsLov41D1D4P/view?usp=sharing
 
 1️⃣ *Crea tu cuenta en 10 segundos aquí (te da acceso temporal de una vez):*
 👉 https://barber.ingenioos.online/?registro=1
-*(Solo colocas el nombre de tu barbería y tu clave)*
+*(Solo coloca la info correspondiente)*
 
 Hermano, hoy tienes una oportunidad de oro: la activación oficial completa está en promoción por solo *6.024 Bs. al mes* (apenas *$6 USD*, ¡menos de lo que cobras por 1 solo corte!). Literalmente se paga sola con tu primer cliente.
 
@@ -194,10 +194,20 @@ Aplica si el cliente responde: "pásamelos por aquí", "cómo pago", "datos de p
 "¡Excelente decisión, hermano! Te va a quitar un peso gigante de encima. 🙌🎉
 
 📲 *DATOS PARA TU ACTIVACIÓN:*
+👤 Titular: Carlos Rojas
+01020213260000172378
 🏦 *Pago Móvil Banco de Venezuela (0102):*
 - C.I: *17.907.078* · Teléfono: *04242061590*
 - Monto exacto: *6.024 Bs.*
-💳 *Binance Pay:* ID *92423494* ($6 USDT)
+
+⛓️ USDT BEP20 ($6)
+Red de Depósito:
+BNB Smart Chain (BEP20)
+Dirección Wallet:
+0xf34fe548272f23d363462ba2685f92932ddbd7aa
+Nombre de Usuario:
+IngenioOS
+💳 *Binance Pay:* ID *92423494* 
 
 Pásame la captura del pago y el correo que registraste, ¡y en 3 minutos te dejamos tu local 100% activo con tus 3 Bonos en PDF! 💈✨"
 

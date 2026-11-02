@@ -20,6 +20,7 @@ export default function SuperAdminView({
   onDeleteTenant,
   onClearDemoTenants,
   onRestoreDemoTenants,
+  onPurgeTestAccounts,
   saasConfig,
   onSaveSaasConfig,
   onRefreshServer,
@@ -50,6 +51,13 @@ export default function SuperAdminView({
   const [shieldDeleteModalTenant, setShieldDeleteModalTenant] = useState(null)
   const [shieldPinInput, setShieldPinInput] = useState('')
   const [shieldPinError, setShieldPinError] = useState('')
+
+  // Purge test accounts modal state
+  const [showPurgeModal, setShowPurgeModal] = useState(false)
+  const [purgePinInput, setPurgePinInput] = useState('')
+  const [purgePinError, setPurgePinError] = useState('')
+  const [isPurging, setIsPurging] = useState(false)
+  const [purgeSuccessToast, setPurgeSuccessToast] = useState('')
 
   // Manual tenant creation / edit form
   const [newProduct, setNewProduct] = useState('barberia_saas')
@@ -187,6 +195,9 @@ export default function SuperAdminView({
   const guaranteeTenants = enrichedTenants.filter(t => t.inGuarantee)
   const expiredTenants = enrichedTenants.filter(t => t.status === 'vencido')
 
+  // Purgeable test accounts (unshielded accounts and not official demo)
+  const purgeableTestTenants = allEnrichedTenants.filter(t => !t.isShielded && t.id !== 'ten_1')
+
   const mrrUsd = paidActiveTenants.length * (saasConfig.monthlyPriceUsd || 10)
   const mrrBs = (mrrUsd * exchangeRate).toFixed(2)
 
@@ -222,7 +233,11 @@ export default function SuperAdminView({
       setShieldPinInput('')
       setShieldPinError('')
     } else {
-      if (confirm(`¿Seguro que deseas eliminar la cuenta de "${tenant.businessName}" (${tenant.email})?`)) {
+      if (
+        confirm(
+          `¿Eliminar definitivamente la cuenta de "${tenant.businessName}" (${tenant.email})?\n\nEsta cuenta será borrada de la base de datos y se registrará en la lista negra permanente (tombstone) para que NUNCA vuelva a aparecer en ningún deploy ni al sincronizar con teléfonos o computadoras.`
+        )
+      ) {
         onDeleteTenant(tenant.id)
       }
     }
@@ -237,6 +252,41 @@ export default function SuperAdminView({
     }
     onDeleteTenant(shieldDeleteModalTenant.id)
     setShieldDeleteModalTenant(null)
+  }
+
+  const handleConfirmPurge = async (e) => {
+    e?.preventDefault?.()
+    const masterPin = saasConfig?.adminPin || '2026'
+    if (purgePinInput.trim() !== masterPin) {
+      setPurgePinError('PIN Maestro incorrecto. La purga ha sido cancelada.')
+      return
+    }
+    setIsPurging(true)
+    setPurgePinError('')
+    try {
+      const idsToPurge = purgeableTestTenants.map(t => t.id)
+      if (onPurgeTestAccounts) {
+        const res = await onPurgeTestAccounts(idsToPurge)
+        if (res && res.ok) {
+          setPurgeSuccessToast(
+            `🧹 ¡Purga completada! Se eliminaron definitivamente ${res.count || idsToPurge.length} cuentas falsas/test y quedaron bloqueadas contra resurrección.`
+          )
+          setTimeout(() => setPurgeSuccessToast(''), 6000)
+          setShowPurgeModal(false)
+          setPurgePinInput('')
+        } else {
+          setPurgePinError('Error al ejecutar la purga.')
+        }
+      } else {
+        idsToPurge.forEach(id => onDeleteTenant(id))
+        setShowPurgeModal(false)
+        setPurgePinInput('')
+      }
+    } catch (err) {
+      setPurgePinError('Error de conexión al purgar.')
+    } finally {
+      setIsPurging(false)
+    }
   }
 
   const handleExtend24Hours = (tenant) => {
@@ -1040,32 +1090,57 @@ export default function SuperAdminView({
           </button>
         </div>
 
+        {/* Purge Success Notification Toast */}
+        {purgeSuccessToast && (
+          <div className="bg-emerald-500/20 border-2 border-emerald-500/60 rounded-2xl p-4 flex items-center justify-between gap-3 text-emerald-300 text-xs font-bold animate-fadeIn shadow-lg shadow-emerald-500/10">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span>{purgeSuccessToast}</span>
+            </div>
+            <button
+              onClick={() => setPurgeSuccessToast('')}
+              className="p-1 rounded-lg hover:bg-emerald-500/30 text-emerald-400"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Clean Demo vs Restore Demo Toolbar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-dark-900 border border-dark-800 px-4 py-3 rounded-2xl">
-          <span className="text-xs text-slate-400">
-            Puedes editar o eliminar cualquier cuenta con los botones de cada fila, o limpiar las de ejemplo:
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-dark-900 border border-dark-800 px-4 py-3 rounded-2xl">
           <div className="flex items-center gap-2">
-            {onClearDemoTenants && (
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-xs text-slate-300">
+              Protección Activa: <strong className="text-white">{shieldedTenants.length} cuentas blindadas</strong> • Lista negra permanente anti-resurrección
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {purgeableTestTenants.length > 0 && (
               <button
                 onClick={() => {
-                  if (confirm('¿Quieres borrar las 4 cuentas ficticias de ejemplo para dejar tu panel limpio?')) {
-                    onClearDemoTenants()
-                  }
+                  setPurgePinInput('')
+                  setPurgePinError('')
+                  setShowPurgeModal(true)
                 }}
-                className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-xs font-bold flex items-center gap-1.5"
+                className="px-3.5 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-red-500/10"
+                title="Eliminar de raíz todas las cuentas de prueba no blindadas y añadirlas a la lista negra permanente"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Borrar Cuentas de Ejemplo</span>
+                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                <span>Purgar Cuentas Falsas / Test</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-red-500 text-white font-mono text-[10px] font-black">
+                  {purgeableTestTenants.length}
+                </span>
               </button>
             )}
+
             {onRestoreDemoTenants && (
               <button
                 onClick={onRestoreDemoTenants}
-                className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-1.5 transition-all"
+                title="Restaura la cuenta demo oficial para demostraciones y publicidad"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Restaurar Ejemplos (Modo Publicidad)</span>
+                <span>Restaurar Demo Oficial</span>
               </button>
             )}
           </div>
@@ -1570,6 +1645,111 @@ export default function SuperAdminView({
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Desbloquear y Eliminar</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirmación de Purga Definitiva de Cuentas Falsas / Test */}
+      {showPurgeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-dark-900 border-2 border-red-500/70 w-full max-w-lg rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start gap-3">
+              <div className="p-3 rounded-2xl bg-red-500/20 border border-red-500/40 text-red-400 shrink-0">
+                <Trash2 className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-300 text-[10px] font-black uppercase tracking-wider">
+                  Limpieza Profunda • Anti-Resurrección
+                </span>
+                <h3 className="font-black text-white text-lg">
+                  ¿Purgar {purgeableTestTenants.length} Cuentas Falsas / Test?
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Esta acción eliminará de forma definitiva estas cuentas de la base de datos del servidor y de todos los dispositivos. Sus correos e IDs quedarán registrados en la <strong>lista negra permanente (tombstone)</strong> para que <strong>NUNCA</strong> vuelvan a resucitar tras un deploy o recarga.
+                </p>
+              </div>
+            </div>
+
+            {/* Shield Protection Guarantee Banner */}
+            <div className="p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center gap-2.5 text-xs text-emerald-300 font-bold">
+              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span>
+                🛡️ Tus cuentas blindadas ({shieldedTenants.length}) y la Demo Oficial están 100% protegidas y NO serán tocadas.
+              </span>
+            </div>
+
+            {/* List of Accounts to be Purged */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Cuentas de prueba que serán eliminadas ({purgeableTestTenants.length}):
+              </span>
+              <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                {purgeableTestTenants.map(pt => (
+                  <div
+                    key={pt.id}
+                    className="p-2.5 rounded-xl bg-dark-850 border border-dark-800 flex items-center justify-between text-xs"
+                  >
+                    <div className="truncate mr-2">
+                      <div className="font-bold text-white truncate">{pt.businessName}</div>
+                      <div className="text-[11px] text-slate-400 font-mono truncate">{pt.email}</div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-dark-800 text-slate-400 shrink-0">
+                      {pt.isTrial24h ? 'Trial 24h' : pt.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmPurge} className="space-y-4 pt-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-gold-400" />
+                  <span>Introduce tu PIN Maestro de Admin para autorizar la purga:</span>
+                </label>
+                <input
+                  type="password"
+                  autoFocus
+                  required
+                  placeholder="PIN Maestro (ej. 2026)"
+                  value={purgePinInput}
+                  onChange={(e) => {
+                    setPurgePinInput(e.target.value)
+                    setPurgePinError('')
+                  }}
+                  className="w-full px-4 py-3 rounded-2xl bg-dark-950 border border-dark-700 text-white font-mono text-center text-lg tracking-widest focus:border-red-500 focus:outline-none"
+                />
+                {purgePinError && (
+                  <p className="text-xs text-red-400 font-bold mt-1.5 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{purgePinError}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isPurging}
+                  onClick={() => setShowPurgeModal(false)}
+                  className="px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 text-xs font-bold transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPurging}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>
+                    {isPurging
+                      ? 'Purgando cuentas...'
+                      : `Confirmar Purga Definitiva (${purgeableTestTenants.length} cuentas)`}
+                  </span>
                 </button>
               </div>
             </form>

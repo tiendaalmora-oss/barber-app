@@ -108,23 +108,63 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_SAAS_CONFIG
   })
 
-  const [tenants, setTenants] = useState(() => {
-    const savedV2 = localStorage.getItem('barber_saas_tenants_v2')
-    if (savedV2) return JSON.parse(savedV2)
-
-    // Migrate any real accounts created by user in v1 while removing fake demo accounts
-    const oldSaved = localStorage.getItem('barber_saas_tenants')
-    if (oldSaved) {
-      try {
-        const parsed = JSON.parse(oldSaved)
-        const realUserAccounts = parsed.filter(
-          t => !['ten_1', 'ten_2', 'ten_3', 'ten_4'].includes(t.id)
-        )
-        return [...realUserAccounts, ...INITIAL_SAAS_TENANTS]
-      } catch (e) {
-        return INITIAL_SAAS_TENANTS
-      }
+  // Tombstones / Blacklist for permanently deleted accounts (guarantees they never resurrect across devices or deploys)
+  const [deletedTenantIds, setDeletedTenantIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('barber_deleted_tenant_ids')
+      return saved ? JSON.parse(saved) : []
+    } catch (e) {
+      return []
     }
+  })
+
+  const [deletedTenantEmails, setDeletedTenantEmails] = useState(() => {
+    try {
+      const saved = localStorage.getItem('barber_deleted_tenant_emails')
+      return saved ? JSON.parse(saved) : []
+    } catch (e) {
+      return []
+    }
+  })
+
+  const isTenantTombstoned = (t, delIds = deletedTenantIds, delEmails = deletedTenantEmails) => {
+    if (!t) return false
+    if (delIds.includes(t.id)) return true
+    if (t.email && delEmails.includes((t.email || '').toLowerCase().trim())) return true
+    return false
+  }
+
+  const [tenants, setTenants] = useState(() => {
+    // Purge legacy storage key to eliminate ancient ghost accounts
+    try {
+      localStorage.removeItem('barber_saas_tenants')
+    } catch (e) {}
+
+    const savedDelIds = (() => {
+      try {
+        const raw = localStorage.getItem('barber_deleted_tenant_ids')
+        return raw ? JSON.parse(raw) : []
+      } catch (e) { return [] }
+    })()
+    const savedDelEmails = (() => {
+      try {
+        const raw = localStorage.getItem('barber_deleted_tenant_emails')
+        return raw ? JSON.parse(raw) : []
+      } catch (e) { return [] }
+    })()
+
+    const savedV2 = localStorage.getItem('barber_saas_tenants_v2')
+    if (savedV2) {
+      try {
+        const parsed = JSON.parse(savedV2)
+        if (Array.isArray(parsed)) {
+          return parsed.filter(
+            t => !savedDelIds.includes(t.id) && (!t.email || !savedDelEmails.includes((t.email || '').toLowerCase().trim()))
+          )
+        }
+      } catch (e) {}
+    }
+
     return INITIAL_SAAS_TENANTS
   })
 
@@ -394,6 +434,14 @@ export default function App() {
   }, [tenants])
 
   useEffect(() => {
+    localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(deletedTenantIds))
+  }, [deletedTenantIds])
+
+  useEffect(() => {
+    localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(deletedTenantEmails))
+  }, [deletedTenantEmails])
+
+  useEffect(() => {
     if (activeTenantId) {
       localStorage.setItem('barber_logged_tenant_id', activeTenantId)
       cleanUrlAuthParams()
@@ -409,14 +457,48 @@ export default function App() {
     }
   }, [activeTenant])
 
-  // --- REAL-TIME MULTI-DEVICE SERVER SYNC (Phone <-> PC) ---
+  // --- REAL-TIME MULTI-DEVICE SERVER SYNC (Phone <-> PC) WITH TOMBSTONE PROTECTION ---
   const fetchServerBootstrap = async () => {
     try {
       const res = await fetch('/api/bootstrap', { cache: 'no-store' })
       if (res.ok) {
         const data = await res.json()
+
+        let nextDelIds = deletedTenantIds
+        let nextDelEmails = deletedTenantEmails
+
+        if (Array.isArray(data.deletedTenantIds) && data.deletedTenantIds.length > 0) {
+          const merged = Array.from(new Set([...deletedTenantIds, ...data.deletedTenantIds]))
+          if (merged.length !== deletedTenantIds.length) {
+            nextDelIds = merged
+            setDeletedTenantIds(merged)
+            localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(merged))
+          }
+        }
+
+        if (Array.isArray(data.deletedTenantEmails) && data.deletedTenantEmails.length > 0) {
+          const mergedEmails = Array.from(
+            new Set([...deletedTenantEmails, ...data.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())])
+          )
+          if (mergedEmails.length !== deletedTenantEmails.length) {
+            nextDelEmails = mergedEmails
+            setDeletedTenantEmails(mergedEmails)
+            localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(mergedEmails))
+          }
+        }
+
         if (Array.isArray(data.tenants)) {
-          setTenants(data.tenants)
+          // Strictly prune against all server & local tombstones
+          const cleanTenants = data.tenants.filter(
+            t => !nextDelIds.includes(t.id) && (!t.email || !nextDelEmails.includes((t.email || '').toLowerCase().trim()))
+          )
+          setTenants(cleanTenants)
+          localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(cleanTenants))
+
+          // Clean scoped local workspace storage for any tombstoned accounts
+          nextDelIds.forEach(id => {
+            try { localStorage.removeItem(`barber_ws_${id}`) } catch (e) {}
+          })
         }
         if (data.saasConfig) {
           setSaasConfig(data.saasConfig)
@@ -428,17 +510,45 @@ export default function App() {
   }
 
   useEffect(() => {
-    // 1. Upload any existing local accounts from this browser (phone or PC) to server DB so nothing is lost
+    // 1. Upload any existing local accounts from this browser (phone or PC) to server DB so nothing is lost,
+    // exchanging tombstones so deleted accounts NEVER resurrect across devices or deploys.
     const syncInitial = async () => {
       try {
+        const cleanLocalTenants = tenants.filter(t => !isTenantTombstoned(t))
         const res = await fetch('/api/tenants/sync-local', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenants })
+          body: JSON.stringify({
+            tenants: cleanLocalTenants,
+            deletedTenantIds,
+            deletedTenantEmails
+          })
         })
         if (res.ok) {
           const data = await res.json()
-          if (Array.isArray(data.tenants)) setTenants(data.tenants)
+          let nextDelIds = deletedTenantIds
+          let nextDelEmails = deletedTenantEmails
+
+          if (Array.isArray(data.deletedTenantIds)) {
+            nextDelIds = Array.from(new Set([...deletedTenantIds, ...data.deletedTenantIds]))
+            setDeletedTenantIds(nextDelIds)
+            localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
+          }
+          if (Array.isArray(data.deletedTenantEmails)) {
+            nextDelEmails = Array.from(
+              new Set([...deletedTenantEmails, ...data.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())])
+            )
+            setDeletedTenantEmails(nextDelEmails)
+            localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
+          }
+
+          if (Array.isArray(data.tenants)) {
+            const cleanServerTenants = data.tenants.filter(
+              t => !nextDelIds.includes(t.id) && (!t.email || !nextDelEmails.includes((t.email || '').toLowerCase().trim()))
+            )
+            setTenants(cleanServerTenants)
+            localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(cleanServerTenants))
+          }
           if (data.saasConfig) setSaasConfig(data.saasConfig)
         }
       } catch (e) {
@@ -455,16 +565,20 @@ export default function App() {
     return () => clearInterval(interval)
   }, [])
 
-  const pushTenantUpsertToServer = async (tenantObj) => {
+  const pushTenantUpsertToServer = async (tenantObj, isNew = false) => {
     try {
       const res = await fetch('/api/tenants/upsert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant: tenantObj })
+        body: JSON.stringify({ tenant: tenantObj, isNewRegistration: isNew })
       })
       if (res.ok) {
         const data = await res.json()
-        if (Array.isArray(data.tenants)) setTenants(data.tenants)
+        if (Array.isArray(data.tenants)) {
+          const cleanTenants = data.tenants.filter(t => !isTenantTombstoned(t))
+          setTenants(cleanTenants)
+          localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(cleanTenants))
+        }
       }
     } catch (e) {
       console.warn('Offline tenant upsert')
@@ -699,6 +813,16 @@ export default function App() {
   }
 
   const handleRegisterNewTenant = async (newTenant) => {
+    const cleanEmail = (newTenant.email || '').toLowerCase().trim()
+
+    // Un-blacklist if previously deleted so user can legitimately register again
+    const nextDelIds = deletedTenantIds.filter(id => id !== newTenant.id)
+    const nextDelEmails = deletedTenantEmails.filter(e => e !== cleanEmail)
+    setDeletedTenantIds(nextDelIds)
+    setDeletedTenantEmails(nextDelEmails)
+    localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
+    localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
+
     // Brand new account starts clean for this tenantId
     const freshWorkspace = {
       transactions: [],
@@ -734,7 +858,7 @@ export default function App() {
     setAppointments([])
     setBusinessProfile(freshWorkspace.businessProfile)
 
-    setTenants(prev => [newTenant, ...prev])
+    setTenants(prev => [newTenant, ...prev.filter(t => t.id !== newTenant.id && (t.email || '').toLowerCase().trim() !== cleanEmail)])
     setActiveTenantId(newTenant.id)
     setCachedActiveTenant(newTenant)
     localStorage.setItem('barber_logged_tenant_id', newTenant.id)
@@ -742,7 +866,7 @@ export default function App() {
     setIsAuthModalOpen(false)
     cleanUrlAuthParams()
 
-    await pushTenantUpsertToServer(newTenant)
+    await pushTenantUpsertToServer(newTenant, true)
     try {
       await fetch(`/api/workspace/${encodeURIComponent(newTenant.id)}`, {
         method: 'POST',
@@ -771,20 +895,126 @@ export default function App() {
   }
 
   const handleDeleteTenant = async (tenantId) => {
-    setTenants(prev => prev.filter(t => t.id !== tenantId))
+    const targetTenant = tenants.find(t => t.id === tenantId)
+    const targetEmail = (targetTenant?.email || '').toLowerCase().trim()
+
+    // Add to tombstones immediately in state and localStorage to prevent any resurrection
+    const nextDelIds = Array.from(new Set([...deletedTenantIds, tenantId]))
+    const nextDelEmails = targetEmail
+      ? Array.from(new Set([...deletedTenantEmails, targetEmail]))
+      : deletedTenantEmails
+    setDeletedTenantIds(nextDelIds)
+    setDeletedTenantEmails(nextDelEmails)
+    localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
+    localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
+
+    // Remove from local tenants
+    const remaining = tenants.filter(
+      t => t.id !== tenantId && (!targetEmail || (t.email || '').toLowerCase().trim() !== targetEmail)
+    )
+    setTenants(remaining)
+    localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(remaining))
+
+    // Remove isolated workspace from localStorage
+    try { localStorage.removeItem(`barber_ws_${tenantId}`) } catch (e) {}
+
+    // If currently logged into this tenant, log out cleanly
+    if (activeTenantId === tenantId) {
+      setActiveTenantId(null)
+      setCachedActiveTenant(null)
+      localStorage.removeItem('barber_logged_tenant_id')
+      localStorage.removeItem('barber_logged_tenant')
+    }
+
     try {
       const res = await fetch('/api/tenants/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: tenantId })
+        body: JSON.stringify({ id: tenantId, email: targetEmail })
       })
       if (res.ok) {
         const data = await res.json()
-        if (Array.isArray(data.tenants)) setTenants(data.tenants)
+        if (Array.isArray(data.tenants)) {
+          const cleanTenants = data.tenants.filter(
+            t => !nextDelIds.includes(t.id) && (!t.email || !nextDelEmails.includes((t.email || '').toLowerCase().trim()))
+          )
+          setTenants(cleanTenants)
+          localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(cleanTenants))
+        }
       }
     } catch (e) {
-      console.warn('Offline delete')
+      console.warn('Offline delete registered in local blacklist')
     }
+  }
+
+  const handlePurgeTestAccounts = async (specificIds = null) => {
+    try {
+      const res = await fetch('/api/tenants/purge-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminPin: saasConfig?.adminPin || '2026',
+          tenantIds: specificIds
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        let nextDelIds = deletedTenantIds
+        let nextDelEmails = deletedTenantEmails
+
+        if (Array.isArray(data.deletedTenantIds)) {
+          nextDelIds = Array.from(new Set([...deletedTenantIds, ...data.deletedTenantIds]))
+          setDeletedTenantIds(nextDelIds)
+          localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
+        }
+        if (Array.isArray(data.deletedTenantEmails)) {
+          nextDelEmails = Array.from(
+            new Set([...deletedTenantEmails, ...data.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())])
+          )
+          setDeletedTenantEmails(nextDelEmails)
+          localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
+        }
+        if (Array.isArray(data.tenants)) {
+          const cleanTenants = data.tenants.filter(
+            t => !nextDelIds.includes(t.id) && (!t.email || !nextDelEmails.includes((t.email || '').toLowerCase().trim()))
+          )
+          setTenants(cleanTenants)
+          localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(cleanTenants))
+        }
+
+        // Clean workspaces
+        nextDelIds.forEach(id => {
+          try { localStorage.removeItem(`barber_ws_${id}`) } catch (e) {}
+        })
+
+        return { ok: true, count: data.purgedCount || 0 }
+      }
+    } catch (e) {
+      console.warn('Purge test accounts offline fallback', e)
+    }
+
+    // Local fallback
+    const unshielded = tenants.filter(t => !t.isShielded && t.id !== 'ten_1' && (!specificIds || specificIds.includes(t.id)))
+    const idsToPurge = unshielded.map(t => t.id)
+    const emailsToPurge = unshielded.map(t => (t.email || '').toLowerCase().trim()).filter(Boolean)
+
+    const nextDelIds = Array.from(new Set([...deletedTenantIds, ...idsToPurge]))
+    const nextDelEmails = Array.from(new Set([...deletedTenantEmails, ...emailsToPurge]))
+
+    setDeletedTenantIds(nextDelIds)
+    setDeletedTenantEmails(nextDelEmails)
+    localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
+    localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
+
+    const remaining = tenants.filter(t => !idsToPurge.includes(t.id))
+    setTenants(remaining)
+    localStorage.setItem('barber_saas_tenants_v2', JSON.stringify(remaining))
+
+    idsToPurge.forEach(id => {
+      try { localStorage.removeItem(`barber_ws_${id}`) } catch (e) {}
+    })
+
+    return { ok: true, count: idsToPurge.length }
   }
 
   const handleClearDemoTenants = () => {
@@ -1026,6 +1256,7 @@ export default function App() {
         onDeleteTenant={handleDeleteTenant}
         onClearDemoTenants={handleClearDemoTenants}
         onRestoreDemoTenants={handleRestoreDemoTenants}
+        onPurgeTestAccounts={handlePurgeTestAccounts}
         saasConfig={saasConfig}
         onSaveSaasConfig={pushConfigToServer}
         onRefreshServer={fetchServerBootstrap}

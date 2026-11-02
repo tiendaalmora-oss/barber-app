@@ -87,9 +87,20 @@ function loadDb() {
       const raw = fs.readFileSync(DB_FILE, 'utf8')
       if (raw && raw.trim().length > 10) {
         const parsed = JSON.parse(raw)
+        const deletedIds = Array.isArray(parsed.deletedTenantIds) ? parsed.deletedTenantIds : []
+        const deletedEmails = Array.isArray(parsed.deletedTenantEmails)
+          ? parsed.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())
+          : []
+        const rawTenants = Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS
+        // Strict prune against tombstone blacklist so deleted accounts never resurrect from disk
+        const cleanTenants = rawTenants.filter(
+          t => !deletedIds.includes(t.id) && (!t.email || !deletedEmails.includes((t.email || '').toLowerCase().trim()))
+        )
         return {
           saasConfig: { ...DEFAULT_SAAS_CONFIG, ...(parsed.saasConfig || {}) },
-          tenants: Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS,
+          tenants: cleanTenants,
+          deletedTenantIds: deletedIds,
+          deletedTenantEmails: deletedEmails,
           workspaces: parsed.workspaces || {}
         }
       }
@@ -107,8 +118,23 @@ function loadDb() {
         if (raw && raw.trim().length > 10) {
           const parsed = JSON.parse(raw)
           console.log('Successfully recovered database from saas_db_latest.bak!')
-          saveDb(parsed)
-          return parsed
+          const deletedIds = Array.isArray(parsed.deletedTenantIds) ? parsed.deletedTenantIds : []
+          const deletedEmails = Array.isArray(parsed.deletedTenantEmails)
+            ? parsed.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())
+            : []
+          const rawTenants = Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS
+          const cleanTenants = rawTenants.filter(
+            t => !deletedIds.includes(t.id) && (!t.email || !deletedEmails.includes((t.email || '').toLowerCase().trim()))
+          )
+          const recovered = {
+            saasConfig: { ...DEFAULT_SAAS_CONFIG, ...(parsed.saasConfig || {}) },
+            tenants: cleanTenants,
+            deletedTenantIds: deletedIds,
+            deletedTenantEmails: deletedEmails,
+            workspaces: parsed.workspaces || {}
+          }
+          saveDb(recovered)
+          return recovered
         }
       }
     }
@@ -119,6 +145,8 @@ function loadDb() {
   const initial = {
     saasConfig: DEFAULT_SAAS_CONFIG,
     tenants: DEFAULT_TENANTS,
+    deletedTenantIds: [],
+    deletedTenantEmails: [],
     workspaces: {}
   }
   saveDb(initial)
@@ -192,7 +220,9 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/api/bootstrap' && req.method === 'GET') {
     return sendJson(res, 200, {
       saasConfig: db.saasConfig,
-      tenants: db.tenants
+      tenants: db.tenants,
+      deletedTenantIds: db.deletedTenantIds || [],
+      deletedTenantEmails: db.deletedTenantEmails || []
     })
   }
 
@@ -209,8 +239,33 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req)
     const tenant = body.tenant
     if (tenant && tenant.id) {
+      const lowerEmail = (tenant.email || '').toLowerCase().trim()
+
+      // If new registration or explicit un-delete, release from tombstones
+      if (body.isNewRegistration || body.allowResurrection) {
+        if (db.deletedTenantIds) {
+          db.deletedTenantIds = db.deletedTenantIds.filter(id => id !== tenant.id)
+        }
+        if (db.deletedTenantEmails && lowerEmail) {
+          db.deletedTenantEmails = db.deletedTenantEmails.filter(e => e.toLowerCase().trim() !== lowerEmail)
+        }
+      } else {
+        // Strict guard: if account was deleted, prevent ghost resurrection
+        const isTombstoned = (db.deletedTenantIds || []).includes(tenant.id) ||
+          (lowerEmail && (db.deletedTenantEmails || []).includes(lowerEmail))
+        if (isTombstoned) {
+          return sendJson(res, 200, {
+            ok: false,
+            error: 'Tenant has been permanently deleted',
+            tenants: db.tenants,
+            deletedTenantIds: db.deletedTenantIds || [],
+            deletedTenantEmails: db.deletedTenantEmails || []
+          })
+        }
+      }
+
       const idx = db.tenants.findIndex(
-        t => t.id === tenant.id || (tenant.email && t.email.toLowerCase() === tenant.email.toLowerCase())
+        t => t.id === tenant.id || (lowerEmail && (t.email || '').toLowerCase().trim() === lowerEmail)
       )
       if (idx >= 0) {
         db.tenants[idx] = { ...db.tenants[idx], ...tenant }
@@ -219,35 +274,146 @@ const server = http.createServer(async (req, res) => {
       }
       saveDb()
     }
-    return sendJson(res, 200, { ok: true, tenants: db.tenants })
+    return sendJson(res, 200, {
+      ok: true,
+      tenants: db.tenants,
+      deletedTenantIds: db.deletedTenantIds || [],
+      deletedTenantEmails: db.deletedTenantEmails || []
+    })
   }
 
   if (pathname === '/api/tenants/sync-local' && req.method === 'POST') {
-    // Merges any locally created tenants from browser storage into server DB without losing server updates
+    // Merges local accounts with bidirectional tombstone sync so deleted accounts NEVER resurrect
     const body = await parseBody(req)
     const localTenants = Array.isArray(body.tenants) ? body.tenants : []
-    let changed = false
+    const clientDelIds = Array.isArray(body.deletedTenantIds) ? body.deletedTenantIds : []
+    const clientDelEmails = Array.isArray(body.deletedTenantEmails)
+      ? body.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())
+      : []
+
+    const idSet = new Set(db.deletedTenantIds || [])
+    const emailSet = new Set((db.deletedTenantEmails || []).map(e => (e || '').toLowerCase().trim()))
+
+    let tombstonesChanged = false
+    clientDelIds.forEach(id => {
+      if (id && !idSet.has(id)) { idSet.add(id); tombstonesChanged = true }
+    })
+    clientDelEmails.forEach(em => {
+      if (em && !emailSet.has(em)) { emailSet.add(em); tombstonesChanged = true }
+    })
+
+    if (tombstonesChanged) {
+      db.deletedTenantIds = Array.from(idSet)
+      db.deletedTenantEmails = Array.from(emailSet)
+    }
+
+    // Prune server db.tenants of any tombstoned accounts
+    const initialLen = db.tenants.length
+    db.tenants = db.tenants.filter(
+      t => !idSet.has(t.id) && (!t.email || !emailSet.has((t.email || '').toLowerCase().trim()))
+    )
+    let changed = tombstonesChanged || (db.tenants.length !== initialLen)
+
     for (const lt of localTenants) {
       if (!lt || !lt.email) continue
       if (['ten_2', 'ten_3', 'ten_4'].includes(lt.id)) continue
-      const exists = db.tenants.find(t => t.email.toLowerCase() === lt.email.toLowerCase() || t.id === lt.id)
+      const lowerEmail = lt.email.toLowerCase().trim()
+      // Strict guard: account was deleted permanently, do NOT resurrect!
+      if (idSet.has(lt.id) || emailSet.has(lowerEmail)) {
+        continue
+      }
+      const exists = db.tenants.find(t => (t.email || '').toLowerCase().trim() === lowerEmail || t.id === lt.id)
       if (!exists) {
         db.tenants.unshift(lt)
         changed = true
       }
     }
     if (changed) saveDb()
-    return sendJson(res, 200, { ok: true, tenants: db.tenants, saasConfig: db.saasConfig })
+    return sendJson(res, 200, {
+      ok: true,
+      tenants: db.tenants,
+      deletedTenantIds: db.deletedTenantIds || [],
+      deletedTenantEmails: db.deletedTenantEmails || [],
+      saasConfig: db.saasConfig
+    })
   }
 
   if (pathname === '/api/tenants/delete' && req.method === 'POST') {
     const body = await parseBody(req)
-    if (body.id) {
-      db.tenants = db.tenants.filter(t => t.id !== body.id)
+    if (body && body.id) {
+      const targetTenant = db.tenants.find(t => t.id === body.id)
+      const targetEmail = (body.email || targetTenant?.email || '').toLowerCase().trim()
+
+      const idSet = new Set(db.deletedTenantIds || [])
+      const emailSet = new Set((db.deletedTenantEmails || []).map(e => (e || '').toLowerCase().trim()))
+
+      idSet.add(body.id)
+      if (targetEmail) emailSet.add(targetEmail)
+
+      db.deletedTenantIds = Array.from(idSet)
+      db.deletedTenantEmails = Array.from(emailSet)
+      db.tenants = db.tenants.filter(
+        t => t.id !== body.id && (!targetEmail || (t.email || '').toLowerCase().trim() !== targetEmail)
+      )
       delete db.workspaces[body.id]
       saveDb()
     }
-    return sendJson(res, 200, { ok: true, tenants: db.tenants })
+    return sendJson(res, 200, {
+      ok: true,
+      tenants: db.tenants,
+      deletedTenantIds: db.deletedTenantIds || [],
+      deletedTenantEmails: db.deletedTenantEmails || []
+    })
+  }
+
+  if (pathname === '/api/tenants/purge-test' && req.method === 'POST') {
+    const body = await parseBody(req)
+    const masterPin = db.saasConfig?.adminPin || '2026'
+    if (body?.adminPin && body.adminPin.trim() !== masterPin) {
+      return sendJson(res, 401, { error: 'PIN Maestro incorrecto' })
+    }
+
+    const idSet = new Set(db.deletedTenantIds || [])
+    const emailSet = new Set((db.deletedTenantEmails || []).map(e => (e || '').toLowerCase().trim()))
+
+    let purgedCount = 0
+    const remainingTenants = []
+
+    for (const t of db.tenants) {
+      // 100% PROTECTED:
+      // - Shielded VIP accounts (isShielded: true)
+      // - Official Demo account (ten_1)
+      if (t.isShielded || t.id === 'ten_1') {
+        remainingTenants.push(t)
+        continue
+      }
+
+      // If specific ids are provided, only purge those; otherwise purge all unshielded test accounts
+      if (Array.isArray(body?.tenantIds) && body.tenantIds.length > 0) {
+        if (!body.tenantIds.includes(t.id)) {
+          remainingTenants.push(t)
+          continue
+        }
+      }
+
+      idSet.add(t.id)
+      if (t.email) emailSet.add(t.email.toLowerCase().trim())
+      delete db.workspaces[t.id]
+      purgedCount++
+    }
+
+    db.deletedTenantIds = Array.from(idSet)
+    db.deletedTenantEmails = Array.from(emailSet)
+    db.tenants = remainingTenants
+    saveDb()
+
+    return sendJson(res, 200, {
+      ok: true,
+      purgedCount,
+      tenants: db.tenants,
+      deletedTenantIds: db.deletedTenantIds,
+      deletedTenantEmails: db.deletedTenantEmails
+    })
   }
 
   if (pathname.startsWith('/api/workspace/')) {
@@ -307,6 +473,8 @@ const server = http.createServer(async (req, res) => {
       db = {
         saasConfig: { ...DEFAULT_SAAS_CONFIG, ...body.saasConfig },
         tenants: body.tenants,
+        deletedTenantIds: Array.isArray(body.deletedTenantIds) ? body.deletedTenantIds : (db.deletedTenantIds || []),
+        deletedTenantEmails: Array.isArray(body.deletedTenantEmails) ? body.deletedTenantEmails : (db.deletedTenantEmails || []),
         workspaces: body.workspaces || {}
       }
       saveDb()
