@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react'
-import { X, Store, Upload, Image, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck, Copy } from 'lucide-react'
+import React, { useState, useRef, useEffect } from 'react'
+import { X, Store, Upload, Image as ImageIcon, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck, Copy } from 'lucide-react'
 import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN, DEFAULT_WEEKLY_SCHEDULE } from '../lib/mockData'
 import { DAYS_OF_WEEK } from '../lib/dateUtils'
+import { getActiveBrand } from '../lib/brandConfig'
 
 const LOGO_PRESETS = [
   { id: 'p1', label: '💈 Navaja Dorada', url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200&h=200&fit=crop&crop=faces&q=80' },
@@ -15,12 +16,25 @@ export default function BusinessSettingsModal({
   isOpen,
   onClose,
   businessProfile,
-  onSaveProfile
+  onSaveProfile,
+  activeTenant
 }) {
+  const brand = getActiveBrand(activeTenant)
+  const isGlam = brand?.code === 'glamos'
+
+  // ALL hooks declared at top level before any conditional return
   const [form, setForm] = useState(businessProfile || {})
   const [activeTab, setActiveTab] = useState('perfil') // 'perfil' | 'logo' | 'pagos'
   const [savedToast, setSavedToast] = useState(false)
+  const [selectedDay, setSelectedDay] = useState('lunes')
   const fileInputRef = useRef(null)
+
+  // Keep form synchronized when businessProfile is updated or modal opens
+  useEffect(() => {
+    if (businessProfile) {
+      setForm(businessProfile)
+    }
+  }, [businessProfile, isOpen])
 
   if (!isOpen) return null
 
@@ -31,7 +45,7 @@ export default function BusinessSettingsModal({
 
     const reader = new FileReader()
     reader.onload = (event) => {
-      const img = new Image()
+      const img = new window.Image()
       img.onload = () => {
         const canvas = document.createElement('canvas')
         const maxDim = 256
@@ -78,8 +92,6 @@ export default function BusinessSettingsModal({
       setForm({ ...form, paymentMethods: [...current, method] })
     }
   }
-
-  const [selectedDay, setSelectedDay] = useState('lunes')
 
   const getWeeklySchedule = () => {
     if (form.weeklySchedule && typeof form.weeklySchedule === 'object' && Object.keys(form.weeklySchedule).length > 0) {
@@ -186,7 +198,7 @@ export default function BusinessSettingsModal({
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-dark-800">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gold-500/15 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <div className={`w-10 h-10 rounded-2xl ${isGlam ? 'bg-pink-500/15 border-pink-500/30 text-pink-400' : 'bg-gold-500/15 border-gold-500/30 text-gold-400'} border flex items-center justify-center`}>
               <Store className="w-5 h-5" />
             </div>
             <div>
@@ -200,7 +212,7 @@ export default function BusinessSettingsModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl bg-dark-800 text-slate-400 hover:text-white"
+            className="p-1.5 rounded-xl bg-dark-800 text-slate-400 hover:text-white cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -211,8 +223,10 @@ export default function BusinessSettingsModal({
           <button
             type="button"
             onClick={() => setActiveTab('perfil')}
-            className={`py-2 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'perfil' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
+            className={`py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'perfil' 
+                ? (isGlam ? 'bg-pink-500 text-white shadow-md' : 'bg-gold-500 text-black shadow-md') 
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             Datos del Local
@@ -220,8 +234,10 @@ export default function BusinessSettingsModal({
           <button
             type="button"
             onClick={() => setActiveTab('logo')}
-            className={`py-2 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'logo' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
+            className={`py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'logo' 
+                ? (isGlam ? 'bg-pink-500 text-white shadow-md' : 'bg-gold-500 text-black shadow-md') 
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             Logo / Foto
@@ -229,8 +245,10 @@ export default function BusinessSettingsModal({
           <button
             type="button"
             onClick={() => setActiveTab('pagos')}
-            className={`py-2 rounded-xl text-xs font-black transition-all ${
-              activeTab === 'pagos' ? 'bg-gold-500 text-black shadow-md' : 'text-slate-400 hover:text-white'
+            className={`py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === 'pagos' 
+                ? (isGlam ? 'bg-pink-500 text-white shadow-md' : 'bg-gold-500 text-black shadow-md') 
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             Pagos & Promos
@@ -512,7 +530,7 @@ export default function BusinessSettingsModal({
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-dark-850 border border-dark-750 flex flex-col sm:flex-row items-center gap-4">
                 {/* Logo Preview */}
-                <div className="w-24 h-24 rounded-2xl bg-dark-900 border-2 border-dashed border-gold-500/40 flex items-center justify-center overflow-hidden shrink-0 relative group">
+                <div className={`w-24 h-24 rounded-2xl bg-dark-900 border-2 border-dashed ${isGlam ? 'border-pink-500/40' : 'border-gold-500/40'} flex items-center justify-center overflow-hidden shrink-0 relative group`}>
                   {form.logoUrl ? (
                     <img
                       src={form.logoUrl}
@@ -521,7 +539,7 @@ export default function BusinessSettingsModal({
                     />
                   ) : (
                     <div className="text-center p-2 text-slate-500">
-                      <Image className="w-8 h-8 mx-auto mb-1 text-slate-600" />
+                      <ImageIcon className="w-8 h-8 mx-auto mb-1 text-slate-600" />
                       <span className="text-[10px]">Sin Logo</span>
                     </div>
                   )}
@@ -547,7 +565,11 @@ export default function BusinessSettingsModal({
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3.5 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black text-xs font-black flex items-center gap-1.5 shadow-md"
+                      className={`px-3.5 py-1.5 rounded-xl ${
+                        isGlam 
+                          ? 'bg-pink-500 hover:bg-pink-400 text-white shadow-pink-500/20' 
+                          : 'bg-gold-500 hover:bg-gold-400 text-black shadow-gold-500/20'
+                      } text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer`}
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Subir desde mi Teléfono / PC</span>
@@ -557,7 +579,7 @@ export default function BusinessSettingsModal({
                       <button
                         type="button"
                         onClick={handleRemoveLogo}
-                        className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-700 text-xs font-bold flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-700 text-xs font-bold flex items-center gap-1 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Quitar</span>
@@ -580,9 +602,9 @@ export default function BusinessSettingsModal({
                         key={preset.id}
                         type="button"
                         onClick={() => handleSelectPreset(preset.url)}
-                        className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                        className={`p-2 rounded-xl border flex flex-col items-center gap-1.5 transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-gold-500/20 border-gold-500 text-gold-400 shadow-md'
+                            ? (isGlam ? 'bg-pink-500/20 border-pink-500 text-pink-300 shadow-md' : 'bg-gold-500/20 border-gold-500 text-gold-400 shadow-md')
                             : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white hover:border-dark-700'
                         }`}
                       >
@@ -606,7 +628,7 @@ export default function BusinessSettingsModal({
           {activeTab === 'pagos' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gold-400 mb-1 flex items-center gap-1">
+                <label className={`block text-xs font-bold ${isGlam ? 'text-pink-400' : 'text-gold-400'} mb-1 flex items-center gap-1`}>
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Banner de Promoción Destacada (Aparece arriba en tu link)</span>
                 </label>
@@ -615,7 +637,7 @@ export default function BusinessSettingsModal({
                   value={form.promoBanner || ''}
                   onChange={(e) => setForm({ ...form, promoBanner: e.target.value })}
                   placeholder="Ej. 🔥 Promo de la Semana: Combo Corte + Barba + Cejas por solo $10"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-gold-500/30 text-xs text-gold-300 focus:outline-none focus:border-gold-500"
+                  className={`w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border ${isGlam ? 'border-pink-500/30 text-pink-300 focus:border-pink-500' : 'border-gold-500/30 text-gold-300 focus:border-gold-500'} text-xs focus:outline-none`}
                 />
               </div>
 
@@ -639,7 +661,7 @@ export default function BusinessSettingsModal({
                         key={method}
                         type="button"
                         onClick={() => togglePaymentMethod(method)}
-                        className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between transition-all ${
+                        className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
                           isChecked
                             ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
                             : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
@@ -660,13 +682,17 @@ export default function BusinessSettingsModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 py-3 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 text-xs font-bold"
+              className="flex-1 py-3 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 text-xs font-bold cursor-pointer transition-all"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black text-xs font-black shadow-lg shadow-gold-500/20"
+              className={`flex-1 py-3 rounded-xl ${
+                isGlam
+                  ? 'bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white shadow-pink-500/20'
+                  : 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/20'
+              } text-xs font-black shadow-lg cursor-pointer transition-all active:scale-[0.99]`}
             >
               Guardar Configuración
             </button>
