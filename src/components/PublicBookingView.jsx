@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package, Timer } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, inferServiceDuration, getScheduleForDate, getDayLabelFromDate } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
+import PhoneCountryInput from './PhoneCountryInput'
 
 export default function PublicBookingView({
   businessProfile,
@@ -747,12 +748,10 @@ export default function PublicBookingView({
                   <label className="block text-xs font-bold text-slate-300 mb-1">
                     Tu Teléfono / WhatsApp
                   </label>
-                  <input
-                    type="tel"
-                    placeholder="Ej. 0412-1234567"
+                  <PhoneCountryInput
                     value={clientPhone}
-                    onChange={(e) => setClientPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
+                    onChange={setClientPhone}
+                    required
                   />
                 </div>
               </div>

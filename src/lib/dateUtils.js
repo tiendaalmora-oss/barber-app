@@ -29,12 +29,28 @@ export function normalizeWhatsAppPhone(rawPhone) {
   if (!rawPhone) return ''
   let clean = rawPhone.toString().replace(/[^0-9]/g, '')
   if (clean.startsWith('00')) clean = clean.slice(2)
+
+  // Fix common mistake in Venezuela: +5804... -> strip the redundant 0
+  if (clean.startsWith('5804') && clean.length === 13) {
+    clean = '58' + clean.slice(3)
+  }
+
   // Venezuelan mobile numbers: 0412, 0414, 0424, 0416, 0426
   if (clean.startsWith('04') && clean.length === 11) {
     clean = '58' + clean.slice(1)
   } else if (clean.startsWith('4') && clean.length === 10) {
     clean = '58' + clean
   }
+
+  // Argentine mobile numbers for WhatsApp (requires +54 9):
+  if (clean.startsWith('54') && !clean.startsWith('549') && clean.length === 12) {
+    clean = '549' + clean.slice(2)
+  } else if (clean.startsWith('11') && clean.length === 10) {
+    clean = '549' + clean
+  } else if (clean.startsWith('011') && clean.length === 11) {
+    clean = '549' + clean.slice(1)
+  }
+
   return clean
 }
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { AlertCircle, CheckCircle2, MessageCircle, Crown, Phone, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import PhoneCountryInput from './PhoneCountryInput'
 
 export default function DebtsClientsView({
   clients,
@@ -16,7 +17,7 @@ export default function DebtsClientsView({
 
   // Form state
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('+58412')
+  const [phone, setPhone] = useState('')
   const [debtUsd, setDebtUsd] = useState('0')
   const [plan, setPlan] = useState('Cliente Regular')
   const [planRenueva, setPlanRenueva] = useState('15 de cada mes')
@@ -24,7 +25,7 @@ export default function DebtsClientsView({
   const openCreateModal = () => {
     setEditingClient(null)
     setName('')
-    setPhone('+58412')
+    setPhone('')
     setDebtUsd('0')
     setPlan(activeSubTab === 'membresias' ? 'Suscripción VIP (4 Cortes/Mes)' : 'Cliente Regular')
     setPlanRenueva('15 de cada mes')
@@ -34,7 +35,7 @@ export default function DebtsClientsView({
   const openEditModal = (c) => {
     setEditingClient(c)
     setName(c.name)
-    setPhone(c.phone || '+58412')
+    setPhone(c.phone || '')
     setDebtUsd(String(c.debt_usd || 0))
     setPlan(c.plan || 'Cliente Regular')
     setPlanRenueva(c.plan_renueva || '15 de cada mes')
@@ -436,13 +437,10 @@ export default function DebtsClientsView({
                   <label className="block text-xs font-bold text-slate-300 mb-1">
                     WhatsApp / Teléfono
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej. +584121234567"
+                  <PhoneCountryInput
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
+                    onChange={setPhone}
+                    required
                   />
                 </div>
               </div>

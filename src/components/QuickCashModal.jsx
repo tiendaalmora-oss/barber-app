@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle } from 'lucide-react'
+import PhoneCountryInput from './PhoneCountryInput'
 
 export default function QuickCashModal({
   isOpen,
@@ -459,12 +460,10 @@ export default function QuickCashModal({
               </datalist>
             </div>
             <div>
-              <input
-                type="tel"
-                placeholder="WhatsApp (ej. +584121234567)"
+              <PhoneCountryInput
                 value={clientPhone}
-                onChange={(e) => setClientPhone(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-dark-800 border border-dark-700 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-gold-500"
+                onChange={setClientPhone}
+                placeholder="WhatsApp del cliente"
               />
             </div>
           </div>

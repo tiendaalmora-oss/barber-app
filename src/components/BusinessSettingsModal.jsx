@@ -3,6 +3,7 @@ import { X, Store, Upload, Image as ImageIcon, Phone, MapPin, Clock, Instagram, 
 import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN, DEFAULT_WEEKLY_SCHEDULE } from '../lib/mockData'
 import { DAYS_OF_WEEK } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
+import PhoneCountryInput from './PhoneCountryInput'
 
 const LOGO_PRESETS = [
   { id: 'p1', label: '💈 Navaja Dorada', url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=200&h=200&fit=crop&crop=faces&q=80' },
@@ -298,15 +299,13 @@ export default function BusinessSettingsModal({
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1">
                     <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>WhatsApp de Atención (con código de país)</span>
+                    <span>WhatsApp de Atención del Local</span>
                   </label>
-                  <input
-                    type="tel"
-                    required
+                  <PhoneCountryInput
                     value={form.whatsapp || ''}
-                    onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                    placeholder="+584121234567"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
+                    onChange={(val) => setForm({ ...form, whatsapp: val })}
+                    isGlam={isGlam}
+                    required
                   />
                 </div>
                 <div>
