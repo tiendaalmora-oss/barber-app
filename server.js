@@ -431,16 +431,21 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req)
       const currentWs = db.workspaces[tenantId] || {}
 
-      let finalAppointments = Array.isArray(body.appointments) ? body.appointments : (currentWs.appointments || [])
+      const existingApts = Array.isArray(currentWs.appointments) ? currentWs.appointments : []
+      let incomingApts = Array.isArray(body.appointments) ? body.appointments : existingApts
 
       // If a single new appointment is provided (e.g. from public client booking)
       if (body.newAppointment && body.newAppointment.id) {
-        const existingApts = currentWs.appointments || []
-        const exists = existingApts.some(a => a.id === body.newAppointment.id)
+        const exists = incomingApts.some(a => a.id === body.newAppointment.id)
         if (!exists) {
-          finalAppointments = [body.newAppointment, ...existingApts]
+          incomingApts = [body.newAppointment, ...incomingApts]
         }
       }
+
+      // Merge: preserve any appointments existing on server that were not in incomingApts unless cancelled
+      const incomingIds = new Set(incomingApts.map(a => a.id))
+      const preservedApts = existingApts.filter(a => !incomingIds.has(a.id) && a.status !== 'cancelada')
+      const finalAppointments = [...incomingApts, ...preservedApts]
 
       db.workspaces[tenantId] = {
         ...currentWs,

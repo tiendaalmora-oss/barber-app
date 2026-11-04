@@ -16,7 +16,8 @@ export default function RetargetingView({
   const [configForm, setConfigForm] = useState(retargetingConfig)
   const [savedToast, setSavedToast] = useState(false)
 
-  const publicUrl = `${window.location.origin}/?reserva=1`
+  const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
+  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}`
 
   // Calculate days since last visit (Resilient with ISO strings and pure YYYY-MM-DD)
   const getDaysSince = (dateStr) => {

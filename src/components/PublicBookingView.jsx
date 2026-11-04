@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package, Timer } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, inferServiceDuration, getScheduleForDate, getDayLabelFromDate } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, isTimeSlotInPast, inferServiceDuration, getScheduleForDate, getDayLabelFromDate } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 import PhoneCountryInput from './PhoneCountryInput'
 
@@ -49,8 +49,13 @@ export default function PublicBookingView({
   const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff)
   const selectedDuration = currentServiceObj?.duration_min || inferServiceDuration(currentServiceObj)
 
+  // Helper to check if a slot is already in the past on the selected date
+  const isSlotInPast = (timeStr) => {
+    return isTimeSlotInPast(timeStr, selectedDate, 10)
+  }
+
   // Check if a slot is already booked in the owner's calendar (duration-aware & staff-aware)
-  const isSlotTaken = (timeStr) => {
+  const isSlotBooked = (timeStr) => {
     if (!Array.isArray(appointments) || appointments.length === 0) return false
     const reqStart = timeToMinutes(timeStr)
     const reqEnd = reqStart + (selectedDuration || 30)
@@ -80,22 +85,48 @@ export default function PublicBookingView({
     }
 
     // Case 2: Customer selected "El 1ro Libre" ('any')
-    // Slot is taken ONLY if all barbers/workers are busy during this time window
+    // Slot is booked ONLY if all barbers/workers are busy during this time window
     if (selectedStaff === 'any') {
-      return overlappingApts.length >= totalStaffCount
+      const busyStaffIds = new Set()
+      let unassignedCount = 0
+      for (const apt of overlappingApts) {
+        if (!apt.staff_id && !apt.staff_name) {
+          unassignedCount++
+        } else {
+          const directMatch = staffList.find(s => s.id === apt.staff_id || s.name === apt.staff_id || s.name === apt.staff_name)
+          if (directMatch) {
+            busyStaffIds.add(directMatch.id)
+          } else {
+            busyStaffIds.add(apt.staff_id || apt.staff_name)
+          }
+        }
+      }
+      return (busyStaffIds.size + unassignedCount) >= totalStaffCount
     }
 
     // Case 3: Customer selected a specific staff member
     return overlappingApts.some(apt => {
-      return apt.staff_id === selectedStaff || !apt.staff_id
+      if (apt.staff_id === selectedStaff) return true
+      const staffObj = staffList.find(s => s.id === selectedStaff)
+      if (staffObj && (apt.staff_name === staffObj.name || apt.staff_id === staffObj.name)) return true
+      if (!apt.staff_id && !apt.staff_name) return true
+      return false
     })
   }
+
+  // Unified slot availability helper
+  const isSlotUnavailable = (timeStr) => {
+    return isSlotInPast(timeStr) || isSlotBooked(timeStr)
+  }
+
+  // Backward compatibility alias
+  const isSlotTaken = (timeStr) => isSlotUnavailable(timeStr)
 
   // Auto-switch selectedTime if user changes date or staff and current slot is occupied or unavailable on this day
   useEffect(() => {
     if (activeSlots.length === 0) return
-    if (!activeSlots.includes(selectedTime) || isSlotTaken(selectedTime)) {
-      const firstFree = activeSlots.find(s => !isSlotTaken(s))
+    if (!activeSlots.includes(selectedTime) || isSlotUnavailable(selectedTime)) {
+      const firstFree = activeSlots.find(s => !isSlotUnavailable(s))
       if (firstFree) setSelectedTime(firstFree)
     }
   }, [selectedDate, selectedStaff, appointments, selectedService, activeSlots])
@@ -104,9 +135,10 @@ export default function PublicBookingView({
   const afternoonSlots = activeSlots.filter(s => timeToMinutes(s) >= 720 && timeToMinutes(s) < 1020)
   const eveningSlots = activeSlots.filter(s => timeToMinutes(s) >= 1020)
 
-  const morningFree = morningSlots.filter(s => !isSlotTaken(s)).length
-  const afternoonFree = afternoonSlots.filter(s => !isSlotTaken(s)).length
-  const eveningFree = eveningSlots.filter(s => !isSlotTaken(s)).length
+  const morningFree = morningSlots.filter(s => !isSlotUnavailable(s)).length
+  const afternoonFree = afternoonSlots.filter(s => !isSlotUnavailable(s)).length
+  const eveningFree = eveningSlots.filter(s => !isSlotUnavailable(s)).length
+  const allTodayUnavailable = activeSlots.length > 0 && activeSlots.every(s => isSlotUnavailable(s))
 
   const displayedSlots = activeSlots.filter(slot => {
     if (timePeriodFilter === 'all') return true
@@ -134,7 +166,11 @@ export default function PublicBookingView({
     }
 
     const normTime = normalizeTimeSlot(selectedTime)
-    if (isSlotTaken(selectedTime)) {
+    if (isSlotInPast(selectedTime)) {
+      alert('⚠️ Este turno ya ha transcurrido. Por favor selecciona una hora disponible más tarde o para mañana.')
+      return
+    }
+    if (isSlotBooked(selectedTime)) {
       alert('⚠️ Este turno acaba de ser reservado por otro cliente. Por favor selecciona otra hora disponible.')
       return
     }
@@ -155,7 +191,10 @@ export default function PublicBookingView({
           const aEnd = aStart + aDur
           return Math.max(reqStart, aStart) < Math.min(reqEnd, aEnd)
         })
-        .map(apt => apt.staff_id)
+        .map(apt => {
+          const directMatch = staffList.find(s => s.id === apt.staff_id || s.name === apt.staff_id || s.name === apt.staff_name)
+          return directMatch ? directMatch.id : apt.staff_id
+        })
       
       const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
       assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
@@ -667,10 +706,30 @@ export default function PublicBookingView({
                   </div>
                 ) : (
                   <>
+                    {/* Alerta inteligente si se agotaron o pasaron los turnos de hoy */}
+                    {allTodayUnavailable && selectedDate === getTodayStr() && (
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-center space-y-1.5 my-2">
+                        <p className="text-xs font-bold text-amber-300">
+                          ⚡ Ya no quedan turnos disponibles para el día de hoy
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          Las horas de hoy ya transcurrieron o fueron reservadas.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDate(getTomorrowStr())}
+                          className="mt-1 px-3 py-1.5 rounded-lg bg-gold-500 hover:bg-gold-400 text-black text-xs font-black shadow-md transition-all inline-flex items-center gap-1.5"
+                        >
+                          <CalendarIcon className="w-3.5 h-3.5" />
+                          <span>Ver turnos disponibles para Mañana</span>
+                        </button>
+                      </div>
+                    )}
+
                     {/* Selector de Horarios Móvil-Friendly (Mañana / Tarde / Noche) */}
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar">
                       {[
-                        { id: 'all', label: 'Todos', count: activeSlots.filter(s => !isSlotTaken(s)).length },
+                        { id: 'all', label: 'Todos', count: activeSlots.filter(s => !isSlotUnavailable(s)).length },
                         { id: 'morning', label: '☀️ Mañana', count: morningFree },
                         { id: 'afternoon', label: '⛅ Tarde', count: afternoonFree },
                         { id: 'evening', label: '🌙 Noche', count: eveningFree }
@@ -703,23 +762,27 @@ export default function PublicBookingView({
                     ) : (
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
                         {displayedSlots.map(slot => {
-                          const taken = isSlotTaken(slot)
-                          const active = selectedTime === slot && !taken
+                          const isPast = isSlotInPast(slot)
+                          const isBooked = isSlotBooked(slot)
+                          const unavailable = isPast || isBooked
+                          const active = selectedTime === slot && !unavailable
                           return (
                             <button
                               type="button"
                               key={slot}
-                              disabled={taken}
+                              disabled={unavailable}
                               onClick={() => setSelectedTime(slot)}
                               className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold border transition-all text-center ${
-                                taken
-                                  ? 'bg-dark-950/80 text-slate-600 border-dark-850/60 line-through cursor-not-allowed opacity-50'
+                                isPast
+                                  ? 'bg-dark-950/80 text-slate-600 border-dark-850/60 line-through cursor-not-allowed opacity-40'
+                                  : isBooked
+                                  ? 'bg-red-950/20 text-red-400/80 border-red-900/30 line-through cursor-not-allowed'
                                   : active
                                   ? 'bg-gold-500 text-black border-gold-400 shadow-md font-black scale-[1.02]'
                                   : 'bg-dark-850 text-slate-300 border-dark-750 hover:border-gold-500/40 hover:text-white'
                               }`}
                             >
-                              {taken ? 'Ocupado' : slot}
+                              {isPast ? 'Pasada' : isBooked ? 'Ocupado' : slot}
                             </button>
                           )
                         })}

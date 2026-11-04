@@ -128,6 +128,23 @@ export function timeToMinutes(timeStr) {
 }
 
 /**
+ * Checks if a given time slot (e.g. "10:00 AM") has already passed for a specific date (defaults to today).
+ * Includes an optional buffer in minutes (default: 10 min) so clients cannot book a slot
+ * starting in the immediate minutes without giving the barber time to prepare.
+ */
+export function isTimeSlotInPast(timeStr, targetDateStr, bufferMinutes = 10) {
+  if (!timeStr) return false
+  const todayIso = getLocalDateIso()
+  const dateToCheck = targetDateStr ? (targetDateStr.includes('T') ? targetDateStr.split('T')[0] : targetDateStr) : todayIso
+  if (dateToCheck !== todayIso) return false
+
+  const now = new Date()
+  const currentMinutes = now.getHours() * 60 + now.getMinutes()
+  const slotMinutes = timeToMinutes(timeStr)
+  return slotMinutes <= (currentMinutes + bufferMinutes)
+}
+
+/**
  * Infers service duration in minutes (30, 45, or 60 min)
  * Respects explicit duration_min if present, or deduces by service name.
  */

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle, Clock3, ChevronLeft, ChevronRight, Filter, MessageSquare, Trash2, Settings, DollarSign } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, getScheduleForDate } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, getScheduleForDate, isTimeSlotInPast, timeToMinutes } from '../lib/dateUtils'
 
 export default function AppointmentsView({ appointments, nicheData, onAddAppointment, onToggleAppointmentStatus, onDeleteAppointment, clients = [], businessProfile = {}, onOpenSettings, onChargeAppointment }) {
   // Today's ISO date string strictly in local timezone
@@ -338,18 +338,36 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                     const slotsList = (sched.enabled && sched.slots.length > 0)
                       ? sched.slots
                       : (businessProfile?.bookingSlots || ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM'])
-                    return slotsList.map(h => (
-                      <button
-                        type="button"
-                        key={h}
-                        onClick={() => setNewTime(h)}
-                        className={`py-1 text-[11px] rounded-lg border font-mono transition-all text-center ${
-                          newTime === h ? 'bg-purple-600 text-white border-purple-500 font-bold shadow-sm' : 'bg-dark-800 text-slate-400 border-dark-700 hover:text-white'
-                        }`}
-                      >
-                        {h}
-                      </button>
-                    ))
+                    return slotsList.map(h => {
+                      const norm = normalizeTimeSlot(h)
+                      const isOccupied = (appointments || []).some(a => {
+                        if (a.date !== newDate || a.status === 'cancelada') return false
+                        const matchTime = normalizeTimeSlot(a.time) === norm
+                        const matchStaff = !a.staff_id || a.staff_id === newStaff
+                        return matchTime && matchStaff
+                      })
+                      const isPast = isTimeSlotInPast(h, newDate, 10)
+                      const isSelected = newTime === h
+                      return (
+                        <button
+                          type="button"
+                          key={h}
+                          onClick={() => setNewTime(h)}
+                          className={`py-1 text-[11px] rounded-lg border font-mono transition-all text-center relative ${
+                            isSelected
+                              ? 'bg-purple-600 text-white border-purple-500 font-bold shadow-sm'
+                              : isOccupied
+                              ? 'bg-red-950/30 text-red-400 border-red-900/40 line-through'
+                              : isPast
+                              ? 'bg-dark-900 text-slate-500 border-dark-800 line-through opacity-50'
+                              : 'bg-dark-800 text-slate-300 border-dark-700 hover:text-white'
+                          }`}
+                          title={isOccupied ? 'Barbero ya tiene cita a esta hora' : isPast ? 'Hora ya transcurrida' : 'Disponible'}
+                        >
+                          {h}
+                        </button>
+                      )
+                    })
                   })()}
                 </div>
                 <input

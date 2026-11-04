@@ -16,6 +16,7 @@ export default function DailyCloseModal({
   const [cashInDrawerCounted, setCashInDrawerCounted] = useState('')
   const [copied, setCopied] = useState(false)
   const [confirmedReset, setConfirmedReset] = useState(false)
+  const [tipDeliveryMode, setTipDeliveryMode] = useState('individual') // 'individual' | 'grupal'
 
   const handleResetAction = onResetDay || onResetDailyTransactions
 
@@ -26,6 +27,25 @@ export default function DailyCloseModal({
   const incomeTx = todayTx.filter(t => t.monto_usd > 0)
   const totalIncomeUSD = incomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
   const totalIncomeBs = totalIncomeUSD * exchangeRate
+
+  // Propinas del día (separadas de la facturación del local)
+  const totalTipsUSD = incomeTx.reduce((sum, t) => sum + (t.propina_usd || 0), 0)
+  const totalTipsBs = totalTipsUSD * exchangeRate
+
+  const tipsByStaff = (staffList || []).map(staff => {
+    const staffTipsTx = incomeTx.filter(t => t.propina_staff_id === staff.id || (t.propina_staff_name && t.propina_staff_name === staff.name))
+    const tipsUSD = staffTipsTx.reduce((sum, t) => sum + (t.propina_usd || 0), 0)
+    return {
+      id: staff.id,
+      name: staff.name,
+      tipsUSD,
+      tipsBs: tipsUSD * exchangeRate
+    }
+  }).filter(s => s.tipsUSD > 0)
+
+  const activeStaffCount = Math.max(1, (staffList || []).length)
+  const tipPoolPerStaffUSD = totalTipsUSD / activeStaffCount
+  const tipPoolPerStaffBs = tipPoolPerStaffUSD * exchangeRate
 
   const efectivoUSD = incomeTx
     .filter(t => isEfectivoMethod(t.metodo_pago))
@@ -127,8 +147,22 @@ export default function DailyCloseModal({
       msg += `  - Sin comisiones registradas\n`
     }
 
+    if (totalTipsUSD > 0) {
+      msg += `\n🪙 *4. PROPINAS DEL DÍA (APARTE):*\n`
+      msg += `• Total Propinas Recaudadas: *$${totalTipsUSD.toFixed(2)} USD* (Bs. ${totalTipsBs.toFixed(2)})\n`
+      if (tipDeliveryMode === 'grupal') {
+        msg += `  - Modalidad: 👥 *Pote Grupal Equitativo*\n`
+        msg += `  - Corresponde a cada profesional (${activeStaffCount}): *$${tipPoolPerStaffUSD.toFixed(2)} USD* (Bs. ${tipPoolPerStaffBs.toFixed(2)})\n`
+      } else {
+        msg += `  - Modalidad: 👤 *Entrega Individual Separada*\n`
+        tipsByStaff.forEach(st => {
+          msg += `  - ${st.name}: *$${st.tipsUSD.toFixed(2)} USD* (Bs. ${st.tipsBs.toFixed(2)})\n`
+        })
+      }
+    }
+
     msg += `\n------------------------------------\n`
-    msg += `🏆 *4. TU GANANCIA LIMPIA (EN EL BOLSILLO):*\n`
+    msg += `🏆 *5. TU GANANCIA LIMPIA (EN EL BOLSILLO):*\n`
     msg += `👉 *$${netProfitUSD.toFixed(2)} USD* (Bs. ${netProfitBs.toFixed(2)})\n\n`
 
     if (hasCounted) {
@@ -287,6 +321,79 @@ export default function DailyCloseModal({
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
                       Bs. {st.commissionBs.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Propinas del Día (Aparte) */}
+        <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <span>🪙 Propinas del Día (Aparte):</span>
+              <span className="font-mono font-black text-amber-400">${totalTipsUSD.toFixed(2)} USD</span>
+            </span>
+            <div className="flex items-center gap-1 bg-dark-900 p-0.5 rounded-lg border border-dark-750">
+              <button
+                type="button"
+                onClick={() => setTipDeliveryMode('individual')}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                  tipDeliveryMode === 'individual'
+                    ? 'bg-amber-500 text-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Individual
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipDeliveryMode('grupal')}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                  tipDeliveryMode === 'grupal'
+                    ? 'bg-amber-500 text-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Pote Grupal
+              </button>
+            </div>
+          </div>
+
+          {totalTipsUSD === 0 ? (
+            <p className="text-xs text-slate-500 py-0.5">
+              No se registraron propinas el día de hoy.
+            </p>
+          ) : tipDeliveryMode === 'grupal' ? (
+            <div className="p-2.5 rounded-xl bg-dark-900/80 border border-dark-800 text-xs flex items-center justify-between">
+              <div>
+                <span className="font-bold text-white block">Fondo Común Compartido</span>
+                <span className="text-[10px] text-slate-400">
+                  Dividido equitativamente entre {activeStaffCount} profesionales
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="font-mono font-black text-amber-400 text-sm block">
+                  ${tipPoolPerStaffUSD.toFixed(2)} c/u
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Bs. {tipPoolPerStaffBs.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="divide-y divide-dark-800 text-xs">
+              {tipsByStaff.map(st => (
+                <div key={st.id} className="py-1.5 flex items-center justify-between">
+                  <span className="font-bold text-white">{st.name}</span>
+                  <div className="text-right">
+                    <span className="font-mono font-black text-amber-400 text-xs block">
+                      +${st.tipsUSD.toFixed(2)} USD
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">
+                      Bs. {st.tipsBs.toFixed(2)}
                     </span>
                   </div>
                 </div>

@@ -412,6 +412,12 @@ export default function DashboardView({
                             <span className="text-slate-300">Cliente: {tx.client_name}</span>
                           </>
                         )}
+                        {tx.propina_usd > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="text-amber-400 font-bold">🪙 Propina: +${tx.propina_usd.toFixed(2)}</span>
+                          </>
+                        )}
                         <span>•</span>
                         <span className="font-mono text-[11px]">{tx.hora}</span>
                       </div>

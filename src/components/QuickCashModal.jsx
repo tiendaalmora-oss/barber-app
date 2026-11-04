@@ -19,10 +19,15 @@ export default function QuickCashModal({
 
   // Multi-item cart: holds services and products on the same bill
   const [cart, setCart] = useState([])
+  const [tipUSD, setTipUSD] = useState(0)
+  const [customTip, setCustomTip] = useState('')
 
   // Pre-fill fields whenever opened from an appointment or normal trigger
   useEffect(() => {
     if (!isOpen) return
+
+    setTipUSD(0)
+    setCustomTip('')
 
     if (prefillData) {
       setClientName(prefillData.clientName || '')
@@ -132,6 +137,10 @@ export default function QuickCashModal({
   const staffCommissionUSD = servicesTotalUSD * (commissionPct / 100)
   const businessProfitUSD = totalUSD - staffCommissionUSD
 
+  // Grand total including tip
+  const grandTotalUSD = totalUSD + tipUSD
+  const grandTotalBs = (grandTotalUSD * exchangeRate).toFixed(2)
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (totalUSD <= 0 || cart.length === 0) {
@@ -156,8 +165,14 @@ export default function QuickCashModal({
       staff_id: staffObj?.id,
       client_name: clientName.trim() || 'Cliente Mostrador',
       client_phone: clientPhone.trim() || '',
-      monto_usd: totalUSD,
+      monto_usd: totalUSD, // Ingreso neto del local por servicios y productos
       monto_bs: parseFloat(totalBs),
+      propina_usd: tipUSD, // Propina registrada aparte
+      propina_bs: parseFloat((tipUSD * exchangeRate).toFixed(2)),
+      total_cobrado_usd: grandTotalUSD, // Total cobrado al cliente
+      total_cobrado_bs: parseFloat(grandTotalBs),
+      propina_staff_id: tipUSD > 0 ? staffObj?.id : null,
+      propina_staff_name: tipUSD > 0 ? (staffObj?.name || 'Venta del Local') : null,
       tasa_bcv: exchangeRate,
       metodo_pago: paymentMethod,
       comision_usd: staffCommissionUSD,
@@ -468,34 +483,95 @@ export default function QuickCashModal({
             </div>
           </div>
 
+          {/* 4. Propina para el Profesional (Aparte) */}
+          <div className="p-3 rounded-xl bg-dark-950/70 border border-dark-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <span>🪙 Propina para {staffObj?.name.split(' ')[0] || 'el Profesional'} (Aparte)</span>
+              </label>
+              {tipUSD > 0 && (
+                <span className="text-[11px] font-mono font-bold text-amber-400">
+                  +${tipUSD.toFixed(2)} (Bs. {(tipUSD * exchangeRate).toFixed(2)})
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {[0, 1, 2, 5].map(amt => (
+                <button
+                  type="button"
+                  key={amt}
+                  onClick={() => {
+                    setTipUSD(amt)
+                    setCustomTip('')
+                  }}
+                  className={`py-1.5 rounded-xl border text-center transition-all text-xs font-bold font-mono ${
+                    tipUSD === amt && customTip === ''
+                      ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm'
+                      : 'bg-dark-800 border-dark-700/60 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {amt === 0 ? 'Sin propina' : `+$${amt}`}
+                </button>
+              ))}
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  placeholder="Otro $"
+                  value={customTip}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setCustomTip(val)
+                    const num = parseFloat(val)
+                    setTipUSD(!isNaN(num) && num > 0 ? num : 0)
+                  }}
+                  className={`w-full py-1.5 px-2 rounded-xl bg-dark-800 border text-center text-xs font-mono font-bold focus:outline-none ${
+                    customTip !== ''
+                      ? 'border-amber-500 text-amber-300'
+                      : 'border-dark-700/60 text-slate-400 focus:border-amber-500'
+                  }`}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Caja con la división de la plata */}
           <div className="p-3.5 rounded-xl bg-dark-850 border border-dark-700/80 space-y-2">
             <div className="flex items-center justify-between pb-2 border-b border-dark-750">
-              <span className="text-xs text-slate-400">Total Factura:</span>
+              <span className="text-xs text-slate-400">Total a Cobrar al Cliente:</span>
               <div className="text-right">
-                <span className="text-xl font-black text-white">${totalUSD.toFixed(2)}</span>
+                <span className="text-xl font-black text-white">${grandTotalUSD.toFixed(2)}</span>
                 <span className="text-xs text-gold-400 font-mono ml-2 font-bold">
-                  (Bs. {totalBs})
+                  (Bs. {grandTotalBs})
                 </span>
               </div>
             </div>
 
             {/* Split */}
-            <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
+            <div className="grid grid-cols-3 gap-2 text-xs pt-0.5">
               <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
                 <span className="text-[10px] text-slate-400 block truncate">
-                  Para {staffObj?.name.split(' ')[0]} ({commissionPct}% cortes):
+                  Comisión {staffObj?.name.split(' ')[0]}:
                 </span>
-                <span className="text-sm font-bold text-amber-400">
-                  ${staffCommissionUSD.toFixed(2)} USD
+                <span className="text-xs font-bold text-amber-400">
+                  ${staffCommissionUSD.toFixed(2)}
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
                 <span className="text-[10px] text-slate-400 block truncate">
-                  Para el Local (Limpio + Productos):
+                  Propina (Aparte):
                 </span>
-                <span className="text-sm font-bold text-emerald-400">
-                  ${businessProfitUSD.toFixed(2)} USD
+                <span className="text-xs font-bold text-gold-400">
+                  +${tipUSD.toFixed(2)}
+                </span>
+              </div>
+              <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
+                <span className="text-[10px] text-slate-400 block truncate">
+                  Para el Local:
+                </span>
+                <span className="text-xs font-bold text-emerald-400">
+                  ${businessProfitUSD.toFixed(2)}
                 </span>
               </div>
             </div>
@@ -512,7 +588,7 @@ export default function QuickCashModal({
             }`}
           >
             <Check className="w-5 h-5 stroke-[3]" />
-            <span>GUARDAR COBRO (${totalUSD.toFixed(2)}) Y DIVIDIR PLATA</span>
+            <span>GUARDAR COBRO (${grandTotalUSD.toFixed(2)}) Y DIVIDIR PLATA</span>
           </button>
 
         </form>

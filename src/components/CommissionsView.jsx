@@ -78,10 +78,14 @@ export default function CommissionsView({
   }
 
   const staffStats = staffList.map((st) => {
-    const staffTx = transactions.filter((t) => t.staff_id === st.id && t.monto_usd > 0)
+    const staffTx = transactions.filter((t) => (t.staff_id === st.id || t.staff_name === st.name) && t.monto_usd > 0)
     const totalEarnedUSD = staffTx.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
     const totalBilledUSD = staffTx.reduce((sum, t) => sum + (t.monto_usd || 0), 0)
     const servicesCount = staffTx.length
+
+    // Propinas del profesional
+    const staffTipsTx = transactions.filter((t) => (t.propina_staff_id === st.id || t.propina_staff_name === st.name) && (t.propina_usd || 0) > 0)
+    const totalTipsUSD = staffTipsTx.reduce((sum, t) => sum + (t.propina_usd || 0), 0)
 
     return {
       ...st,
@@ -89,6 +93,8 @@ export default function CommissionsView({
       totalBilledUSD,
       totalEarnedUSD,
       totalEarnedBs: totalEarnedUSD * exchangeRate,
+      totalTipsUSD,
+      totalTipsBs: totalTipsUSD * exchangeRate,
       isPaid: paidStatus[st.id] || false
     }
   })
@@ -242,6 +248,12 @@ export default function CommissionsView({
                   <div className="text-xs text-gold-400 font-mono mt-0.5">
                     Bs. {st.totalEarnedBs.toFixed(2)}
                   </div>
+                  {st.totalTipsUSD > 0 && (
+                    <div className="mt-2 pt-2 border-t border-amber-500/20 flex items-center justify-between text-xs">
+                      <span className="text-slate-400 text-[11px]">🪙 Propinas del Día:</span>
+                      <span className="font-mono font-bold text-amber-300">+${st.totalTipsUSD.toFixed(2)} USD</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
