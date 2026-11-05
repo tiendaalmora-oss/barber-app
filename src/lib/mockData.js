@@ -903,7 +903,8 @@ export const INITIAL_BUSINESS_PROFILE = {
   paymentMethods: ['Pago Móvil BCV', 'Efectivo ($)', 'Zelle', 'Punto de Venta'],
   promoBanner: '🔥 Promo de la Semana: Combo Corte + Barba + Cejas por solo $10',
   bookingSlots: DEFAULT_BOOKING_SLOTS,
-  weeklySchedule: DEFAULT_WEEKLY_SCHEDULE
+  weeklySchedule: DEFAULT_WEEKLY_SCHEDULE,
+  singleChairMode: true
 }
 
 export const INITIAL_SAAS_CONFIG = {

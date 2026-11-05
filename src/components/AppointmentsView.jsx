@@ -36,12 +36,39 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
     const matchedService = (nicheData?.services || []).find(s => s.name === newService)
     const dur = matchedService?.duration_min || inferServiceDuration(newService)
 
+    // Check collision with existing appointments
+    const reqStart = timeToMinutes(canonicalTime)
+    const reqEnd = reqStart + dur
+    const staffList = nicheData?.staff || []
+    const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
+
+    const collidingApt = (appointments || []).find(apt => {
+      if (apt.date !== newDate || apt.status === 'cancelada') return false
+      const aptStart = timeToMinutes(apt.time)
+      const aptDur = apt.duration_min || inferServiceDuration(apt.service)
+      const aptEnd = aptStart + aptDur
+      const overlaps = Math.max(reqStart, aptStart) < Math.min(reqEnd, aptEnd)
+      if (!overlaps) return false
+
+      if (isSingleChair) return true
+      return !apt.staff_id || apt.staff_id === newStaff
+    })
+
+    if (collidingApt) {
+      const confirmForce = window.confirm(
+        `⚠️ ADVERTENCIA DE COLISIÓN DE HORARIO:\n\n` +
+        `Ya existe una cita (${collidingApt.client_name || 'Cita previa'}) a las ${collidingApt.time} (${collidingApt.duration_min || 30} min) que se cruza con este horario (${canonicalTime}, ${dur} min).\n\n` +
+        `¿Deseas registrarla de todas formas y permitir el solapamiento?`
+      )
+      if (!confirmForce) return
+    }
+
     const newItem = {
       id: 'app_' + Date.now(),
       client_name: newClient.trim(),
       date: newDate,
       time: canonicalTime,
-      staff_id: newStaff,
+      staff_id: isSingleChair ? (staffList[0]?.id || 'e1') : newStaff,
       service: newService,
       duration_min: dur,
       status: 'pendiente'
@@ -338,13 +365,23 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                     const slotsList = (sched.enabled && sched.slots.length > 0)
                       ? sched.slots
                       : (businessProfile?.bookingSlots || ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM'])
+                    const staffList = nicheData?.staff || []
+                    const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
+                    const matchedService = (nicheData?.services || []).find(s => s.name === newService)
+                    const curDur = matchedService?.duration_min || inferServiceDuration(newService) || 30
+
                     return slotsList.map(h => {
-                      const norm = normalizeTimeSlot(h)
+                      const hStart = timeToMinutes(h)
+                      const hEnd = hStart + curDur
                       const isOccupied = (appointments || []).some(a => {
                         if (a.date !== newDate || a.status === 'cancelada') return false
-                        const matchTime = normalizeTimeSlot(a.time) === norm
-                        const matchStaff = !a.staff_id || a.staff_id === newStaff
-                        return matchTime && matchStaff
+                        const aStart = timeToMinutes(a.time)
+                        const aDur = a.duration_min || inferServiceDuration(a.service)
+                        const aEnd = aStart + aDur
+                        const overlaps = Math.max(hStart, aStart) < Math.min(hEnd, aEnd)
+                        if (!overlaps) return false
+                        if (isSingleChair) return true
+                        return !a.staff_id || a.staff_id === newStaff
                       })
                       const isPast = isTimeSlotInPast(h, newDate, 10)
                       const isSelected = newTime === h
@@ -362,7 +399,7 @@ export default function AppointmentsView({ appointments, nicheData, onAddAppoint
                               ? 'bg-dark-900 text-slate-500 border-dark-800 line-through opacity-50'
                               : 'bg-dark-800 text-slate-300 border-dark-700 hover:text-white'
                           }`}
-                          title={isOccupied ? 'Barbero ya tiene cita a esta hora' : isPast ? 'Hora ya transcurrida' : 'Disponible'}
+                          title={isOccupied ? 'Horario ocupado por otra cita' : isPast ? 'Hora ya transcurrida' : 'Disponible'}
                         >
                           {h}
                         </button>

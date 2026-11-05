@@ -45,8 +45,12 @@ export default function PublicBookingView({
   const [bookedTicket, setBookedTicket] = useState(null)
   const [timePeriodFilter, setTimePeriodFilter] = useState('all') // 'all' | 'morning' | 'afternoon' | 'evening'
 
+  const staffList = nicheData?.staff || []
+  // Single-chair mode is active if explicitly set to true OR by default if undefined OR if shop has <= 1 staff
+  const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
+
   const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
-  const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff)
+  const currentStaffObj = staffList.find(s => s.id === selectedStaff)
   const selectedDuration = currentServiceObj?.duration_min || inferServiceDuration(currentServiceObj)
 
   // Helper to check if a slot is already in the past on the selected date
@@ -59,7 +63,6 @@ export default function PublicBookingView({
     if (!Array.isArray(appointments) || appointments.length === 0) return false
     const reqStart = timeToMinutes(timeStr)
     const reqEnd = reqStart + (selectedDuration || 30)
-    const staffList = nicheData?.staff || []
     const totalStaffCount = Math.max(1, staffList.length)
 
     // Find all active appointments that overlap with [reqStart, reqEnd)
@@ -78,13 +81,13 @@ export default function PublicBookingView({
 
     if (overlappingApts.length === 0) return false
 
-    // Case 1: Solo business (1 barber/worker or no workers defined)
+    // Case 1: Solo business / Single Chair Mode (1 client at a time in the shop)
     // Any overlapping active appointment blocks this time slot completely!
-    if (totalStaffCount <= 1) {
+    if (isSingleChair) {
       return true
     }
 
-    // Case 2: Customer selected "El 1ro Libre" ('any')
+    // Case 2: Customer selected "El 1ro Libre" ('any') in multi-chair mode
     // Slot is booked ONLY if all barbers/workers are busy during this time window
     if (selectedStaff === 'any') {
       const busyStaffIds = new Set()
@@ -175,10 +178,11 @@ export default function PublicBookingView({
       return
     }
 
-    // If 'any' is selected, assign to the first staff member who is ACTUALLY free during that slot window
+    // Staff assignment: Single chair mode assigns directly to primary staff
     let assignedStaffId = selectedStaff
-    const staffList = nicheData?.staff || []
-    if (selectedStaff === 'any') {
+    if (isSingleChair) {
+      assignedStaffId = staffList[0]?.id || 'e1'
+    } else if (selectedStaff === 'any') {
       const reqStart = timeToMinutes(normTime)
       const reqEnd = reqStart + (selectedDuration || 30)
 
@@ -200,7 +204,7 @@ export default function PublicBookingView({
       assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
     }
 
-    const assignedStaffObj = nicheData.staff.find(s => s.id === assignedStaffId)
+    const assignedStaffObj = staffList.find(s => s.id === assignedStaffId)
 
     const newApt = {
       id: 'web_' + Date.now(),
@@ -218,7 +222,7 @@ export default function PublicBookingView({
     onBookAppointment(newApt)
     setBookedTicket({
       ...newApt,
-      staffName: assignedStaffObj ? assignedStaffObj.name : 'Equipo Disponible',
+      staffName: assignedStaffObj ? assignedStaffObj.name : (businessProfile?.businessName || 'Equipo Disponible'),
       priceUsd: currentServiceObj?.price_usd || 0,
       priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toFixed(2),
       durationMin: selectedDuration
@@ -573,6 +577,8 @@ export default function PublicBookingView({
                   onClick={() => {
                     setBookedTicket(null)
                     setClientName('')
+                    const nextFree = activeSlots.find(s => !isSlotUnavailable(s))
+                    if (nextFree) setSelectedTime(nextFree)
                   }}
                   className="w-full py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 text-xs font-semibold"
                 >
@@ -589,7 +595,7 @@ export default function PublicBookingView({
                     Agenda Directa
                   </span>
                   <h3 className="text-lg font-black text-white">
-                    Aparta tu Turno en 3 Pasos
+                    Aparta tu Turno en {isSingleChair ? '3 Pasos' : '4 Pasos'}
                   </h3>
                 </div>
                 <CalendarIcon className="w-6 h-6 text-gold-400" />
@@ -616,49 +622,51 @@ export default function PublicBookingView({
                 </select>
               </div>
 
-              {/* Paso 2: Elegir Profesional */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  2. ¿Con quién te quieres atender? ({nicheData.roleName})
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {nicheData.staff.map(st => {
-                    const active = selectedStaff === st.id
-                    return (
-                      <button
-                        type="button"
-                        key={st.id}
-                        onClick={() => setSelectedStaff(st.id)}
-                        className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
-                          active
-                            ? 'bg-gold-500/15 border-gold-500 text-white'
-                            : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <span className="text-base">{st.avatar}</span>
-                        <span className="text-xs font-bold truncate">{st.name}</span>
-                      </button>
-                    )
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedStaff('any')}
-                    className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
-                      selectedStaff === 'any'
-                        ? 'bg-gold-500/15 border-gold-500 text-white'
-                        : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-base">⚡</span>
-                    <span className="text-xs font-bold truncate">El 1ro Libre</span>
-                  </button>
+              {/* Paso 2: Elegir Profesional (Solo en modo equipo con más de 1 barbero) */}
+              {!isSingleChair && staffList.length > 1 && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    2. ¿Con quién te quieres atender? ({nicheData.roleName})
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {staffList.map(st => {
+                      const active = selectedStaff === st.id
+                      return (
+                        <button
+                          type="button"
+                          key={st.id}
+                          onClick={() => setSelectedStaff(st.id)}
+                          className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                            active
+                              ? 'bg-gold-500/15 border-gold-500 text-white'
+                              : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <span className="text-base">{st.avatar}</span>
+                          <span className="text-xs font-bold truncate">{st.name}</span>
+                        </button>
+                      )
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStaff('any')}
+                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                        selectedStaff === 'any'
+                          ? 'bg-gold-500/15 border-gold-500 text-white'
+                          : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="text-base">⚡</span>
+                      <span className="text-xs font-bold truncate">El 1ro Libre</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Paso 3: Fecha y Hora */}
               <div className="space-y-3">
                 <label className="block text-xs font-bold text-slate-300">
-                  3. Elige el Día y la Hora Disponible
+                  {isSingleChair ? '2' : '3'}. Elige el Día y la Hora Disponible
                 </label>
 
                 {/* Selector rápido Hoy / Mañana / Calendario */}
@@ -792,11 +800,11 @@ export default function PublicBookingView({
                 )}
               </div>
 
-              {/* Paso 4: Datos del Cliente */}
+              {/* Paso 4 (o 3 en modo silla única): Datos del Cliente */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Tu Nombre y Apellido *
+                    {isSingleChair ? '3' : '4'}. Tu Nombre y Apellido *
                   </label>
                   <input
                     type="text"
@@ -809,7 +817,7 @@ export default function PublicBookingView({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Tu Teléfono / WhatsApp
+                    Tu Teléfono / WhatsApp *
                   </label>
                   <PhoneCountryInput
                     value={clientPhone}
@@ -822,14 +830,18 @@ export default function PublicBookingView({
               {/* Botón Confirmar */}
               <button
                 type="submit"
-                disabled={isDayClosed || activeSlots.length === 0}
+                disabled={isDayClosed || activeSlots.length === 0 || isSlotUnavailable(selectedTime)}
                 className={`w-full py-3.5 rounded-2xl font-black text-sm shadow-xl transition-all ${
-                  isDayClosed || activeSlots.length === 0
+                  isDayClosed || activeSlots.length === 0 || isSlotUnavailable(selectedTime)
                     ? 'bg-dark-800 text-slate-500 border border-dark-700 cursor-not-allowed opacity-60'
                     : 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/20 active:scale-98'
                 }`}
               >
-                {isDayClosed ? `Cerrado los ${selectedDayLabel}s` : 'Confirmar Mi Turno Ahora'}
+                {isDayClosed
+                  ? `Cerrado los ${selectedDayLabel}s`
+                  : isSlotUnavailable(selectedTime)
+                  ? 'Selecciona una hora disponible'
+                  : 'Confirmar Mi Turno Ahora'}
               </button>
             </form>
           )}

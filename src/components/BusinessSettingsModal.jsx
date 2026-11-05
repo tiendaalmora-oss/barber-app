@@ -352,6 +352,47 @@ export default function BusinessSettingsModal({
                 </div>
               </div>
 
+              {/* Capacidad de Atención de Citas */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <span>💺 Capacidad de Citas del Local</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, singleChairMode: true })}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      form.singleChairMode !== false
+                        ? 'bg-gold-500/15 border-gold-500 text-white shadow-sm'
+                        : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center gap-1">
+                      <span>👤 1 Cliente a la vez (Silla Única)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Ideal si atiendes solo. 1 cita bloquea la hora y su duración para todo el local.
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, singleChairMode: false })}
+                    className={`p-2.5 rounded-xl border text-left transition-all ${
+                      form.singleChairMode === false
+                        ? 'bg-gold-500/15 border-gold-500 text-white shadow-sm'
+                        : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="font-bold text-xs flex items-center gap-1">
+                      <span>👥 Varios Clientes a la vez (Equipo)</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      Varios barberos simultáneos. Cada profesional tiene su propia agenda.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               {/* Selector de Horas de Agenda y Turnos Disponibles por Día */}
               <div className="pt-3 border-t border-dark-800 space-y-2.5">
                 {/* Header limpio: Título + Badge de activas */}
