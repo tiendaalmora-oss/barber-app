@@ -27,6 +27,7 @@ export default function CatalogConfigView({
   const [newSvcPrice, setNewSvcPrice] = useState('')
   const [newSvcDuration, setNewSvcDuration] = useState(30)
   const [newSvcCategory, setNewSvcCategory] = useState('Servicios')
+  const [newSvcCommission, setNewSvcCommission] = useState('')
   const [editingSvcId, setEditingSvcId] = useState(null)
 
   const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
@@ -64,6 +65,7 @@ export default function CatalogConfigView({
     if (!newSvcName.trim() || !newSvcPrice) return
 
     const finalDur = Number(newSvcDuration) || 30
+    const finalComm = newSvcCommission !== '' && !isNaN(Number(newSvcCommission)) ? Number(newSvcCommission) : null
 
     if (editingSvcId) {
       onUpdateService({
@@ -71,7 +73,8 @@ export default function CatalogConfigView({
         name: newSvcName.trim(),
         price_usd: parseFloat(newSvcPrice) || 5,
         category: newSvcCategory,
-        duration_min: finalDur
+        duration_min: finalDur,
+        commission_pct: finalComm
       })
       setEditingSvcId(null)
     } else {
@@ -80,12 +83,14 @@ export default function CatalogConfigView({
         name: newSvcName.trim(),
         price_usd: parseFloat(newSvcPrice) || 5,
         category: newSvcCategory,
-        duration_min: finalDur
+        duration_min: finalDur,
+        commission_pct: finalComm
       })
     }
     setNewSvcName('')
     setNewSvcPrice('')
     setNewSvcDuration(30)
+    setNewSvcCommission('')
   }
 
   const [selectedDay, setSelectedDay] = useState('lunes')
@@ -184,6 +189,7 @@ export default function CatalogConfigView({
     setNewSvcPrice(String(svc.price_usd))
     setNewSvcCategory(svc.category || 'Servicios')
     setNewSvcDuration(svc.duration_min || inferServiceDuration(svc))
+    setNewSvcCommission(svc.commission_pct ? String(svc.commission_pct) : '')
   }
 
   return (
@@ -630,7 +636,7 @@ export default function CatalogConfigView({
 
               {/* Selector de Duración del Servicio */}
               <div className="flex items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] text-slate-400 font-semibold shrink-0">⏱️ Tiempo estimado:</span>
+                <span className="text-[10px] text-slate-400 font-semibold shrink-0">⏱️ Tiempo:</span>
                 {[15, 30, 45, 60].map(dur => (
                   <button
                     key={dur}
@@ -642,9 +648,26 @@ export default function CatalogConfigView({
                         : 'bg-dark-900 text-slate-400 border-dark-700 hover:text-white'
                     }`}
                   >
-                    {dur === 60 ? '1 hora' : `${dur} min`}
+                    {dur === 60 ? '1h' : `${dur}m`}
                   </button>
                 ))}
+              </div>
+
+              {/* Comisión especial para este servicio (Opcional, ej. 40% o 60%) */}
+              <div className="flex items-center gap-2 pt-0.5">
+                <span className="text-[10px] text-amber-400 font-semibold shrink-0">🏷️ % Comisión (Opcional):</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="Ej. 40"
+                  value={newSvcCommission}
+                  onChange={(e) => setNewSvcCommission(e.target.value)}
+                  className="w-20 px-2.5 py-1 rounded-lg bg-dark-900 border border-dark-700 text-[11px] text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+                <span className="text-[10px] text-slate-500">
+                  {newSvcCommission ? `${newSvcCommission}% a quien lo haga` : 'Usa el % del especialista'}
+                </span>
               </div>
 
               <button
@@ -673,6 +696,11 @@ export default function CatalogConfigView({
                         <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 border border-purple-500/25 font-bold shrink-0">
                           ⏱️ {svc.duration_min || inferServiceDuration(svc)}m
                         </span>
+                        {Number(svc.commission_pct) > 0 && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold shrink-0">
+                            🏷️ {svc.commission_pct}% com.
+                          </span>
+                        )}
                       </div>
                       <span className="text-[10px] text-slate-400">
                         Bs. {(svc.price_usd * exchangeRate).toFixed(2)}

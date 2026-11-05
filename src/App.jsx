@@ -1579,6 +1579,7 @@ export default function App() {
             <DashboardView
               transactions={transactions}
               exchangeRate={exchangeRate}
+              businessProfile={businessProfile}
               onOpenCashModal={() => setIsCashModalOpen(true)}
               onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
@@ -1682,6 +1683,7 @@ export default function App() {
         }}
         nicheData={nicheData}
         exchangeRate={exchangeRate}
+        businessProfile={businessProfile}
         onRegisterTransaction={handleRegisterTransaction}
         clients={clients}
         prefillData={cashModalPrefill}
