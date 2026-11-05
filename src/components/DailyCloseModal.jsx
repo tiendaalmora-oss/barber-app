@@ -68,25 +68,37 @@ export default function DailyCloseModal({
     .filter(t => isFiadoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
-  // 2. Expenses of today
-  const expenseTx = todayTx.filter(t => t.monto_usd < 0)
-  const totalExpensesUSD = Math.abs(expenseTx.reduce((sum, t) => sum + t.monto_usd, 0))
+  // 2. Expenses & Vales of today
+  const allNegativeTx = todayTx.filter(t => t.monto_usd < 0)
+  const valesTx = todayTx.filter(t => t.type === 'vale' || t.category === 'Vale Empleado')
+  const totalValesUSD = Math.abs(valesTx.reduce((sum, t) => sum + (t.monto_usd || 0), 0))
+  const totalValesBs = totalValesUSD * exchangeRate
+
+  // Local operating expenses (insumos, alquiler, luz, comida, etc. - excluding vales and payouts)
+  const operatingExpenseTx = allNegativeTx.filter(t => t.category !== 'Vale Empleado' && t.category !== 'Comisiones' && t.type !== 'vale')
+  const totalExpensesUSD = Math.abs(operatingExpenseTx.reduce((sum, t) => sum + t.monto_usd, 0))
   const totalExpensesBs = totalExpensesUSD * exchangeRate
 
-  // Cash expected in drawer (Efectivo cobrado menos gastos en efectivo)
+  // Cash expected in drawer (Efectivo cobrado menos todas las salidas en efectivo: gastos y vales)
   const cashExpensesUSD = Math.abs(
-    expenseTx
+    allNegativeTx
       .filter(t => isEfectivoMethod(t.metodo_pago) || !t.metodo_pago)
       .reduce((sum, t) => sum + t.monto_usd, 0)
   )
   const expectedCashInDrawer = Math.max(0, efectivoUSD - cashExpensesUSD)
 
-  // 3. Commissions by Staff Member
+  // 3. Commissions by Staff Member (with Vales of today deducted!)
   const commissionsByStaff = (staffList || []).map(staff => {
     const staffTx = incomeTx.filter(t => t.staff_id === staff.id || t.staff_name === staff.name)
     const count = staffTx.length
     const generatedUSD = staffTx.reduce((sum, t) => sum + t.monto_usd, 0)
     const commissionUSD = staffTx.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
+
+    // Vales of this staff member today
+    const staffValesToday = valesTx.filter(t => t.staff_id === staff.id || t.staff_name === staff.name)
+    const staffValesUSD = Math.abs(staffValesToday.reduce((sum, t) => sum + (t.monto_usd || 0), 0))
+    const netCommissionUSD = commissionUSD - staffValesUSD
+
     return {
       id: staff.id,
       name: staff.name,
@@ -94,13 +106,17 @@ export default function DailyCloseModal({
       count,
       generatedUSD,
       commissionUSD,
-      commissionBs: commissionUSD * exchangeRate
+      valesUSD: staffValesUSD,
+      netCommissionUSD,
+      commissionBs: commissionUSD * exchangeRate,
+      netCommissionBs: netCommissionUSD * exchangeRate
     }
-  }).filter(s => s.count > 0 || s.commissionUSD > 0)
+  }).filter(s => s.count > 0 || s.commissionUSD > 0 || s.valesUSD > 0)
 
   const totalCommissionsUSD = commissionsByStaff.reduce((sum, s) => sum + s.commissionUSD, 0)
+  const totalNetCommissionsUSD = commissionsByStaff.reduce((sum, s) => sum + s.netCommissionUSD, 0)
 
-  // 4. Net Profit in Pocket
+  // 4. Net Profit in Pocket for Business (Income - Operating Expenses - Raw Commissions)
   const netProfitUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
   const netProfitBs = netProfitUSD * exchangeRate
 
@@ -127,28 +143,40 @@ export default function DailyCloseModal({
     if (zelleUSD > 0) msg += `  - 🟡 Zelle / Binance: $${zelleUSD.toFixed(2)}\n`
     if (fiadoUSD > 0) msg += `  - 📝 Fiados del Día: $${fiadoUSD.toFixed(2)}\n`
 
-    msg += `\n➖ *2. GASTOS DEL LOCAL:*\n`
+    msg += `\n➖ *2. GASTOS OPERATIVOS DEL LOCAL:*\n`
     msg += `• Total Gastos: *-$${totalExpensesUSD.toFixed(2)} USD* (Bs. ${totalExpensesBs.toFixed(2)})\n`
-    if (expenseTx.length > 0) {
-      expenseTx.forEach(ex => {
+    if (operatingExpenseTx.length > 0) {
+      operatingExpenseTx.forEach(ex => {
         msg += `  - ${ex.item_name}: -$${Math.abs(ex.monto_usd).toFixed(2)}\n`
       })
     } else {
       msg += `  - Cero gastos hoy\n`
     }
 
-    msg += `\n✂️ *3. A PAGAR A LOS MUCHACHOS (COMISIONES):*\n`
+    if (totalValesUSD > 0) {
+      msg += `\n🧾 *3. VALES Y ADELANTOS ENTREGADOS HOY:*\n`
+      msg += `• Total Vales: *-$${totalValesUSD.toFixed(2)} USD* (Bs. ${totalValesBs.toFixed(2)})\n`
+      valesTx.forEach(v => {
+        msg += `  - ${v.staff_name || 'Empleado'} (${v.motivo || 'Vale'}): -$${Math.abs(v.monto_usd).toFixed(2)} (${v.metodo_pago === 'efectivo_usd' ? 'Efectivo' : 'Banco'})\n`
+      })
+    }
+
+    msg += `\n✂️ *${totalValesUSD > 0 ? '4' : '3'}. A PAGAR A LOS MUCHACHOS (LIQUIDACIÓN):*\n`
     if (commissionsByStaff.length > 0) {
       commissionsByStaff.forEach(st => {
-        msg += `  - ${st.name} (${st.count} cortes): *$${st.commissionUSD.toFixed(2)} USD* (Bs. ${st.commissionBs.toFixed(2)})\n`
+        if (st.valesUSD > 0) {
+          msg += `  - ${st.name} (${st.count} cortes): Comisiones $${st.commissionUSD.toFixed(2)} - Vales $${st.valesUSD.toFixed(2)} = *Neto $${st.netCommissionUSD.toFixed(2)} USD* (Bs. ${st.netCommissionBs.toFixed(2)})\n`
+        } else {
+          msg += `  - ${st.name} (${st.count} cortes): *$${st.commissionUSD.toFixed(2)} USD* (Bs. ${st.commissionBs.toFixed(2)})\n`
+        }
       })
-      msg += `• Total Comisiones: *$${totalCommissionsUSD.toFixed(2)} USD*\n`
+      msg += `• Total Comisiones Netas: *$${totalNetCommissionsUSD.toFixed(2)} USD*\n`
     } else {
       msg += `  - Sin comisiones registradas\n`
     }
 
     if (totalTipsUSD > 0) {
-      msg += `\n🪙 *4. PROPINAS DEL DÍA (APARTE):*\n`
+      msg += `\n🪙 *${totalValesUSD > 0 ? '5' : '4'}. PROPINAS DEL DÍA (APARTE):*\n`
       msg += `• Total Propinas Recaudadas: *$${totalTipsUSD.toFixed(2)} USD* (Bs. ${totalTipsBs.toFixed(2)})\n`
       if (tipDeliveryMode === 'grupal') {
         msg += `  - Modalidad: 👥 *Pote Grupal Equitativo*\n`
@@ -162,7 +190,7 @@ export default function DailyCloseModal({
     }
 
     msg += `\n------------------------------------\n`
-    msg += `🏆 *5. TU GANANCIA LIMPIA (EN EL BOLSILLO):*\n`
+    msg += `🏆 *${totalValesUSD > 0 ? '6' : '5'}. TU GANANCIA LIMPIA (EN EL BOLSILLO):*\n`
     msg += `👉 *$${netProfitUSD.toFixed(2)} USD* (Bs. ${netProfitBs.toFixed(2)})\n\n`
 
     if (hasCounted) {
@@ -238,13 +266,17 @@ export default function DailyCloseModal({
           <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
             <span className="text-[10px] uppercase font-bold text-red-400 block">Gastos Local</span>
             <div className="text-lg font-black text-red-400 mt-0.5">-${totalExpensesUSD.toFixed(2)}</div>
-            <span className="text-[10px] text-slate-500 font-mono">Bs. {totalExpensesBs.toFixed(2)}</span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              {totalValesUSD > 0 ? `+ $${totalValesUSD.toFixed(2)} en vales` : `Bs. ${totalExpensesBs.toFixed(2)}`}
+            </span>
           </div>
 
           <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
             <span className="text-[10px] uppercase font-bold text-amber-400 block">Comisiones</span>
             <div className="text-lg font-black text-amber-400 mt-0.5">${totalCommissionsUSD.toFixed(2)}</div>
-            <span className="text-[10px] text-slate-500 font-mono">A los muchachos</span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              {totalValesUSD > 0 ? `Neto hoy: $${totalNetCommissionsUSD.toFixed(2)}` : 'A los muchachos'}
+            </span>
           </div>
 
           <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
@@ -308,19 +340,24 @@ export default function DailyCloseModal({
           ) : (
             <div className="divide-y divide-dark-800 text-xs">
               {commissionsByStaff.map(st => (
-                <div key={st.id} className="py-2 flex items-center justify-between">
+                <div key={st.id} className="py-2.5 flex items-center justify-between">
                   <div>
                     <span className="font-bold text-white block">{st.name}</span>
                     <span className="text-[10px] text-slate-400">
                       {st.count} {st.count === 1 ? 'servicio' : 'servicios'} • Facturó ${st.generatedUSD.toFixed(2)} ({st.percentage}%)
                     </span>
+                    {st.valesUSD > 0 && (
+                      <span className="inline-block mt-0.5 text-[10px] text-amber-400 font-bold">
+                        🧾 Vales hoy: -${st.valesUSD.toFixed(2)} USD
+                      </span>
+                    )}
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-black text-amber-400 text-sm block">
-                      ${st.commissionUSD.toFixed(2)} USD
+                      ${st.netCommissionUSD.toFixed(2)} {st.valesUSD > 0 ? 'Neto' : 'USD'}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
-                      Bs. {st.commissionBs.toFixed(2)}
+                      {st.valesUSD > 0 ? `(Comisión: $${st.commissionUSD.toFixed(2)})` : `Bs. ${st.commissionBs.toFixed(2)}`}
                     </span>
                   </div>
                 </div>

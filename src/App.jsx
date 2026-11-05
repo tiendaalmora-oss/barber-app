@@ -1285,6 +1285,22 @@ export default function App() {
     setTransactions(prev => prev.filter(t => t.id !== txId))
   }
 
+  const handleLiquidateStaff = (payoutTx, settledTxIds = [], settledValeIds = []) => {
+    const nowIso = new Date().toISOString()
+    setTransactions(prev => {
+      const updated = prev.map(t => {
+        if (settledTxIds.includes(t.id)) {
+          return { ...t, comision_pagada: true, liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
+        }
+        if (settledValeIds.includes(t.id)) {
+          return { ...t, status: 'liquidado', liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
+        }
+        return t
+      })
+      return [payoutTx, ...updated]
+    })
+  }
+
   // 1. If in Super-Admin Mode (Owner SaaS Control Panel)
   if (isSuperAdminOpen) {
     return (
@@ -1603,10 +1619,13 @@ export default function App() {
               roleName={nicheData.roleName}
               transactions={transactions}
               exchangeRate={exchangeRate}
+              businessProfile={businessProfile}
               onAddStaff={handleAddStaff}
               onUpdateStaff={handleUpdateStaff}
               onDeleteStaff={handleDeleteStaff}
               onRegisterExpense={handleRegisterExpense}
+              onLiquidateStaff={handleLiquidateStaff}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           )}
 
@@ -1672,6 +1691,7 @@ export default function App() {
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
         exchangeRate={exchangeRate}
+        staffList={currentStaff}
         onRegisterExpense={handleRegisterExpense}
       />
 
