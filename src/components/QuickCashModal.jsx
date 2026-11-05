@@ -26,6 +26,21 @@ export default function QuickCashModal({
   const [customTip, setCustomTip] = useState('')
   const [completedTx, setCompletedTx] = useState(null)
 
+  // Resolve item commission based on 3-tier cascade:
+  // 1. Staff specific custom commission for this service
+  // 2. Service level standard commission
+  // 3. Staff base commission fallback
+  const resolveItemCommission = (item, staff) => {
+    if (!item || item.isProduct) return 0
+    if (staff?.service_commissions && staff.service_commissions[item.id] !== undefined) {
+      return Number(staff.service_commissions[item.id])
+    }
+    if (Number(item.commission_pct) > 0) {
+      return Number(item.commission_pct)
+    }
+    return Number(staff?.commission_pct) || 50
+  }
+
   // Pre-fill fields whenever opened from an appointment or normal trigger
   useEffect(() => {
     if (!isOpen) return
@@ -36,11 +51,9 @@ export default function QuickCashModal({
     if (prefillData) {
       setClientName(prefillData.clientName || '')
       setClientPhone(prefillData.clientPhone || '')
-      if (prefillData.staffId) {
-        setSelectedStaff(prefillData.staffId)
-      } else if (nicheData.staff[0]?.id) {
-        setSelectedStaff(nicheData.staff[0].id)
-      }
+      const targetStaffId = prefillData.staffId || nicheData.staff[0]?.id || ''
+      setSelectedStaff(targetStaffId)
+      const targetStaffObj = nicheData.staff.find(s => s.id === targetStaffId) || nicheData.staff[0]
 
       // Pre-fill cart with the appointment's service
       const svcMatch = (nicheData.services || []).find(s => 
@@ -48,9 +61,7 @@ export default function QuickCashModal({
       )
 
       if (svcMatch) {
-        const itemComm = (!svcMatch.isProduct && Number(svcMatch.commission_pct) > 0)
-          ? Number(svcMatch.commission_pct)
-          : (staffObj?.commission_pct || 50)
+        const itemComm = resolveItemCommission(svcMatch, targetStaffObj)
         setCart([{
           id: svcMatch.id,
           name: svcMatch.name,
@@ -64,7 +75,7 @@ export default function QuickCashModal({
           id: 'svc_' + Date.now(),
           name: prefillData.serviceName,
           price_usd: 5,
-          commission_pct: staffObj?.commission_pct || 50,
+          commission_pct: targetStaffObj?.commission_pct || 50,
           isProduct: false,
           qty: 1
         }])
@@ -73,11 +84,11 @@ export default function QuickCashModal({
       // Normal open: reset or default
       setClientName('')
       setClientPhone('')
-      if (nicheData.staff[0]?.id) setSelectedStaff(nicheData.staff[0].id)
+      const defaultStaffId = nicheData.staff[0]?.id || ''
+      if (defaultStaffId) setSelectedStaff(defaultStaffId)
+      const defaultStaffObj = nicheData.staff[0]
       const firstSvc = nicheData.services[0]
-      const firstComm = firstSvc && Number(firstSvc.commission_pct) > 0
-        ? Number(firstSvc.commission_pct)
-        : (nicheData.staff[0]?.commission_pct || 50)
+      const firstComm = firstSvc ? resolveItemCommission(firstSvc, defaultStaffObj) : 50
       setCart(firstSvc ? [{
         id: firstSvc.id,
         name: firstSvc.name,
@@ -98,6 +109,18 @@ export default function QuickCashModal({
   const servicesList = nicheData.services || []
   const productsList = nicheData.products || []
 
+  const handleSelectStaff = (newStaffId) => {
+    setSelectedStaff(newStaffId)
+    const newStaffObj = nicheData.staff.find(s => s.id === newStaffId)
+    if (newStaffObj) {
+      setCart(prev => prev.map(ci => {
+        if (ci.isProduct) return ci
+        const nextComm = resolveItemCommission(ci, newStaffObj)
+        return { ...ci, commission_pct: nextComm }
+      }))
+    }
+  }
+
   // Add or increment item
   const handleAddItem = (item, isProduct) => {
     setCart(prev => {
@@ -105,9 +128,7 @@ export default function QuickCashModal({
       if (idx >= 0) {
         return prev.map((ci, i) => i === idx ? { ...ci, qty: ci.qty + 1 } : ci)
       } else {
-        const itemComm = (!isProduct && Number(item.commission_pct) > 0)
-          ? Number(item.commission_pct)
-          : (staffObj?.commission_pct || 50)
+        const itemComm = resolveItemCommission(item, staffObj)
         return [...prev, {
           id: item.id,
           name: item.name,
@@ -361,7 +382,7 @@ export default function QuickCashModal({
                 <button
                   type="button"
                   key={st.id}
-                  onClick={() => setSelectedStaff(st.id)}
+                  onClick={() => handleSelectStaff(st.id)}
                   className={`p-2.5 rounded-xl border text-left transition-all ${
                     selectedStaff === st.id
                       ? 'bg-gold-500/15 border-gold-500/60 text-white shadow-sm'
@@ -518,12 +539,23 @@ export default function QuickCashModal({
                         <span className="text-xs">{ci.isProduct ? '🧴' : '✂️'}</span>
                         <span className="font-semibold text-white truncate text-[11px]">{ci.name}</span>
                         {!ci.isProduct && (
-                          <span 
-                            title={`Comisión: ${ci.commission_pct || commissionPct}%`}
-                            className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold shrink-0 font-mono"
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentVal = ci.commission_pct !== undefined ? ci.commission_pct : commissionPct
+                              const promptVal = prompt(`Ajustar comisión para "${ci.name}" (%) en este cobro:`, currentVal)
+                              if (promptVal !== null) {
+                                const parsed = parseFloat(promptVal)
+                                if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                                  handleUpdateItemCommission(ci.id, parsed)
+                                }
+                              }
+                            }}
+                            title="Toca para ajustar el % de comisión de este servicio para este cobro"
+                            className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold shrink-0 font-mono transition-colors cursor-pointer"
                           >
-                            {ci.commission_pct || commissionPct}%
-                          </span>
+                            {ci.commission_pct ?? commissionPct}% ✎
+                          </button>
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

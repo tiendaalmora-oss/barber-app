@@ -1616,6 +1616,7 @@ export default function App() {
           {activeTab === 'commissions' && (
             <CommissionsView
               staffList={currentStaff}
+              servicesList={nicheData.services || []}
               rolePlural={nicheData.rolePlural}
               roleName={nicheData.roleName}
               transactions={transactions}

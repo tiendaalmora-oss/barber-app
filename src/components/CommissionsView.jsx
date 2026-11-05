@@ -28,6 +28,7 @@ const isDateToday = (dateStr) => {
 
 export default function CommissionsView({
   staffList = [],
+  servicesList = [],
   rolePlural = 'Barberos',
   roleName = 'Barbero',
   transactions = [],
@@ -57,6 +58,10 @@ export default function CommissionsView({
   const [name, setName] = useState('')
   const [commissionPct, setCommissionPct] = useState(50)
   const [avatar, setAvatar] = useState('✂️')
+  const [serviceCommissions, setServiceCommissions] = useState({}) // { [serviceId]: percentage }
+  const [selectedServiceToAdd, setSelectedServiceToAdd] = useState('')
+  const [customPctToAdd, setCustomPctToAdd] = useState('')
+  const [showAdvancedCommissions, setShowAdvancedCommissions] = useState(false)
 
   // Vale Form state
   const [valeAmount, setValeAmount] = useState('')
@@ -140,6 +145,10 @@ export default function CommissionsView({
     setName('')
     setCommissionPct(50)
     setAvatar('✂️')
+    setServiceCommissions({})
+    setSelectedServiceToAdd('')
+    setCustomPctToAdd('')
+    setShowAdvancedCommissions(false)
     setIsStaffModalOpen(true)
   }
 
@@ -148,6 +157,10 @@ export default function CommissionsView({
     setName(st.name)
     setCommissionPct(st.commission_pct || 50)
     setAvatar(st.avatar || '✂️')
+    setServiceCommissions(st.service_commissions || {})
+    setSelectedServiceToAdd('')
+    setCustomPctToAdd('')
+    setShowAdvancedCommissions(Object.keys(st.service_commissions || {}).length > 0)
     setIsStaffModalOpen(true)
   }
 
@@ -155,19 +168,22 @@ export default function CommissionsView({
     e.preventDefault()
     if (!name.trim()) return
 
+    const staffPayload = {
+      name: name.trim(),
+      commission_pct: parseFloat(commissionPct) || 50,
+      avatar,
+      service_commissions: serviceCommissions
+    }
+
     if (editingStaff) {
       onUpdateStaff({
         ...editingStaff,
-        name: name.trim(),
-        commission_pct: parseFloat(commissionPct) || 50,
-        avatar
+        ...staffPayload
       })
     } else {
       onAddStaff({
         id: 'st_' + Date.now(),
-        name: name.trim(),
-        commission_pct: parseFloat(commissionPct) || 50,
-        avatar
+        ...staffPayload
       })
     }
     setIsStaffModalOpen(false)
@@ -437,6 +453,14 @@ export default function CommissionsView({
                               <span>Comisión: {st.commission_pct}%</span>
                               <Pencil className="w-3 h-3" />
                             </button>
+                            {st.service_commissions && Object.keys(st.service_commissions).length > 0 && (
+                              <span 
+                                title={`${Object.keys(st.service_commissions).length} servicios con porcentaje personalizado`}
+                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 font-medium"
+                              >
+                                🏷️ {Object.keys(st.service_commissions).length} esp.
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -1059,6 +1083,129 @@ export default function CommissionsView({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Sección Opcional: Comisiones Especiales por Servicio */}
+              <div className="pt-2 border-t border-dark-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedCommissions(!showAdvancedCommissions)}
+                  className="w-full flex items-center justify-between text-left text-xs font-bold text-slate-300 hover:text-gold-400 py-1 transition-colors"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>🏷️</span>
+                    <span>Comisiones Especiales por Servicio</span>
+                    {Object.keys(serviceCommissions).length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/40 font-mono font-bold">
+                        {Object.keys(serviceCommissions).length}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    {showAdvancedCommissions ? '▲ Ocultar' : '▼ Personalizar'}
+                  </span>
+                </button>
+
+                {showAdvancedCommissions && (
+                  <div className="mt-2.5 p-3 rounded-2xl bg-dark-850 border border-dark-750 space-y-3 animate-fadeIn">
+                    <p className="text-[11px] text-slate-400 leading-relaxed">
+                      Si este profesional tiene un porcentaje especial para algún servicio (ej. 30% en Keratina porque es junior o 40% en químicas), agrégalo aquí:
+                    </p>
+
+                    {/* Selector de servicio y % */}
+                    <div className="flex gap-1.5">
+                      <select
+                        value={selectedServiceToAdd}
+                        onChange={(e) => setSelectedServiceToAdd(e.target.value)}
+                        className="flex-1 px-2.5 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                      >
+                        <option value="">Seleccionar servicio...</option>
+                        {(servicesList || [])
+                          .filter(s => !s.isProduct)
+                          .map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} (${s.price_usd})
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        placeholder="%"
+                        value={customPctToAdd}
+                        onChange={(e) => setCustomPctToAdd(e.target.value)}
+                        className="w-16 px-2 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs font-mono font-bold text-center text-white focus:outline-none focus:border-gold-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!selectedServiceToAdd) {
+                            alert('Elige un servicio')
+                            return
+                          }
+                          const pct = parseFloat(customPctToAdd)
+                          if (isNaN(pct) || pct <= 0 || pct > 100) {
+                            alert('Ingresa un porcentaje válido (1-100)')
+                            return
+                          }
+                          setServiceCommissions(prev => ({
+                            ...prev,
+                            [selectedServiceToAdd]: pct
+                          }))
+                          setSelectedServiceToAdd('')
+                          setCustomPctToAdd('')
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shrink-0"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Chips de comisiones configuradas */}
+                    {Object.keys(serviceCommissions).length > 0 ? (
+                      <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
+                        {Object.entries(serviceCommissions).map(([svcId, pct]) => {
+                          const svc = (servicesList || []).find(s => s.id === svcId)
+                          const svcName = svc ? svc.name : svcId
+                          return (
+                            <div
+                              key={svcId}
+                              className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-dark-900 border border-dark-800 text-xs"
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="text-white font-medium truncate">{svcName}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono font-bold text-gold-400 text-xs bg-gold-500/10 px-1.5 py-0.5 rounded border border-gold-500/20">
+                                  {pct}%
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setServiceCommissions(prev => {
+                                      const next = { ...prev }
+                                      delete next[svcId]
+                                      return next
+                                    })
+                                  }}
+                                  className="text-slate-500 hover:text-red-400 p-0.5"
+                                  title="Quitar excepción"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 italic text-center py-1">
+                        Sin excepciones. Ganará {commissionPct}% en todos los servicios.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 pt-2">
