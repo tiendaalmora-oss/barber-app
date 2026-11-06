@@ -168,11 +168,20 @@ export default function CommissionsView({
     e.preventDefault()
     if (!name.trim()) return
 
+    // Auto-commit any pending service selection and % typed before saving
+    let finalServiceCommissions = { ...serviceCommissions }
+    if (selectedServiceToAdd && customPctToAdd) {
+      const pct = parseFloat(customPctToAdd)
+      if (!isNaN(pct) && pct > 0 && pct <= 100) {
+        finalServiceCommissions[selectedServiceToAdd] = pct
+      }
+    }
+
     const staffPayload = {
       name: name.trim(),
       commission_pct: parseFloat(commissionPct) || 50,
       avatar,
-      service_commissions: serviceCommissions
+      service_commissions: finalServiceCommissions
     }
 
     if (editingStaff) {
@@ -1085,49 +1094,95 @@ export default function CommissionsView({
                 </div>
               </div>
 
-              {/* Sección Opcional: Comisiones Especiales por Servicio */}
-              <div className="pt-2 border-t border-dark-800">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvancedCommissions(!showAdvancedCommissions)}
-                  className="w-full flex items-center justify-between text-left text-xs font-bold text-slate-300 hover:text-gold-400 py-1 transition-colors"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <span>🏷️</span>
-                    <span>Comisiones Especiales por Servicio</span>
-                    {Object.keys(serviceCommissions).length > 0 && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/40 font-mono font-bold">
-                        {Object.keys(serviceCommissions).length}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[11px] text-slate-500 font-mono">
-                    {showAdvancedCommissions ? '▲ Ocultar' : '▼ Personalizar'}
-                  </span>
-                </button>
+              {/* Sección: Comisiones Especiales por Servicio */}
+              <div className="pt-2 border-t border-dark-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-gold-400 flex items-center gap-1.5">
+                    <span>🏷️ Comisiones Especiales por Servicio</span>
+                  </label>
+                  {Object.keys(serviceCommissions).length > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/40 font-mono font-bold">
+                      {Object.keys(serviceCommissions).length} asignada(s)
+                    </span>
+                  )}
+                </div>
 
-                {showAdvancedCommissions && (
-                  <div className="mt-2.5 p-3 rounded-2xl bg-dark-850 border border-dark-750 space-y-3 animate-fadeIn">
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      Si este profesional tiene un porcentaje especial para algún servicio (ej. 30% en Keratina porque es junior o 40% en químicas), agrégalo aquí:
-                    </p>
+                {/* Lista de comisiones especiales ya asignadas a este empleado */}
+                {Object.keys(serviceCommissions).length > 0 ? (
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto p-2 bg-dark-950 rounded-xl border border-dark-800">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1">
+                      Comisiones activas de este profesional:
+                    </span>
+                    {Object.entries(serviceCommissions).map(([svcId, pct]) => {
+                      const svc = (servicesList || []).find(s => s.id === svcId || s.name.toLowerCase() === svcId.toLowerCase())
+                      const svcName = svc ? svc.name : svcId
+                      return (
+                        <div
+                          key={svcId}
+                          className="flex items-center justify-between p-2 rounded-lg bg-dark-900 border border-dark-750 text-xs hover:border-dark-650 transition-all"
+                        >
+                          <div className="flex items-center gap-1.5 truncate pr-2">
+                            <span className="text-white font-bold truncate text-[11px]">{svcName}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-mono font-black text-gold-400 text-xs bg-gold-500/15 px-2 py-0.5 rounded border border-gold-500/30">
+                              {pct}%
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setServiceCommissions(prev => {
+                                  const next = { ...prev }
+                                  delete next[svcId]
+                                  return next
+                                })
+                              }}
+                              className="text-slate-500 hover:text-red-400 p-1 rounded hover:bg-dark-800 transition-colors"
+                              title="Eliminar excepción"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 italic py-1">
+                    Sin comisiones especiales aún (gana {commissionPct}% base en todos los servicios).
+                  </p>
+                )}
 
-                    {/* Selector de servicio y % */}
-                    <div className="flex gap-1.5">
-                      <select
-                        value={selectedServiceToAdd}
-                        onChange={(e) => setSelectedServiceToAdd(e.target.value)}
-                        className="flex-1 px-2.5 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
-                      >
-                        <option value="">Seleccionar servicio...</option>
-                        {(servicesList || [])
-                          .filter(s => !s.isProduct)
-                          .map(s => (
-                            <option key={s.id} value={s.id}>
-                              {s.name} (${s.price_usd})
-                            </option>
-                          ))}
-                      </select>
+                {/* Asignador de comisiones especiales */}
+                <div className="p-2.5 rounded-xl bg-dark-850 border border-dark-750 space-y-2">
+                  <span className="text-[11px] font-semibold text-slate-300 block">
+                    {Object.keys(serviceCommissions).length > 0 ? '+ Asignar otro servicio:' : 'Asignar un servicio con porcentaje especial:'}
+                  </span>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={selectedServiceToAdd}
+                      onChange={(e) => {
+                        const svcId = e.target.value
+                        setSelectedServiceToAdd(svcId)
+                        if (svcId && serviceCommissions[svcId] !== undefined) {
+                          setCustomPctToAdd(String(serviceCommissions[svcId]))
+                        } else if (svcId) {
+                          const found = (servicesList || []).find(s => s.id === svcId)
+                          setCustomPctToAdd(found?.commission_pct ? String(found.commission_pct) : String(commissionPct))
+                        }
+                      }}
+                      className="flex-1 px-2.5 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                    >
+                      <option value="">Seleccionar servicio...</option>
+                      {(servicesList || [])
+                        .filter(s => !s.isProduct)
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} (${s.price_usd}) {serviceCommissions[s.id] !== undefined ? `[Asignado: ${serviceCommissions[s.id]}%]` : ''}
+                          </option>
+                        ))}
+                    </select>
+                    <div className="relative w-16 shrink-0">
                       <input
                         type="number"
                         min="1"
@@ -1135,77 +1190,34 @@ export default function CommissionsView({
                         placeholder="%"
                         value={customPctToAdd}
                         onChange={(e) => setCustomPctToAdd(e.target.value)}
-                        className="w-16 px-2 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs font-mono font-bold text-center text-white focus:outline-none focus:border-gold-500"
+                        className="w-full px-2 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs font-mono font-bold text-center text-white focus:outline-none focus:border-gold-500"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!selectedServiceToAdd) {
-                            alert('Elige un servicio')
-                            return
-                          }
-                          const pct = parseFloat(customPctToAdd)
-                          if (isNaN(pct) || pct <= 0 || pct > 100) {
-                            alert('Ingresa un porcentaje válido (1-100)')
-                            return
-                          }
-                          setServiceCommissions(prev => ({
-                            ...prev,
-                            [selectedServiceToAdd]: pct
-                          }))
-                          setSelectedServiceToAdd('')
-                          setCustomPctToAdd('')
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shrink-0"
-                      >
-                        +
-                      </button>
                     </div>
-
-                    {/* Chips de comisiones configuradas */}
-                    {Object.keys(serviceCommissions).length > 0 ? (
-                      <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
-                        {Object.entries(serviceCommissions).map(([svcId, pct]) => {
-                          const svc = (servicesList || []).find(s => s.id === svcId)
-                          const svcName = svc ? svc.name : svcId
-                          return (
-                            <div
-                              key={svcId}
-                              className="flex items-center justify-between p-1.5 px-2.5 rounded-xl bg-dark-900 border border-dark-800 text-xs"
-                            >
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="text-white font-medium truncate">{svcName}</span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className="font-mono font-bold text-gold-400 text-xs bg-gold-500/10 px-1.5 py-0.5 rounded border border-gold-500/20">
-                                  {pct}%
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setServiceCommissions(prev => {
-                                      const next = { ...prev }
-                                      delete next[svcId]
-                                      return next
-                                    })
-                                  }}
-                                  className="text-slate-500 hover:text-red-400 p-0.5"
-                                  title="Quitar excepción"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-[10px] text-slate-500 italic text-center py-1">
-                        Sin excepciones. Ganará {commissionPct}% en todos los servicios.
-                      </p>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!selectedServiceToAdd) {
+                          alert('Selecciona un servicio de la lista')
+                          return
+                        }
+                        const pct = parseFloat(customPctToAdd)
+                        if (isNaN(pct) || pct <= 0 || pct > 100) {
+                          alert('Ingresa un porcentaje válido entre 1 y 100')
+                          return
+                        }
+                        setServiceCommissions(prev => ({
+                          ...prev,
+                          [selectedServiceToAdd]: pct
+                        }))
+                        setSelectedServiceToAdd('')
+                        setCustomPctToAdd('')
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shrink-0 flex items-center gap-1 shadow-sm transition-all"
+                    >
+                      <span>Asignar</span>
+                    </button>
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="flex gap-2 pt-2">

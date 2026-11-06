@@ -27,17 +27,41 @@ export default function QuickCashModal({
   const [completedTx, setCompletedTx] = useState(null)
 
   // Resolve item commission based on 3-tier cascade:
-  // 1. Staff specific custom commission for this service
-  // 2. Service level standard commission
+  // 1. Staff specific custom commission for this service (matching by ID or by Name)
+  // 2. Service level standard commission in catalog
   // 3. Staff base commission fallback
   const resolveItemCommission = (item, staff) => {
     if (!item || item.isProduct) return 0
-    if (staff?.service_commissions && staff.service_commissions[item.id] !== undefined) {
-      return Number(staff.service_commissions[item.id])
+
+    // Look up original catalog service
+    const catalogSvc = (nicheData.services || []).find(s => s.id === item.id || s.name.toLowerCase() === (item.name || '').toLowerCase())
+    const svcId = catalogSvc?.id || item.id
+    const svcName = catalogSvc?.name || item.name || ''
+
+    // 1. Staff specific custom commission
+    if (staff?.service_commissions) {
+      if (staff.service_commissions[svcId] !== undefined) {
+        return Number(staff.service_commissions[svcId])
+      }
+      if (svcName && staff.service_commissions[svcName] !== undefined) {
+        return Number(staff.service_commissions[svcName])
+      }
+      // Match by service name in case-insensitive keys
+      const matchingKey = Object.keys(staff.service_commissions).find(k => {
+        const cat = (nicheData.services || []).find(s => s.id === k)
+        return (cat && cat.name.toLowerCase() === svcName.toLowerCase()) || k.toLowerCase() === svcName.toLowerCase()
+      })
+      if (matchingKey && staff.service_commissions[matchingKey] !== undefined) {
+        return Number(staff.service_commissions[matchingKey])
+      }
     }
-    if (Number(item.commission_pct) > 0) {
-      return Number(item.commission_pct)
+
+    // 2. Service level standard commission
+    if (catalogSvc && Number(catalogSvc.commission_pct) > 0) {
+      return Number(catalogSvc.commission_pct)
     }
+
+    // 3. Staff base commission fallback
     return Number(staff?.commission_pct) || 50
   }
 
@@ -128,7 +152,8 @@ export default function QuickCashModal({
       if (idx >= 0) {
         return prev.map((ci, i) => i === idx ? { ...ci, qty: ci.qty + 1 } : ci)
       } else {
-        const itemComm = resolveItemCommission(item, staffObj)
+        const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff) || staffObj
+        const itemComm = resolveItemCommission(item, currentStaffObj)
         return [...prev, {
           id: item.id,
           name: item.name,
