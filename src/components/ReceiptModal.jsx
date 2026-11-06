@@ -1,6 +1,6 @@
 import React from 'react'
 import { X, Receipt, Smartphone } from 'lucide-react'
-import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
 
 export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRate = 889.26, businessProfile }) {
   if (!isOpen || !transaction) return null
@@ -31,7 +31,15 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
     msg += `------------------------------------\n`
     msg += `💰 *TOTAL PAGADO: $${totalUSD.toFixed(2)} USD*\n`
     msg += `👉 *Al cambio BCV: Bs. ${totalBs.toFixed(2)}*\n`
-    msg += `💳 *Método de pago:* ${(tx.metodo_pago || '').replace(/_/g, ' ').toUpperCase()}\n\n`
+    if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
+      msg += `💳 *Método de pago:* PAGO MIXTO\n`
+      tx.payment_splits.forEach(sp => {
+        msg += `  • ${formatMethodName(sp.method)}: $${Number(sp.amount_usd).toFixed(2)} USD (Bs. ${Number(sp.amount_bs || (sp.amount_usd * exchangeRate)).toFixed(2)})\n`
+      })
+      msg += `\n`
+    } else {
+      msg += `💳 *Método de pago:* ${formatMethodName(tx.metodo_pago).toUpperCase()}\n\n`
+    }
     msg += `¡Gracias por visitarnos, te esperamos pronto! ✨`
 
     const url = cleanPhone
@@ -109,8 +117,23 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
             <span className="text-emerald-400 font-mono text-base">${totalUSD.toFixed(2)}</span>
           </div>
           <div className="text-right text-[11px] text-slate-400">
-            Bs. {totalBs.toFixed(2)} (Método: {(tx.metodo_pago || '').replace(/_/g, ' ').toUpperCase()})
+            Bs. {totalBs.toFixed(2)} (Método: {formatMethodName(tx.metodo_pago).toUpperCase()})
           </div>
+          {Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0 && (
+            <div className="pt-2 border-t border-dark-800/80 space-y-1 text-[11px]">
+              <div className="text-purple-400 font-sans font-bold uppercase tracking-wider text-[10px]">
+                🔀 Desglose de Pago Mixto:
+              </div>
+              {tx.payment_splits.map((sp, i) => (
+                <div key={i} className="flex justify-between text-slate-300">
+                  <span>• {formatMethodName(sp.method)}:</span>
+                  <span className="font-bold text-white">
+                    ${Number(sp.amount_usd).toFixed(2)} <span className="text-slate-500">(Bs. {Number(sp.amount_bs || (sp.amount_usd * exchangeRate)).toFixed(0)})</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action Buttons */}

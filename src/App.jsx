@@ -30,7 +30,7 @@ import {
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck } from 'lucide-react'
-import { getLocalDateIso, isDateToday } from './lib/dateUtils'
+import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
 import { getActiveBrand } from './lib/brandConfig'
 
 export default function App() {
@@ -1507,7 +1507,7 @@ export default function App() {
     if (newTx.client_name && newTx.client_name !== 'Cliente Mostrador') {
       setClients(prev => {
         const found = prev.find(c => c.name.toLowerCase() === newTx.client_name.toLowerCase())
-        const addedDebt = newTx.metodo_pago === 'fiado' ? newTx.monto_usd : 0
+        const addedDebt = getTxMethodCollectedUSD(newTx, 'fiado')
         if (found) {
           return prev.map(c => c.id === found.id ? {
             ...c,

@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle, Receipt } from 'lucide-react'
 import PhoneCountryInput from './PhoneCountryInput'
-import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
+
+const SPLIT_METHOD_OPTIONS = [
+  { id: 'efectivo_usd', label: '💵 Efectivo $ (Gaveta)' },
+  { id: 'pago_movil', label: '📲 Pago Móvil (Bs)' },
+  { id: 'punto_de_venta', label: '💳 Punto de Venta' },
+  { id: 'zelle', label: '🟡 Zelle / Binance' },
+  { id: 'fiado', label: '📝 Fiado (Queda debiendo)' },
+]
 
 export default function QuickCashModal({
   isOpen,
@@ -25,6 +33,12 @@ export default function QuickCashModal({
   const [tipCurrency, setTipCurrency] = useState('USD') // 'USD' | 'Bs'
   const [customTip, setCustomTip] = useState('')
   const [completedTx, setCompletedTx] = useState(null)
+
+  // Split / Mixed Payment state ('mixto')
+  const [splitMethod1, setSplitMethod1] = useState('efectivo_usd')
+  const [splitMethod2, setSplitMethod2] = useState('pago_movil')
+  const [splitCurrency1, setSplitCurrency1] = useState('USD') // 'USD' | 'Bs'
+  const [splitInput1, setSplitInput1] = useState('')
 
   // Resolve item commission based on 3-tier cascade:
   // 1. Staff specific custom commission for this service (matching by ID or by Name)
@@ -71,6 +85,10 @@ export default function QuickCashModal({
 
     setTipUSD(0)
     setCustomTip('')
+    setSplitInput1('')
+    setSplitCurrency1('USD')
+    setSplitMethod1('efectivo_usd')
+    setSplitMethod2('pago_movil')
 
     if (prefillData) {
       setClientName(prefillData.clientName || '')
@@ -212,6 +230,20 @@ export default function QuickCashModal({
   const grandTotalUSD = totalUSD + tipUSD
   const grandTotalBs = (grandTotalUSD * exchangeRate).toFixed(2)
 
+  // Split / Mixed payment live calculations
+  const parsedSplit1Raw = parseFloat(splitInput1)
+  const split1USD = !isNaN(parsedSplit1Raw) && parsedSplit1Raw > 0
+    ? (splitCurrency1 === 'Bs' && exchangeRate > 0 ? (parsedSplit1Raw / exchangeRate) : parsedSplit1Raw)
+    : 0
+  const split1Bs = split1USD * exchangeRate
+  const split2USD = Math.max(0, grandTotalUSD - split1USD)
+  const split2Bs = split2USD * exchangeRate
+  const isSplitValid = paymentMethod !== 'mixto' || (
+    split1USD > 0.001 &&
+    split1USD < (grandTotalUSD - 0.001) &&
+    splitMethod1 !== splitMethod2
+  )
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (totalUSD <= 0 || cart.length === 0) {
@@ -219,8 +251,44 @@ export default function QuickCashModal({
       return
     }
 
+    if (paymentMethod === 'mixto') {
+      if (splitMethod1 === splitMethod2) {
+        alert('En Pago Mixto debes elegir dos métodos de pago diferentes (ej: Efectivo $ y Pago Móvil).')
+        return
+      }
+      if (split1USD <= 0 || split1USD >= grandTotalUSD) {
+        alert(`En Pago Mixto, ingresa en la 1ra parte un monto mayor a $0 y menor al total a cobrar ($${grandTotalUSD.toFixed(2)} USD).`)
+        return
+      }
+    }
+
     const combinedItemName = cart.map(ci => ci.qty > 1 ? `${ci.qty}x ${ci.name}` : ci.name).join(' + ')
     const productItems = cart.filter(ci => ci.isProduct).map(ci => ({ id: ci.id, qty: ci.qty }))
+
+    // Compute exact split breakdown if paymentMethod === 'mixto'
+    let paymentSplits = null
+    if (paymentMethod === 'mixto' && grandTotalUSD > 0) {
+      const cleanSplit1USD = Math.round(split1USD * 100) / 100
+      const cleanSplit2USD = Math.round((grandTotalUSD - cleanSplit1USD) * 100) / 100
+      const ratio1 = cleanSplit1USD / grandTotalUSD
+      const net1USD = Math.round(totalUSD * ratio1 * 100) / 100
+      const net2USD = Math.round((totalUSD - net1USD) * 100) / 100
+
+      paymentSplits = [
+        {
+          method: splitMethod1,
+          amount_usd: cleanSplit1USD,
+          amount_bs: Math.round(cleanSplit1USD * exchangeRate * 100) / 100,
+          net_income_usd: net1USD
+        },
+        {
+          method: splitMethod2,
+          amount_usd: cleanSplit2USD,
+          amount_bs: Math.round(cleanSplit2USD * exchangeRate * 100) / 100,
+          net_income_usd: net2USD
+        }
+      ]
+    }
 
     const transaction = {
       id: 'tx_' + Date.now(),
@@ -247,6 +315,7 @@ export default function QuickCashModal({
       propina_staff_name: tipUSD > 0 ? (staffObj?.name || 'Venta del Local') : null,
       tasa_bcv: exchangeRate,
       metodo_pago: paymentMethod,
+      payment_splits: paymentSplits,
       comision_usd: staffCommissionUSD,
       ganancia_negocio_usd: businessProfitUSD,
       hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -279,7 +348,15 @@ export default function QuickCashModal({
       msg += `------------------------------------\n`
       msg += `💰 *TOTAL PAGADO: $${completedTx.total_cobrado_usd.toFixed(2)} USD*\n`
       msg += `👉 *Al cambio BCV: Bs. ${completedTx.total_cobrado_bs.toFixed(2)}*\n`
-      msg += `💳 *Método de pago:* ${(completedTx.metodo_pago || '').replace(/_/g, ' ').toUpperCase()}\n\n`
+      if (Array.isArray(completedTx.payment_splits) && completedTx.payment_splits.length > 0) {
+        msg += `💳 *Método de pago:* PAGO MIXTO\n`
+        completedTx.payment_splits.forEach(sp => {
+          msg += `  • ${formatMethodName(sp.method)}: $${Number(sp.amount_usd).toFixed(2)} USD (Bs. ${Number(sp.amount_bs).toFixed(2)})\n`
+        })
+        msg += `\n`
+      } else {
+        msg += `💳 *Método de pago:* ${formatMethodName(completedTx.metodo_pago).toUpperCase()}\n\n`
+      }
       msg += `¡Gracias por visitarnos, te esperamos pronto! ✨`
 
       const url = cleanPhone
@@ -338,6 +415,21 @@ export default function QuickCashModal({
             <div className="text-right text-[11px] text-slate-400">
               Bs. {completedTx.total_cobrado_bs.toFixed(2)} (Tasa: {exchangeRate.toFixed(2)})
             </div>
+            {Array.isArray(completedTx.payment_splits) && completedTx.payment_splits.length > 0 && (
+              <div className="pt-2 border-t border-dark-800/80 space-y-1 text-[11px]">
+                <div className="text-purple-400 font-sans font-bold uppercase tracking-wider text-[10px]">
+                  🔀 Desglose de Pago Mixto:
+                </div>
+                {completedTx.payment_splits.map((sp, i) => (
+                  <div key={i} className="flex justify-between text-slate-300">
+                    <span>• {formatMethodName(sp.method)}:</span>
+                    <span className="font-bold text-white">
+                      ${Number(sp.amount_usd).toFixed(2)} <span className="text-slate-500">(Bs. {Number(sp.amount_bs).toFixed(0)})</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}
@@ -620,18 +712,19 @@ export default function QuickCashModal({
             </div>
           </div>
 
-          {/* 3. Método de Pago (Venezuela Criollo) */}
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          {/* 3. Método de Pago (Venezuela Criollo + Pago Mixto) */}
+          <div className="space-y-2.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">
               3. ¿Cómo pagó el cliente?
             </label>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
               {[
                 { id: 'pago_movil', label: 'Pago Móvil', badge: 'Bs. Banco' },
                 { id: 'efectivo_usd', label: 'Efectivo $', badge: 'Gaveta' },
                 { id: 'punto_de_venta', label: 'Punto Venta', badge: 'Bs. Tarjeta' },
                 { id: 'zelle', label: 'Zelle / Binance', badge: 'Dólares' },
                 { id: 'fiado', label: 'Fiado (Debe)', badge: 'Pendiente' },
+                { id: 'mixto', label: '🔀 Mixto', badge: '2 Métodos' },
               ].map(method => (
                 <button
                   type="button"
@@ -639,7 +732,9 @@ export default function QuickCashModal({
                   onClick={() => setPaymentMethod(method.id)}
                   className={`p-2 rounded-xl border text-center transition-all ${
                     paymentMethod === method.id
-                      ? 'bg-blue-500/20 border-blue-500/60 text-white font-bold'
+                      ? method.id === 'mixto'
+                        ? 'bg-purple-500/20 border-purple-500/70 text-purple-200 font-bold shadow-sm'
+                        : 'bg-blue-500/20 border-blue-500/60 text-white font-bold'
                       : 'bg-dark-800 border-dark-700/60 text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -648,6 +743,154 @@ export default function QuickCashModal({
                 </button>
               ))}
             </div>
+
+            {/* Calculadora Interactiva de Pago Mixto (Se despliega al elegir 'mixto') */}
+            {paymentMethod === 'mixto' && (
+              <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/35 space-y-2.5 animate-fadeIn">
+                <div className="flex items-center justify-between text-[11px] pb-1.5 border-b border-purple-500/20">
+                  <span className="font-bold text-purple-300 uppercase tracking-wider">
+                    🔀 División de Cobro Mixto
+                  </span>
+                  <span className="font-mono text-slate-300">
+                    Total: <strong className="text-white">${grandTotalUSD.toFixed(2)}</strong> (Bs. {grandTotalBs})
+                  </span>
+                </div>
+
+                {/* Parte 1: Lo que entrega primero el cliente */}
+                <div className="p-2.5 rounded-xl bg-dark-900/90 border border-dark-750 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                      1ra Parte (Recibido):
+                    </span>
+                    <div className="flex items-center gap-1 bg-dark-950 border border-dark-750 p-0.5 rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSplitCurrency1('USD')
+                          setSplitInput1('')
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                          splitCurrency1 === 'USD'
+                            ? 'bg-emerald-500 text-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        En $ USD
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSplitCurrency1('Bs')
+                          setSplitInput1('')
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                          splitCurrency1 === 'Bs'
+                            ? 'bg-emerald-500 text-black'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        En Bs.
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <select
+                      value={splitMethod1}
+                      onChange={(e) => {
+                        const nextM1 = e.target.value
+                        setSplitMethod1(nextM1)
+                        if (nextM1 === splitMethod2) {
+                          const alt = SPLIT_METHOD_OPTIONS.find(o => o.id !== nextM1)
+                          if (alt) setSplitMethod2(alt.id)
+                        }
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-semibold focus:outline-none focus:border-purple-500"
+                    >
+                      {SPLIT_METHOD_OPTIONS.map(opt => (
+                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                      ))}
+                    </select>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        placeholder={splitCurrency1 === 'USD' ? 'Monto 1ra parte ($)' : 'Monto 1ra parte (Bs)'}
+                        value={splitInput1}
+                        onChange={(e) => setSplitInput1(e.target.value)}
+                        className="w-full pl-3 pr-8 py-2 rounded-xl bg-dark-950 border border-purple-500/40 focus:border-purple-400 text-xs font-mono font-bold text-white placeholder-slate-500 focus:outline-none"
+                      />
+                      {splitInput1 !== '' && (
+                        <button
+                          type="button"
+                          onClick={() => setSplitInput1('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {split1USD > 0 && (
+                    <div className="text-right text-[10px] font-mono text-slate-400">
+                      1ra Parte: <strong className="text-emerald-400">${split1USD.toFixed(2)} USD</strong> (Bs. {split1Bs.toFixed(2)})
+                    </div>
+                  )}
+                </div>
+
+                {/* Parte 2: Restante Automático */}
+                <div className="p-2.5 rounded-xl bg-dark-900/90 border border-dark-750 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                      2da Parte (Restante Automático):
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      Se calcula solo al instante
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-center">
+                    <select
+                      value={splitMethod2}
+                      onChange={(e) => {
+                        const nextM2 = e.target.value
+                        setSplitMethod2(nextM2)
+                        if (nextM2 === splitMethod1) {
+                          const alt = SPLIT_METHOD_OPTIONS.find(o => o.id !== nextM2)
+                          if (alt) setSplitMethod1(alt.id)
+                        }
+                      }}
+                      className="w-full px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-semibold focus:outline-none focus:border-purple-500"
+                    >
+                      {SPLIT_METHOD_OPTIONS.map(opt => (
+                        <option key={opt.id} value={opt.id}>{opt.label}</option>
+                      ))}
+                    </select>
+
+                    <div className="px-3 py-1.5 rounded-xl bg-dark-950 border border-amber-500/30 flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-semibold">Falta cobrar:</span>
+                      <div className="text-right font-mono">
+                        <span className="text-sm font-black text-amber-400 block leading-tight">
+                          ${split2USD.toFixed(2)} USD
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-bold block">
+                          Bs. {split2Bs.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {!isSplitValid && splitInput1 !== '' && (
+                  <p className="text-[11px] text-red-400 font-semibold text-center">
+                    ⚠️ El monto de la 1ra parte debe ser menor al total (${grandTotalUSD.toFixed(2)}) y con métodos distintos.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Nombre y WhatsApp del cliente (para Retargeting y Fidelidad) */}
@@ -681,11 +924,11 @@ export default function QuickCashModal({
             </div>
           </div>
 
-          {/* 4. Propina para el Profesional (Aparte) */}
+          {/* 4. Propina Libre Manual para el Profesional (En $ o Bs, sin montos predeterminados) */}
           <div className="p-3 rounded-xl bg-dark-950/70 border border-dark-800 space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-                <span>🪙 Propina {staffObj?.name.split(' ')[0] ? `para ${staffObj.name.split(' ')[0]}` : ''} (Aparte)</span>
+                <span>🪙 Propina {staffObj?.name.split(' ')[0] ? `para ${staffObj.name.split(' ')[0]}` : ''} (Opcional)</span>
               </label>
 
               {/* Currency Toggle: [$ USD] | [Bs. Bolívares] */}
@@ -697,7 +940,7 @@ export default function QuickCashModal({
                     setTipUSD(0)
                     setCustomTip('')
                   }}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                  className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all ${
                     tipCurrency === 'USD'
                       ? 'bg-amber-500 text-black shadow'
                       : 'text-slate-400 hover:text-white'
@@ -712,7 +955,7 @@ export default function QuickCashModal({
                     setTipUSD(0)
                     setCustomTip('')
                   }}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                  className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all ${
                     tipCurrency === 'Bs'
                       ? 'bg-amber-500 text-black shadow'
                       : 'text-slate-400 hover:text-white'
@@ -723,109 +966,58 @@ export default function QuickCashModal({
               </div>
             </div>
 
-            {/* Current tip readout */}
-            {tipUSD > 0 && (
-              <div className="text-right">
-                <span className="text-[11px] font-mono font-bold text-amber-400">
-                  {tipCurrency === 'Bs'
-                    ? `Bs. ${(tipUSD * exchangeRate).toFixed(0)} (~$${tipUSD.toFixed(2)} USD)`
-                    : `+$${tipUSD.toFixed(2)} USD (Bs. ${(tipUSD * exchangeRate).toFixed(2)})`}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-amber-400">
+                  {tipCurrency === 'USD' ? '$' : 'Bs.'}
                 </span>
-              </div>
-            )}
-
-            {/* Quick chips depending on selected currency */}
-            {tipCurrency === 'USD' ? (
-              <div className="grid grid-cols-5 gap-1.5">
-                {[0, 1, 2, 5].map(amt => (
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  placeholder={tipCurrency === 'USD' ? 'Escribe el monto de propina en $ (ej: 2)' : 'Escribe el monto de propina en Bs (ej: 150)'}
+                  value={customTip}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setCustomTip(val)
+                    const num = parseFloat(val)
+                    if (!isNaN(num) && num > 0) {
+                      setTipUSD(tipCurrency === 'Bs' && exchangeRate > 0 ? (num / exchangeRate) : num)
+                    } else {
+                      setTipUSD(0)
+                    }
+                  }}
+                  className={`w-full pl-9 pr-8 py-2 rounded-xl bg-dark-850 border text-xs font-mono font-bold text-white placeholder-slate-500 focus:outline-none transition-all ${
+                    tipUSD > 0
+                      ? 'border-amber-500/80 ring-1 ring-amber-500/20'
+                      : 'border-dark-700/80 focus:border-amber-500'
+                  }`}
+                />
+                {customTip !== '' && (
                   <button
                     type="button"
-                    key={amt}
                     onClick={() => {
-                      setTipUSD(amt)
                       setCustomTip('')
+                      setTipUSD(0)
                     }}
-                    className={`py-1.5 rounded-xl border text-center transition-all text-xs font-bold font-mono ${
-                      tipUSD === amt && customTip === ''
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm'
-                        : 'bg-dark-800 border-dark-700/60 text-slate-400 hover:text-white'
-                    }`}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                    title="Limpiar propina"
                   >
-                    {amt === 0 ? 'Sin propina' : `+$${amt}`}
+                    ✕
                   </button>
-                ))}
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    placeholder="Otro $"
-                    value={customTip}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setCustomTip(val)
-                      const num = parseFloat(val)
-                      setTipUSD(!isNaN(num) && num > 0 ? num : 0)
-                    }}
-                    className={`w-full py-1.5 px-2 rounded-xl bg-dark-800 border text-center text-xs font-mono font-bold focus:outline-none ${
-                      customTip !== ''
-                        ? 'border-amber-500 text-amber-300'
-                        : 'border-dark-700/60 text-slate-400 focus:border-amber-500'
-                    }`}
-                  />
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="grid grid-cols-5 gap-1.5">
-                {[0, 50, 100, 200].map(amtBs => {
-                  const amtUSD = amtBs > 0 && exchangeRate > 0 ? (amtBs / exchangeRate) : 0
-                  const isSelected = customTip === '' && (
-                    amtBs === 0 ? tipUSD === 0 : Math.abs((tipUSD * exchangeRate) - amtBs) < 1.5
-                  )
-                  return (
-                    <button
-                      type="button"
-                      key={amtBs}
-                      onClick={() => {
-                        setTipUSD(amtUSD)
-                        setCustomTip('')
-                      }}
-                      className={`py-1.5 rounded-xl border text-center transition-all text-xs font-bold font-mono ${
-                        isSelected
-                          ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm'
-                          : 'bg-dark-800 border-dark-700/60 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {amtBs === 0 ? 'Sin propina' : `+Bs.${amtBs}`}
-                    </button>
-                  )
-                })}
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="10"
-                    min="0"
-                    placeholder="Otro Bs."
-                    value={customTip}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setCustomTip(val)
-                      const num = parseFloat(val)
-                      if (!isNaN(num) && num > 0 && exchangeRate > 0) {
-                        setTipUSD(num / exchangeRate)
-                      } else {
-                        setTipUSD(0)
-                      }
-                    }}
-                    className={`w-full py-1.5 px-2 rounded-xl bg-dark-800 border text-center text-xs font-mono font-bold focus:outline-none ${
-                      customTip !== ''
-                        ? 'border-amber-500 text-amber-300'
-                        : 'border-dark-700/60 text-slate-400 focus:border-amber-500'
-                    }`}
-                  />
+
+              {tipUSD > 0 && (
+                <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-right shrink-0">
+                  <span className="text-[11px] font-mono font-bold text-amber-300 block">
+                    {tipCurrency === 'Bs'
+                      ? `+$${tipUSD.toFixed(2)} USD (Bs. ${(tipUSD * exchangeRate).toFixed(2)})`
+                      : `+$${tipUSD.toFixed(2)} USD (Bs. ${(tipUSD * exchangeRate).toFixed(2)})`}
+                  </span>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Caja con la división de la plata */}

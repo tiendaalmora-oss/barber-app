@@ -87,6 +87,93 @@ export function isFiadoMethod(method) {
   return method === 'fiado'
 }
 
+export function isMixtoMethod(method) {
+  return method === 'mixto'
+}
+
+function matchesMethodGroup(method, targetGroup) {
+  if (!method) return false
+  if (targetGroup === 'efectivo') return isEfectivoMethod(method)
+  if (targetGroup === 'pago_movil') return isPagoMovilMethod(method)
+  if (targetGroup === 'punto') return isPuntoMethod(method)
+  if (targetGroup === 'digital' || targetGroup === 'zelle') return isDigitalMethod(method)
+  if (targetGroup === 'fiado') return isFiadoMethod(method)
+  return method === targetGroup
+}
+
+/**
+ * Returns the exact USD net revenue portion of a transaction that belongs to a given payment method group.
+ * Supports both standard single-method transactions and split payments (`payment_splits`).
+ */
+export function getTxMethodAmountUSD(tx, targetGroup) {
+  if (!tx || (tx.monto_usd || 0) <= 0) return 0
+  if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
+    return tx.payment_splits.reduce((sum, split) => {
+      if (split && matchesMethodGroup(split.method, targetGroup)) {
+        const val = split.net_income_usd !== undefined ? Number(split.net_income_usd) : Number(split.amount_usd || 0)
+        return sum + (isNaN(val) ? 0 : val)
+      }
+      return sum
+    }, 0)
+  }
+  return matchesMethodGroup(tx.metodo_pago, targetGroup) ? Number(tx.monto_usd || 0) : 0
+}
+
+/**
+ * Returns the total collected USD (including tip if any) for a given payment method group.
+ */
+export function getTxMethodCollectedUSD(tx, targetGroup) {
+  if (!tx || (tx.monto_usd || 0) <= 0) return 0
+  if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
+    return tx.payment_splits.reduce((sum, split) => {
+      if (split && matchesMethodGroup(split.method, targetGroup)) {
+        const val = Number(split.amount_usd || 0)
+        return sum + (isNaN(val) ? 0 : val)
+      }
+      return sum
+    }, 0)
+  }
+  const total = Number(tx.total_cobrado_usd ?? tx.monto_usd ?? 0)
+  return matchesMethodGroup(tx.metodo_pago, targetGroup) ? total : 0
+}
+
+/**
+ * Checks whether a transaction includes a specific payment method (either as primary method or inside payment_splits).
+ */
+export function txMatchesPaymentFilter(tx, filterGroup) {
+  if (!tx) return false
+  if (!filterGroup || filterGroup === 'all') return true
+  if (filterGroup === 'mixto') {
+    return tx.metodo_pago === 'mixto' || (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 1)
+  }
+  if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
+    return tx.payment_splits.some(s => s && matchesMethodGroup(s.method, filterGroup))
+  }
+  return matchesMethodGroup(tx.metodo_pago, filterGroup)
+}
+
+export function formatMethodName(method) {
+  if (!method) return 'Pago Móvil'
+  if (isEfectivoMethod(method)) return 'Efectivo $'
+  if (isPagoMovilMethod(method)) return 'Pago Móvil'
+  if (isPuntoMethod(method)) return 'Punto de Venta'
+  if (isDigitalMethod(method)) return 'Zelle / Binance'
+  if (isFiadoMethod(method)) return 'Fiado'
+  if (isMixtoMethod(method)) return 'Pago Mixto'
+  return String(method).replace(/_/g, ' ')
+}
+
+export function formatTxPaymentSummary(tx) {
+  if (!tx) return ''
+  if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
+    const parts = tx.payment_splits
+      .filter(s => s && Number(s.amount_usd) > 0)
+      .map(s => `${formatMethodName(s.method)} $${Number(s.amount_usd).toFixed(2)}`)
+    if (parts.length > 0) return `Mixto (${parts.join(' + ')})`
+  }
+  return formatMethodName(tx.metodo_pago)
+}
+
 /**
  * Normalizes time strings to canonical "HH:MM AM/PM" format.
  * Examples:

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, MessageSquare, Copy, Check, ExternalLink, Send, Smartphone, ShieldCheck, Share2 } from 'lucide-react'
-import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
+import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
 
 export default function WhatsAppCloseModal({
@@ -42,12 +42,12 @@ export default function WhatsAppCloseModal({
   const netProfitUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
   const netProfitBs = netProfitUSD * exchangeRate
 
-  // Breakdown by payment method
-  const pagoMovilUSD = incomeTx.filter(t => isPagoMovilMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
-  const efectivoUSD = incomeTx.filter(t => isEfectivoMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
-  const puntoUSD = incomeTx.filter(t => isPuntoMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
-  const digitalUSD = incomeTx.filter(t => isDigitalMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
-  const fiadoUSD = incomeTx.filter(t => isFiadoMethod(t.metodo_pago)).reduce((s, t) => s + t.monto_usd, 0)
+  // Breakdown by payment method (supports both single and split/mixed payments)
+  const pagoMovilUSD = incomeTx.reduce((s, t) => s + getTxMethodAmountUSD(t, 'pago_movil'), 0)
+  const efectivoUSD = incomeTx.reduce((s, t) => s + getTxMethodAmountUSD(t, 'efectivo'), 0)
+  const puntoUSD = incomeTx.reduce((s, t) => s + getTxMethodAmountUSD(t, 'punto'), 0)
+  const digitalUSD = incomeTx.reduce((s, t) => s + getTxMethodAmountUSD(t, 'digital'), 0)
+  const fiadoUSD = incomeTx.reduce((s, t) => s + getTxMethodAmountUSD(t, 'fiado'), 0)
 
   // Breakdown by staff
   const staffSummary = {}

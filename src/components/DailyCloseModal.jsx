@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
-import { isDateToday, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
+import { isDateToday, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
 
 export default function DailyCloseModal({
@@ -48,26 +48,16 @@ export default function DailyCloseModal({
   const tipPoolPerStaffUSD = totalTipsUSD / activeStaffCount
   const tipPoolPerStaffBs = tipPoolPerStaffUSD * exchangeRate
 
-  const efectivoUSD = incomeTx
-    .filter(t => isEfectivoMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const efectivoUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'efectivo'), 0)
 
-  const pagoMovilUSD = incomeTx
-    .filter(t => isPagoMovilMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const pagoMovilUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'pago_movil'), 0)
   const pagoMovilBs = pagoMovilUSD * exchangeRate
 
-  const zelleUSD = incomeTx
-    .filter(t => isDigitalMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const zelleUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'zelle'), 0)
 
-  const puntoUSD = incomeTx
-    .filter(t => isPuntoMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const puntoUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'punto'), 0)
 
-  const fiadoUSD = incomeTx
-    .filter(t => isFiadoMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const fiadoUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'fiado'), 0)
 
   // 2. Expenses & Vales of today
   const allNegativeTx = todayTx.filter(t => t.monto_usd < 0)

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Lock, Receipt, Smartphone, X, Calendar as CalendarIcon } from 'lucide-react'
-import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD, formatTxPaymentSummary, normalizeWhatsAppPhone } from '../lib/dateUtils'
 import ReceiptModal from './ReceiptModal'
 
 export default function DashboardView({ 
@@ -97,7 +97,7 @@ export default function DashboardView({
   const hasWeeklySales = weeklyData.some(d => d.revenue > 0)
   const bestDay = hasWeeklySales ? [...weeklyData].sort((a, b) => b.revenue - a.revenue)[0] : null
 
-  // 2. DYNAMIC real payment methods breakdown (Unified IDs & Normalized Methods) for selected date
+  // 2. DYNAMIC real payment methods breakdown (Unified IDs & Split Payments Support) for selected date
   const paymentMethodsList = [
     { id: 'pago_movil', label: 'Pago Móvil (Bs)', color: 'bg-blue-500' },
     { id: 'efectivo', label: 'Efectivo $ (Gaveta)', color: 'bg-emerald-500' },
@@ -105,33 +105,20 @@ export default function DashboardView({
     { id: 'punto', label: 'Punto de Venta', color: 'bg-teal-500' },
     { id: 'fiado', label: 'Fiados (Por Cobrar)', color: 'bg-amber-500' },
   ].map(m => {
-    const sum = dateTransactions
-      .filter(t => {
-        if (t.monto_usd <= 0) return false
-        if (m.id === 'efectivo') return isEfectivoMethod(t.metodo_pago)
-        if (m.id === 'punto') return isPuntoMethod(t.metodo_pago)
-        if (m.id === 'pago_movil') return isPagoMovilMethod(t.metodo_pago)
-        if (m.id === 'zelle') return isDigitalMethod(t.metodo_pago)
-        if (m.id === 'fiado') return isFiadoMethod(t.metodo_pago)
-        return t.metodo_pago === m.id
-      })
-      .reduce((acc, t) => acc + t.monto_usd, 0)
+    const sum = dateTransactions.reduce((acc, t) => acc + getTxMethodAmountUSD(t, m.id), 0)
     const pct = totalIncomeUSD > 0 ? Math.round((sum / totalIncomeUSD) * 100) : 0
     return { ...m, sum, pct }
   })
 
-  // Physical Cash (Gaveta) vs Digital / Banks vs Fiados (Real-time Criollo split) for selected date
-  const cashUSD = dateTransactions
-    .filter(t => t.monto_usd > 0 && isEfectivoMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  // Physical Cash (Gaveta) vs Digital / Banks vs Fiados (Real-time Criollo split + Mixed Payment support) for selected date
+  const cashUSD = dateTransactions.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'efectivo'), 0)
 
-  const digitalUSD = dateTransactions
-    .filter(t => t.monto_usd > 0 && !isEfectivoMethod(t.metodo_pago) && !isFiadoMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const digitalUSD = dateTransactions.reduce(
+    (sum, t) => sum + getTxMethodAmountUSD(t, 'pago_movil') + getTxMethodAmountUSD(t, 'punto') + getTxMethodAmountUSD(t, 'zelle'),
+    0
+  )
 
-  const fiadoUSD = dateTransactions
-    .filter(t => t.monto_usd > 0 && isFiadoMethod(t.metodo_pago))
-    .reduce((sum, t) => sum + t.monto_usd, 0)
+  const fiadoUSD = dateTransactions.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'fiado'), 0)
 
   // Distribution percentages of Total Revenue
   const profitPct = totalIncomeUSD > 0 ? Math.max(0, Math.round((totalBusinessNetUSD / totalIncomeUSD) * 100)) : 0
@@ -610,11 +597,12 @@ export default function DashboardView({
                               GASTO
                             </span>
                           ) : (
-                            <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-dark-800 text-slate-400 border border-dark-750">
-                              {isPagoMovilMethod(tx.metodo_pago) ? 'Pago Móvil' :
-                               isEfectivoMethod(tx.metodo_pago) ? 'Efectivo $' :
-                               isPuntoMethod(tx.metodo_pago) ? 'Punto Venta' :
-                               isFiadoMethod(tx.metodo_pago) ? 'Fiado' : (tx.metodo_pago || 'Otro')}
+                            <span className={`text-[9px] uppercase font-mono px-1.5 py-0.2 rounded border ${
+                              tx.metodo_pago === 'mixto'
+                                ? 'bg-purple-500/15 text-purple-300 border-purple-500/30 font-bold'
+                                : 'bg-dark-800 text-slate-400 border-dark-750'
+                            }`}>
+                              {formatTxPaymentSummary(tx)}
                             </span>
                           )}
                         </div>

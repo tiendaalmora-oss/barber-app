@@ -7,7 +7,8 @@ import {
 } from 'lucide-react'
 import { 
   isDateToday, getLocalDateIso, isEfectivoMethod, isPuntoMethod, 
-  isPagoMovilMethod, isDigitalMethod, isFiadoMethod, normalizeWhatsAppPhone 
+  isPagoMovilMethod, isDigitalMethod, isFiadoMethod, txMatchesPaymentFilter,
+  formatTxPaymentSummary, normalizeWhatsAppPhone 
 } from '../lib/dateUtils'
 import ReceiptModal from './ReceiptModal'
 
@@ -161,12 +162,8 @@ export default function MonthlyReportView({
     if (typeFilter === 'income' && t.monto_usd <= 0) return false
     if (typeFilter === 'expense' && t.monto_usd >= 0) return false
 
-    // Payment method filter
-    if (paymentFilter === 'efectivo' && !isEfectivoMethod(t.metodo_pago)) return false
-    if (paymentFilter === 'pago_movil' && !isPagoMovilMethod(t.metodo_pago)) return false
-    if (paymentFilter === 'punto' && !isPuntoMethod(t.metodo_pago)) return false
-    if (paymentFilter === 'digital' && !isDigitalMethod(t.metodo_pago)) return false
-    if (paymentFilter === 'fiado' && !isFiadoMethod(t.metodo_pago)) return false
+    // Payment method filter (supports both single and split/mixed payments)
+    if (paymentFilter !== 'all' && !txMatchesPaymentFilter(t, paymentFilter)) return false
 
     // Staff filter
     if (staffFilter !== 'all') {
@@ -554,6 +551,7 @@ export default function MonthlyReportView({
                 <option value="punto">💳 Punto de Venta</option>
                 <option value="digital">⚡ Zelle / Binance</option>
                 <option value="fiado">🤝 Fiado (Por Cobrar)</option>
+                <option value="mixto">🔀 Pago Mixto</option>
               </select>
 
               {/* Type Filter */}
@@ -621,11 +619,12 @@ export default function MonthlyReportView({
                               GASTO OPERATIVO
                             </span>
                           ) : (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-dark-800 text-slate-300 font-semibold border border-dark-750 uppercase font-mono">
-                              {isPagoMovilMethod(tx.metodo_pago) ? '📱 Pago Móvil' :
-                               isEfectivoMethod(tx.metodo_pago) ? '💵 Efectivo $' :
-                               isPuntoMethod(tx.metodo_pago) ? '💳 Punto' :
-                               isFiadoMethod(tx.metodo_pago) ? '🤝 Fiado' : (tx.metodo_pago || 'Otro')}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border uppercase font-mono ${
+                              tx.metodo_pago === 'mixto'
+                                ? 'bg-purple-500/15 text-purple-300 border-purple-500/30 font-bold'
+                                : 'bg-dark-800 text-slate-300 border-dark-750'
+                            }`}>
+                              {formatTxPaymentSummary(tx)}
                             </span>
                           )}
 
