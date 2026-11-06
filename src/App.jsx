@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Navbar from './components/Navbar'
 import DashboardView from './components/DashboardView'
 import CommissionsView from './components/CommissionsView'
@@ -222,6 +222,7 @@ export default function App() {
 
   // Editable Staff, Services, and Products per Niche
   const [staffByNiche, setStaffByNiche] = useState(() => {
+    if (initWs && initWs.staffByNiche) return initWs.staffByNiche
     const saved = localStorage.getItem('barber_staff_by_niche')
     return saved ? JSON.parse(saved) : {
       barberia: NICHES.barberia.staff,
@@ -231,6 +232,7 @@ export default function App() {
   })
 
   const [servicesByNiche, setServicesByNiche] = useState(() => {
+    if (initWs && initWs.servicesByNiche) return initWs.servicesByNiche
     const saved = localStorage.getItem('barber_services_by_niche')
     return saved ? JSON.parse(saved) : {
       barberia: NICHES.barberia.services,
@@ -240,6 +242,7 @@ export default function App() {
   })
 
   const [productsByNiche, setProductsByNiche] = useState(() => {
+    if (initWs && initWs.productsByNiche) return initWs.productsByNiche
     const saved = localStorage.getItem('barber_products_by_niche')
     return saved ? JSON.parse(saved) : {
       barberia: NICHES.barberia.products,
@@ -247,6 +250,16 @@ export default function App() {
       mixto: NICHES.mixto.products
     }
   })
+
+  // Track explicitly deleted transaction IDs so server merge does not resurrect intentionally deleted tickets
+  const [deletedTxIds, setDeletedTxIds] = useState(() => {
+    if (initWs && Array.isArray(initWs.deletedTxIds)) return initWs.deletedTxIds
+    return []
+  })
+
+  // Guard: never POST workspace to server until initial GET /api/workspace/:id has completed for the active tenant
+  const serverSyncReadyRef = useRef(false)
+  const syncedTenantIdRef = useRef(null)
 
   const [transactions, setTransactions] = useState(() => {
     const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
@@ -393,6 +406,7 @@ export default function App() {
     const ws = {
       currentNiche,
       transactions,
+      deletedTxIds,
       clients,
       appointments,
       businessProfile,
@@ -417,8 +431,11 @@ export default function App() {
       console.warn('Storage quota warning, continuing with in-memory state:', storageErr)
     }
 
-    // 3. Debounced sync to VPS backend
+    // 3. Debounced sync to VPS backend — strictly gated until initial GET /api/workspace/:id has completed!
     const timeout = setTimeout(async () => {
+      if (!serverSyncReadyRef.current || syncedTenantIdRef.current !== activeTenantId) {
+        return
+      }
       try {
         await fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
           method: 'POST',
@@ -431,12 +448,13 @@ export default function App() {
     }, 1200)
 
     return () => clearTimeout(timeout)
-  }, [activeTenantId, currentNiche, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings])
+  }, [activeTenantId, currentNiche, transactions, deletedTxIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings])
 
   // Auto-reconstruct historical transactions from client visit history if wiped by legacy reset button
   useEffect(() => {
     if (!activeTenantId || activeTenantId === 'ten_1' || !Array.isArray(clients) || clients.length === 0) return
 
+    const delSet = new Set(Array.isArray(deletedTxIds) ? deletedTxIds : [])
     const rate = Number(exchangeRate) || 889.26
     const allServices = [
       ...((servicesByNiche && servicesByNiche.barberia) || []),
@@ -458,6 +476,8 @@ export default function App() {
         if (activeTenantId === 'ten_1793499033884' && c.last_staff === 'Agenda Web') continue
 
         const recId = 'rec_' + c.id
+        if (delSet.has(recId)) continue
+
         const alreadyExists = existingTxs.some(
           t => t && (t.id === recId || (t.client_name === c.name && (t.fecha || '').startsWith(c.last_visit)))
         )
@@ -541,7 +561,7 @@ export default function App() {
       if (recoveredTxs.length === 0) return prev
       return [...existingTxs, ...recoveredTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
     })
-  }, [activeTenantId, clients, servicesByNiche, staffByNiche, exchangeRate])
+  }, [activeTenantId, clients, deletedTxIds, servicesByNiche, staffByNiche, exchangeRate])
 
   // Real-time auto-sync for active barber: polls for new web bookings and restored server transactions without overwriting local changes
   useEffect(() => {
@@ -553,8 +573,16 @@ export default function App() {
         if (res.ok) {
           const data = await res.json()
           if (data && data.workspace) {
-            if (Array.isArray(data.workspace.appointments)) {
-              const serverApts = data.workspace.appointments
+            const ws = data.workspace
+            const serverDelIds = Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : []
+            if (serverDelIds.length > 0) {
+              setDeletedTxIds(prev => {
+                const merged = Array.from(new Set([...(prev || []), ...serverDelIds]))
+                return merged.length !== (prev || []).length ? merged : prev
+              })
+            }
+            if (Array.isArray(ws.appointments)) {
+              const serverApts = ws.appointments
               setAppointments(prev => {
                 const prevIds = new Set((prev || []).map(a => a.id))
                 const newIncoming = serverApts.filter(a => a && a.id && !prevIds.has(a.id))
@@ -564,8 +592,8 @@ export default function App() {
                 return prev
               })
             }
-            if (Array.isArray(data.workspace.clients)) {
-              const serverClients = data.workspace.clients
+            if (Array.isArray(ws.clients)) {
+              const serverClients = ws.clients
               setClients(prev => {
                 const prevIds = new Set((prev || []).map(c => c.id))
                 const newIncomingClients = serverClients.filter(c => c && c.id && !prevIds.has(c.id))
@@ -575,18 +603,44 @@ export default function App() {
                 return prev
               })
             }
-            if (Array.isArray(data.workspace.transactions)) {
-              const serverTxs = data.workspace.transactions
+            if (Array.isArray(ws.transactions)) {
+              const serverTxs = ws.transactions
               setTransactions(prev => {
                 const prevIds = new Set((prev || []).map(t => t.id))
-                const newIncomingTxs = serverTxs.filter(t => t && t.id && !prevIds.has(t.id))
+                const newIncomingTxs = serverTxs.filter(t => t && t.id && !prevIds.has(t.id) && !serverDelIds.includes(t.id))
                 if (newIncomingTxs.length > 0) {
                   return [...prev, ...newIncomingTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
                 }
                 return prev
               })
             }
+            if (Array.isArray(ws.dailyClosings)) {
+              const serverClosings = ws.dailyClosings
+              setDailyClosings(prev => {
+                const prevIds = new Set((prev || []).map(c => c.id))
+                const newIncoming = serverClosings.filter(c => c && c.id && !prevIds.has(c.id))
+                if (newIncoming.length > 0) {
+                  return [...newIncoming, ...prev]
+                }
+                return prev
+              })
+            }
+            // If local state hasn't synced yet for this tenant, also hydrate profile, staff, services, products, and rate from server
+            if (syncedTenantIdRef.current !== activeTenantId) {
+              if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
+              if (ws.staffByNiche) setStaffByNiche(ws.staffByNiche)
+              if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
+              if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
+              if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
+                setExchangeRate(Number(ws.exchangeRate))
+              }
+              if (ws.currentNiche && NICHES[ws.currentNiche]) {
+                setCurrentNiche(ws.currentNiche)
+              }
+            }
           }
+          syncedTenantIdRef.current = activeTenantId
+          serverSyncReadyRef.current = true
         }
       } catch (e) {}
     }
@@ -937,13 +991,49 @@ export default function App() {
         const data = await res.json()
         if (data.workspace) {
           const ws = data.workspace
-          if (Array.isArray(ws.transactions)) setTransactions(ws.transactions)
-          if (Array.isArray(ws.clients)) setClients(ws.clients)
-          if (Array.isArray(ws.appointments)) setAppointments(ws.appointments)
+          const serverDelIds = Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : []
+          if (serverDelIds.length > 0) {
+            setDeletedTxIds(prev => Array.from(new Set([...(prev || []), ...serverDelIds])))
+          }
+          if (Array.isArray(ws.transactions)) {
+            setTransactions(prev => {
+              const localList = Array.isArray(prev) ? prev : []
+              const serverIds = new Set(ws.transactions.map(t => t && t.id).filter(Boolean))
+              const localOnly = localList.filter(t => t && t.id && !serverIds.has(t.id) && !serverDelIds.includes(t.id))
+              return [...ws.transactions, ...localOnly]
+                .filter(t => t && !serverDelIds.includes(t.id))
+                .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+            })
+          }
+          if (Array.isArray(ws.clients)) {
+            setClients(prev => {
+              const localList = Array.isArray(prev) ? prev : []
+              const serverIds = new Set(ws.clients.map(c => c && c.id).filter(Boolean))
+              const localOnly = localList.filter(c => c && c.id && !serverIds.has(c.id))
+              return [...ws.clients, ...localOnly]
+            })
+          }
+          if (Array.isArray(ws.appointments)) {
+            setAppointments(prev => {
+              const localList = Array.isArray(prev) ? prev : []
+              const serverIds = new Set(ws.appointments.map(a => a && a.id).filter(Boolean))
+              const localOnly = localList.filter(a => a && a.id && !serverIds.has(a.id))
+              return [...ws.appointments, ...localOnly]
+            })
+          }
+          if (Array.isArray(ws.dailyClosings)) {
+            setDailyClosings(prev => {
+              const localList = Array.isArray(prev) ? prev : []
+              const serverIds = new Set(ws.dailyClosings.map(c => c && c.id).filter(Boolean))
+              const localOnly = localList.filter(c => c && c.id && !serverIds.has(c.id))
+              return [...ws.dailyClosings, ...localOnly]
+            })
+          }
           if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
           if (ws.staffByNiche) setStaffByNiche(ws.staffByNiche)
           if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
           if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
+          if (ws.currentNiche && NICHES[ws.currentNiche]) setCurrentNiche(ws.currentNiche)
           if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
             setExchangeRate(Number(ws.exchangeRate))
             localStorage.setItem('barber_rate', String(ws.exchangeRate))
@@ -952,6 +1042,8 @@ export default function App() {
             localStorage.setItem(`barber_ws_${tid}`, JSON.stringify(ws))
           } catch (e) {}
         }
+        syncedTenantIdRef.current = tid
+        serverSyncReadyRef.current = true
       }
     } catch (e) {
       console.warn('Workspace server load offline')
@@ -960,6 +1052,10 @@ export default function App() {
 
   // Handlers for SaaS Tenants
   const handleSelectTenant = (tenant) => {
+    // Lock auto-POST until server workspace is fetched and merged for this tenant
+    serverSyncReadyRef.current = false
+    syncedTenantIdRef.current = null
+
     setActiveTenantId(tenant.id)
     setCachedActiveTenant(tenant)
     localStorage.setItem('barber_logged_tenant_id', tenant.id)
@@ -973,44 +1069,75 @@ export default function App() {
 
     const isDemo = tenant.email === 'demo@ingenioos.online' || tenant.id === 'ten_1'
 
-    // Load tenant-scoped workspace from localStorage or server (NEVER wipe it!)
+    // Load tenant-scoped workspace from localStorage AND always sync with server (NEVER wipe or skip server!)
     try {
       const localScoped = localStorage.getItem(`barber_ws_${tenant.id}`)
       if (localScoped) {
         const parsed = JSON.parse(localScoped)
         if (isDemo && (!Array.isArray(parsed.transactions) || parsed.transactions.length < 15)) {
           handleLoadDemoWorkspaceData()
+          syncedTenantIdRef.current = tenant.id
+          serverSyncReadyRef.current = true
         } else {
-          if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions)
-          if (Array.isArray(parsed.clients)) setClients(parsed.clients)
-          if (Array.isArray(parsed.appointments)) setAppointments(parsed.appointments)
+          setTransactions(Array.isArray(parsed.transactions) ? parsed.transactions : [])
+          setDeletedTxIds(Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds : [])
+          setClients(Array.isArray(parsed.clients) ? parsed.clients : [])
+          setAppointments(Array.isArray(parsed.appointments) ? parsed.appointments : [])
+          setDailyClosings(Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [])
           if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
           if (parsed.staffByNiche) setStaffByNiche(parsed.staffByNiche)
           if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
           if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
+          if (parsed.exchangeRate && !isNaN(Number(parsed.exchangeRate))) {
+            setExchangeRate(Number(parsed.exchangeRate))
+          }
+          // CRITICAL: Always fetch latest server workspace to merge any data from other devices or server restorations!
+          if (!isDemo) {
+            fetchTenantWorkspace(tenant.id)
+          } else {
+            syncedTenantIdRef.current = tenant.id
+            serverSyncReadyRef.current = true
+          }
         }
       } else {
         if (isDemo) {
           handleLoadDemoWorkspaceData()
+          syncedTenantIdRef.current = tenant.id
+          serverSyncReadyRef.current = true
         } else {
-          fetchTenantWorkspace(tenant.id)
-          setBusinessProfile(prev => ({
-            ...prev,
+          // Clear previous tenant's in-memory arrays before pulling target tenant from server
+          setTransactions([])
+          setDeletedTxIds([])
+          setClients([])
+          setAppointments([])
+          setDailyClosings([])
+          setBusinessProfile({
+            ...INITIAL_BUSINESS_PROFILE,
             businessName: tenant.businessName,
-            whatsapp: tenant.phone || prev.whatsapp
-          }))
+            whatsapp: tenant.phone || ''
+          })
+          fetchTenantWorkspace(tenant.id)
         }
       }
     } catch (e) {
       if (isDemo) {
         handleLoadDemoWorkspaceData()
+        syncedTenantIdRef.current = tenant.id
+        serverSyncReadyRef.current = true
       } else {
+        setTransactions([])
+        setDeletedTxIds([])
+        setClients([])
+        setAppointments([])
+        setDailyClosings([])
         fetchTenantWorkspace(tenant.id)
       }
     }
   }
 
   const handleLogout = () => {
+    serverSyncReadyRef.current = false
+    syncedTenantIdRef.current = null
     setActiveTenantId(null)
     setCachedActiveTenant(null)
     localStorage.removeItem('barber_logged_tenant_id')
@@ -1062,8 +1189,10 @@ export default function App() {
       localStorage.setItem(`barber_ws_${newTenant.id}`, JSON.stringify(freshWorkspace))
     } catch (e) {}
     setTransactions([])
+    setDeletedTxIds([])
     setClients([])
     setAppointments([])
+    setDailyClosings([])
     setBusinessProfile(freshWorkspace.businessProfile)
     if (newTenant.niche && NICHES[newTenant.niche]) {
       setCurrentNiche(newTenant.niche)
@@ -1072,6 +1201,8 @@ export default function App() {
     if (freshWorkspace.servicesByNiche) setServicesByNiche(freshWorkspace.servicesByNiche)
     if (freshWorkspace.productsByNiche) setProductsByNiche(freshWorkspace.productsByNiche)
 
+    syncedTenantIdRef.current = newTenant.id
+    serverSyncReadyRef.current = true
     setTenants(prev => [newTenant, ...prev.filter(t => t.id !== newTenant.id && (t.email || '').toLowerCase().trim() !== cleanEmail)])
     setActiveTenantId(newTenant.id)
     setCachedActiveTenant(newTenant)
@@ -1457,6 +1588,9 @@ export default function App() {
   }
 
   const handleDeleteTransaction = (txId) => {
+    if (txId) {
+      setDeletedTxIds(prev => Array.from(new Set([...(prev || []), txId])))
+    }
     setTransactions(prev => prev.filter(t => t.id !== txId))
   }
 

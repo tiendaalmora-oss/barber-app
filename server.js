@@ -575,20 +575,72 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       // Merge: preserve historical/restored transactions existing on server unless explicitly deleted
       const existingTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
       const incomingTxs = Array.isArray(body.transactions) ? body.transactions : existingTxs
-      const deletedTxIds = new Set(Array.isArray(body.deletedTxIds) ? body.deletedTxIds : [
-        ...(Array.isArray(currentWs.deletedTxIds) ? currentWs.deletedTxIds : [])
+      const deletedTxIds = new Set([
+        ...(Array.isArray(currentWs.deletedTxIds) ? currentWs.deletedTxIds : []),
+        ...(Array.isArray(body.deletedTxIds) ? body.deletedTxIds : [])
       ])
       const incomingTxIds = new Set(incomingTxs.map(t => t && t.id).filter(Boolean))
       const preservedTxs = existingTxs.filter(t => t && t.id && !incomingTxIds.has(t.id) && !deletedTxIds.has(t.id))
       const finalTransactions = [...incomingTxs, ...preservedTxs].filter(t => t && !deletedTxIds.has(t.id))
 
+      // Merge dailyClosings
+      const existingClosings = Array.isArray(currentWs.dailyClosings) ? currentWs.dailyClosings : []
+      const incomingClosings = Array.isArray(body.dailyClosings) ? body.dailyClosings : existingClosings
+      const incomingClosingIds = new Set(incomingClosings.map(c => c && c.id).filter(Boolean))
+      const preservedClosings = existingClosings.filter(c => c && c.id && !incomingClosingIds.has(c.id))
+      const finalDailyClosings = [...incomingClosings, ...preservedClosings]
+
+      // Protect customized staff, services, profile, and exchangeRate against stale/empty browser tabs
+      const isStaleEmptyPayload =
+        (existingClients.length > 0 || existingTxs.length > 0) &&
+        Array.isArray(body.clients) && body.clients.length === 0 &&
+        Array.isArray(body.transactions) && body.transactions.length === 0
+
+      const isDefaultMockStaff = (sbn) =>
+        sbn && Array.isArray(sbn.barberia) && sbn.barberia.length === 3 &&
+        sbn.barberia[0]?.name === 'Carlos (El Maestro)' && sbn.barberia[1]?.name === 'Miguel (Fade Pro)'
+
+      const isDefaultMockServices = (svbn) =>
+        svbn && Array.isArray(svbn.barberia) && svbn.barberia.length === 5 &&
+        svbn.barberia[0]?.name === 'Corte Clásico / Degradé' && Number(svbn.barberia[0]?.price_usd) === 8
+
+      const finalStaffByNiche =
+        (isStaleEmptyPayload && currentWs.staffByNiche) ||
+        (currentWs.staffByNiche && !isDefaultMockStaff(currentWs.staffByNiche) && isDefaultMockStaff(body.staffByNiche))
+          ? currentWs.staffByNiche
+          : (body.staffByNiche || currentWs.staffByNiche)
+
+      const finalServicesByNiche =
+        (isStaleEmptyPayload && currentWs.servicesByNiche) ||
+        (currentWs.servicesByNiche && !isDefaultMockServices(currentWs.servicesByNiche) && isDefaultMockServices(body.servicesByNiche))
+          ? currentWs.servicesByNiche
+          : (body.servicesByNiche || currentWs.servicesByNiche)
+
+      const finalBusinessProfile =
+        (isStaleEmptyPayload && currentWs.businessProfile) ||
+        (currentWs.businessProfile?.businessName &&
+          currentWs.businessProfile.businessName !== 'Barbería & Studio El Fino' &&
+          body.businessProfile?.businessName === 'Barbería & Studio El Fino')
+          ? currentWs.businessProfile
+          : (body.businessProfile || currentWs.businessProfile)
+
+      const finalExchangeRate =
+        isStaleEmptyPayload && currentWs.exchangeRate
+          ? currentWs.exchangeRate
+          : (body.exchangeRate || currentWs.exchangeRate)
+
       const mergedWs = reconstructWorkspaceTransactions(tenantId, {
         ...currentWs,
         ...(body || {}),
+        businessProfile: finalBusinessProfile,
+        staffByNiche: finalStaffByNiche,
+        servicesByNiche: finalServicesByNiche,
+        exchangeRate: finalExchangeRate,
         clients: finalClients,
         transactions: finalTransactions,
         deletedTxIds: Array.from(deletedTxIds),
         appointments: finalAppointments,
+        dailyClosings: finalDailyClosings,
         updatedAt: Date.now()
       })
 

@@ -1,6 +1,6 @@
 // BarberOS Progressive Web App Service Worker
 // 100% Offline Resilience for Latin America & Venezuela
-const CACHE_NAME = 'barberos-cache-v9'
+const CACHE_NAME = 'barberos-cache-v10'
 
 const PRECACHE_ASSETS = [
   '/',
