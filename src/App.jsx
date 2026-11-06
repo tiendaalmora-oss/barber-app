@@ -433,28 +433,45 @@ export default function App() {
     return () => clearTimeout(timeout)
   }, [activeTenantId, currentNiche, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings])
 
-  // Real-time auto-sync for active barber: polls for new web bookings without overwriting local changes
+  // Real-time auto-sync for active barber: polls for new web bookings and restored server transactions without overwriting local changes
   useEffect(() => {
     if (!activeTenantId || isPublicPreview) return
-    const pollTimer = setInterval(async () => {
+
+    const syncFromServer = async () => {
       try {
         const res = await fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, { cache: 'no-store' })
         if (res.ok) {
           const data = await res.json()
-          if (data && data.workspace && Array.isArray(data.workspace.appointments)) {
-            const serverApts = data.workspace.appointments
-            setAppointments(prev => {
-              const prevIds = new Set((prev || []).map(a => a.id))
-              const newIncoming = serverApts.filter(a => !prevIds.has(a.id))
-              if (newIncoming.length > 0) {
-                return [...newIncoming, ...prev]
-              }
-              return prev
-            })
+          if (data && data.workspace) {
+            if (Array.isArray(data.workspace.appointments)) {
+              const serverApts = data.workspace.appointments
+              setAppointments(prev => {
+                const prevIds = new Set((prev || []).map(a => a.id))
+                const newIncoming = serverApts.filter(a => a && a.id && !prevIds.has(a.id))
+                if (newIncoming.length > 0) {
+                  return [...newIncoming, ...prev]
+                }
+                return prev
+              })
+            }
+            if (Array.isArray(data.workspace.transactions)) {
+              const serverTxs = data.workspace.transactions
+              setTransactions(prev => {
+                const prevIds = new Set((prev || []).map(t => t.id))
+                const newIncomingTxs = serverTxs.filter(t => t && t.id && !prevIds.has(t.id))
+                if (newIncomingTxs.length > 0) {
+                  return [...prev, ...newIncomingTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+                }
+                return prev
+              })
+            }
           }
         }
       } catch (e) {}
-    }, 12000)
+    }
+
+    syncFromServer()
+    const pollTimer = setInterval(syncFromServer, 12000)
 
     return () => clearInterval(pollTimer)
   }, [activeTenantId, isPublicPreview])

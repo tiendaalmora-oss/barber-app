@@ -447,9 +447,21 @@ const server = http.createServer(async (req, res) => {
       const preservedApts = existingApts.filter(a => !incomingIds.has(a.id) && a.status !== 'cancelada')
       const finalAppointments = [...incomingApts, ...preservedApts]
 
+      // Merge: preserve historical/restored transactions existing on server unless explicitly deleted
+      const existingTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
+      const incomingTxs = Array.isArray(body.transactions) ? body.transactions : existingTxs
+      const deletedTxIds = new Set(Array.isArray(body.deletedTxIds) ? body.deletedTxIds : [
+        ...(Array.isArray(currentWs.deletedTxIds) ? currentWs.deletedTxIds : [])
+      ])
+      const incomingTxIds = new Set(incomingTxs.map(t => t && t.id).filter(Boolean))
+      const preservedTxs = existingTxs.filter(t => t && t.id && !incomingTxIds.has(t.id) && !deletedTxIds.has(t.id))
+      const finalTransactions = [...incomingTxs, ...preservedTxs].filter(t => t && !deletedTxIds.has(t.id))
+
       db.workspaces[tenantId] = {
         ...currentWs,
         ...(body || {}),
+        transactions: finalTransactions,
+        deletedTxIds: Array.from(deletedTxIds),
         appointments: finalAppointments,
         updatedAt: Date.now()
       }
