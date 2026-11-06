@@ -5,6 +5,14 @@
  * Solves the critical 8:00 PM UTC rollover in Venezuela (GMT-4).
  */
 export function getLocalDateIso(d = new Date()) {
+  if (!d) return ''
+  // If already a valid YYYY-MM-DD string, return directly to prevent UTC midnight timezone shifts!
+  if (typeof d === 'string') {
+    const clean = d.split('T')[0].trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+      return clean
+    }
+  }
   const date = d instanceof Date ? d : new Date(d)
   if (isNaN(date.getTime())) return ''
   const localTime = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
@@ -16,7 +24,8 @@ export function getLocalDateIso(d = new Date()) {
  */
 export function isDateToday(dateString) {
   if (!dateString) return false
-  const targetIso = dateString.includes('T') ? dateString.split('T')[0] : dateString
+  const str = String(dateString)
+  const targetIso = str.includes('T') ? str.split('T')[0] : str
   return targetIso === getLocalDateIso()
 }
 

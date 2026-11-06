@@ -10,11 +10,15 @@
     <meta name="apple-mobile-web-app-title" content="BarberOS" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="application-name" content="BarberOS" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>BarberOS · Control Financiero & Caja</title>
     <script>
       (function() {
+        // 1. Brand customizer
         try {
           var h = window.location.hostname.toLowerCase();
           var p = new URLSearchParams(window.location.search);
@@ -34,6 +38,25 @@
             if (manifestLink) manifestLink.setAttribute('href', '/manifest.webmanifest?brand=glamos');
           }
         } catch (e) {}
+
+        // 2. Self-healing fallback: if any chunk hash 404s due to a new deployment, auto-purge cache and reload!
+        window.addEventListener('error', function(e) {
+          if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+            var url = e.target.src || e.target.href || '';
+            if (url.indexOf('/assets/') !== -1 && 'serviceWorker' in navigator) {
+              console.warn('Recovering from stale chunk cache:', url);
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+                if ('caches' in window) {
+                  caches.keys().then(function(keys) {
+                    keys.forEach(function(k) { caches.delete(k); });
+                    window.location.reload();
+                  });
+                }
+              });
+            }
+          }
+        }, true);
       })();
     </script>
   </head>

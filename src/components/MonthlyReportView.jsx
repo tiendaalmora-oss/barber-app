@@ -24,6 +24,9 @@ export default function MonthlyReportView({
   staffList = [],
   onDeleteTransaction
 }) {
+  const safeTransactions = Array.isArray(transactions) ? transactions : []
+  const safeClosings = Array.isArray(dailyClosings) ? dailyClosings : []
+
   const [activeSubTab, setActiveSubTab] = useState('summary') // 'summary' | 'sales_history' | 'daily_closings'
   const [periodFilter, setPeriodFilter] = useState('last_3_months') // 'this_month' | 'prev_month' | 'last_3_months' | 'last_6_months' | 'year' | 'all'
   
@@ -41,7 +44,7 @@ export default function MonthlyReportView({
 
   // Period filtering logic
   const isInPeriod = (dateStr) => {
-    if (!dateStr) return false
+    if (!dateStr || typeof dateStr !== 'string') return false
     const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
     const parts = cleanDate.split('-')
     if (parts.length !== 3) return true
@@ -75,21 +78,21 @@ export default function MonthlyReportView({
   }
 
   // Transactions scoped to chosen period
-  const periodTransactions = transactions.filter(t => isInPeriod(t.fecha))
+  const periodTransactions = safeTransactions.filter(t => t && isInPeriod(t.fecha))
 
   // Financial KPI calculations for period
-  const periodIncomeTx = periodTransactions.filter(t => t.monto_usd > 0)
-  const periodExpenseTx = periodTransactions.filter(t => t.monto_usd < 0)
+  const periodIncomeTx = periodTransactions.filter(t => (t.monto_usd || 0) > 0)
+  const periodExpenseTx = periodTransactions.filter(t => (t.monto_usd || 0) < 0)
 
-  const periodTotalRevenueUSD = periodIncomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
-  const periodTotalExpensesUSD = Math.abs(periodExpenseTx.reduce((sum, t) => sum + t.monto_usd, 0))
-  const periodTotalCommissionsUSD = periodIncomeTx.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
+  const periodTotalRevenueUSD = periodIncomeTx.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0)
+  const periodTotalExpensesUSD = Math.abs(periodExpenseTx.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0))
+  const periodTotalCommissionsUSD = periodIncomeTx.reduce((sum, t) => sum + Number(t.comision_usd || 0), 0)
   const periodNetProfitUSD = Math.max(0, periodTotalRevenueUSD - periodTotalExpensesUSD - periodTotalCommissionsUSD)
 
   // Monthly History Breakdown (for Summary Tab)
   const monthlyMap = {}
-  transactions.forEach(t => {
-    if (!t.fecha) return
+  safeTransactions.forEach(t => {
+    if (!t || !t.fecha || typeof t.fecha !== 'string') return
     const cleanDate = t.fecha.includes('T') ? t.fecha.split('T')[0] : t.fecha
     const parts = cleanDate.split('-')
     if (parts.length !== 3) return
@@ -104,12 +107,12 @@ export default function MonthlyReportView({
       monthlyMap[mKey] = { mes: MONTH_NAMES[mIdx], year: y, facturacion: 0, gastos: 0, comisiones: 0, lucro: 0, count: 0 }
     }
 
-    if (t.monto_usd > 0) {
-      monthlyMap[mKey].facturacion += t.monto_usd
-      monthlyMap[mKey].comisiones += (t.comision_usd || 0)
+    if ((t.monto_usd || 0) > 0) {
+      monthlyMap[mKey].facturacion += Number(t.monto_usd || 0)
+      monthlyMap[mKey].comisiones += Number(t.comision_usd || 0)
       monthlyMap[mKey].count += 1
     } else {
-      monthlyMap[mKey].gastos += Math.abs(t.monto_usd)
+      monthlyMap[mKey].gastos += Math.abs(Number(t.monto_usd || 0))
     }
   })
 

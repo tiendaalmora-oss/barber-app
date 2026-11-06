@@ -268,21 +268,33 @@ export default function App() {
   })
 
   const [businessProfile, setBusinessProfile] = useState(() => {
-    if (initWs && initWs.businessProfile) return initWs.businessProfile
-    const saved = localStorage.getItem('barber_profile')
-    return saved ? JSON.parse(saved) : INITIAL_BUSINESS_PROFILE
+    try {
+      if (initWs && initWs.businessProfile) return initWs.businessProfile
+      const saved = localStorage.getItem('barber_profile')
+      return saved ? JSON.parse(saved) : INITIAL_BUSINESS_PROFILE
+    } catch (e) {
+      return INITIAL_BUSINESS_PROFILE
+    }
   })
 
   const [retargetingConfig, setRetargetingConfig] = useState(() => {
-    const saved = localStorage.getItem('barber_retargeting_config')
-    return saved ? JSON.parse(saved) : INITIAL_RETARGETING_CONFIG
+    try {
+      const saved = localStorage.getItem('barber_retargeting_config')
+      return saved ? JSON.parse(saved) : INITIAL_RETARGETING_CONFIG
+    } catch (e) {
+      return INITIAL_RETARGETING_CONFIG
+    }
   })
 
   // Daily cash drawer closures & audit history
   const [dailyClosings, setDailyClosings] = useState(() => {
-    if (initWs && Array.isArray(initWs.dailyClosings)) return initWs.dailyClosings
-    const saved = localStorage.getItem('barber_daily_closings')
-    return saved ? JSON.parse(saved) : []
+    try {
+      if (initWs && Array.isArray(initWs.dailyClosings)) return initWs.dailyClosings
+      const saved = localStorage.getItem('barber_daily_closings')
+      return saved ? JSON.parse(saved) : []
+    } catch (e) {
+      return []
+    }
   })
 
   // Modals

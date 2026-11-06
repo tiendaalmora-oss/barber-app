@@ -1,6 +1,6 @@
 // BarberOS Progressive Web App Service Worker
 // 100% Offline Resilience for Latin America & Venezuela
-const CACHE_NAME = 'barberos-cache-v6'
+const CACHE_NAME = 'barberos-cache-v7'
 
 const PRECACHE_ASSETS = [
   '/',
@@ -128,6 +128,11 @@ self.addEventListener('fetch', (event) => {
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(request, responseClone)
             })
+            return networkResponse
+          }
+          // If server returns 404 (new release deployed), drop cache
+          if (networkResponse && networkResponse.status === 404) {
+            caches.delete(CACHE_NAME)
           }
           return networkResponse
         }).catch(() => {

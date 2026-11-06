@@ -4,16 +4,17 @@ import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, is
 import ReceiptModal from './ReceiptModal'
 
 export default function DashboardView({ 
-  transactions, 
-  exchangeRate, 
+  transactions = [], 
+  exchangeRate = 889.26, 
   onOpenCashModal,
   onOpenExpenseModal,
   onOpenWhatsAppModal,
   onOpenDailyCloseModal,
   onDeleteTransaction,
-  nicheData,
+  nicheData = {},
   businessProfile = {}
 }) {
+  const safeTransactions = Array.isArray(transactions) ? transactions : []
   const todayIso = getLocalDateIso()
   const yesterdayDate = new Date()
   yesterdayDate.setDate(yesterdayDate.getDate() - 1)
@@ -27,17 +28,20 @@ export default function DashboardView({
   const isViewingYesterday = selectedDate === yesterdayIso
 
   const formatDateLabel = (dateStr) => {
-    if (!dateStr) return ''
+    if (!dateStr || typeof dateStr !== 'string') return ''
     if (dateStr === todayIso) return 'Hoy'
     if (dateStr === yesterdayIso) return 'Ayer'
     const parts = dateStr.split('-')
     if (parts.length < 3) return dateStr
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
-    return `${parts[2]} de ${months[parseInt(parts[1], 10) - 1]}`
+    const mIdx = parseInt(parts[1], 10) - 1
+    const monthName = months[mIdx] || ''
+    return `${parts[2]} de ${monthName}`
   }
 
   // Filter transactions strictly for the selected date
-  const dateTransactions = transactions.filter(t => {
+  const dateTransactions = safeTransactions.filter(t => {
+    if (!t) return false
     if (!t.fecha) return isViewingToday
     return getLocalDateIso(t.fecha) === selectedDate
   })
@@ -70,7 +74,8 @@ export default function DashboardView({
     const dateIso = getLocalDateIso(d)
     const dayLabel = idx === 6 ? 'Hoy' : dayNames[d.getDay()]
 
-    const dayTx = transactions.filter(t => {
+    const dayTx = safeTransactions.filter(t => {
+      if (!t) return false
       const txDate = t.fecha ? getLocalDateIso(t.fecha) : ''
       return txDate === dateIso
     })
@@ -353,7 +358,7 @@ export default function DashboardView({
           <div className="p-3.5 rounded-2xl bg-dark-900/70 border border-dark-800/80 flex items-center justify-between">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                A Pagar ({nicheData.rolePlural})
+                A Pagar ({nicheData?.rolePlural || 'Personal'})
               </span>
               <div className="text-xl font-black text-amber-400 mt-0.5">
                 ${totalCommissionsUSD.toFixed(2)}
@@ -637,10 +642,10 @@ export default function DashboardView({
                       {/* Amount */}
                       <div className="text-left sm:text-right">
                         <div className={`text-sm font-black font-mono ${isExpense ? 'text-red-400' : 'text-white'}`}>
-                          {isExpense ? `-$${Math.abs(tx.monto_usd).toFixed(2)}` : `+$${tx.monto_usd.toFixed(2)}`}
+                          {isExpense ? `-$${Math.abs(Number(tx.monto_usd || 0)).toFixed(2)}` : `+$${Number(tx.monto_usd || 0).toFixed(2)}`}
                         </div>
                         <div className="text-[11px] text-slate-400 font-mono">
-                          Bs. {Math.abs(tx.monto_bs).toFixed(1)}
+                          Bs. {Math.abs(Number(tx.monto_bs || (Number(tx.monto_usd || 0) * exchangeRate) || 0)).toFixed(1)}
                         </div>
                       </div>
 
