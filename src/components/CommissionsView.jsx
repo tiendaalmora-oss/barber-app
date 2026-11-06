@@ -1006,23 +1006,29 @@ export default function CommissionsView({
 
       {/* MODAL 3: AGREGAR O EDITAR PROFESIONAL */}
       {isStaffModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-dark-900 border border-dark-700 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-dark-800 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-dark-900 border border-dark-700 w-full max-w-md max-h-[88vh] flex flex-col rounded-3xl shadow-2xl overflow-hidden">
+            {/* Header Fijo */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-dark-800 shrink-0">
               <div>
                 <h3 className="font-black text-white text-base">
                   {editingStaff ? `Editar ${roleName}` : `Nuevo ${roleName}`}
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Configura su nombre y % de comisión
+                  Configura su nombre y comisiones
                 </p>
               </div>
-              <button onClick={() => setIsStaffModalOpen(false)} className="text-slate-400 hover:text-white">
+              <button 
+                type="button"
+                onClick={() => setIsStaffModalOpen(false)} 
+                className="p-1.5 rounded-full hover:bg-dark-800 text-slate-400 hover:text-white transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveStaff} className="space-y-4">
+            {/* Formulario Scrolleable */}
+            <form onSubmit={handleSaveStaff} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-left">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
                   Nombre o Apodo del {roleName}
@@ -1040,7 +1046,7 @@ export default function CommissionsView({
 
               <div>
                 <label className="block text-xs font-bold text-gold-400 mb-1.5">
-                  Porcentaje de Comisión (%)
+                  Porcentaje de Comisión Base (%)
                 </label>
                 <div className="grid grid-cols-5 gap-1.5 mb-2">
                   {[40, 50, 55, 60, 70].map(pct => (
@@ -1095,7 +1101,7 @@ export default function CommissionsView({
               </div>
 
               {/* Sección: Comisiones Especiales por Servicio */}
-              <div className="pt-2 border-t border-dark-800 space-y-2">
+              <div className="pt-2 border-t border-dark-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-gold-400 flex items-center gap-1.5">
                     <span>🏷️ Comisiones Especiales por Servicio</span>
@@ -1148,56 +1154,61 @@ export default function CommissionsView({
                     })}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-slate-500 italic py-1">
+                  <p className="text-[11px] text-slate-500 italic py-0.5">
                     Sin comisiones especiales aún (gana {commissionPct}% base en todos los servicios).
                   </p>
                 )}
 
-                {/* Asignador de comisiones especiales */}
-                <div className="p-2.5 rounded-xl bg-dark-850 border border-dark-750 space-y-2">
+                {/* Asignador de comisiones especiales adaptado a móvil */}
+                <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750 space-y-2">
                   <span className="text-[11px] font-semibold text-slate-300 block">
-                    {Object.keys(serviceCommissions).length > 0 ? '+ Asignar otro servicio:' : 'Asignar un servicio con porcentaje especial:'}
+                    {Object.keys(serviceCommissions).length > 0 ? '+ Asignar otro servicio:' : 'Asignar servicio con porcentaje especial:'}
                   </span>
-                  <div className="flex gap-1.5">
-                    <select
-                      value={selectedServiceToAdd}
-                      onChange={(e) => {
-                        const svcId = e.target.value
-                        setSelectedServiceToAdd(svcId)
-                        if (svcId && serviceCommissions[svcId] !== undefined) {
-                          setCustomPctToAdd(String(serviceCommissions[svcId]))
-                        } else if (svcId) {
-                          const found = (servicesList || []).find(s => s.id === svcId)
-                          setCustomPctToAdd(found?.commission_pct ? String(found.commission_pct) : String(commissionPct))
-                        }
-                      }}
-                      className="flex-1 px-2.5 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
-                    >
-                      <option value="">Seleccionar servicio...</option>
-                      {(servicesList || [])
-                        .filter(s => !s.isProduct)
-                        .map(s => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} (${s.price_usd}) {serviceCommissions[s.id] !== undefined ? `[Asignado: ${serviceCommissions[s.id]}%]` : ''}
-                          </option>
-                        ))}
-                    </select>
-                    <div className="relative w-16 shrink-0">
+                  
+                  {/* Fila 1: Selector de Servicio (ancho completo) */}
+                  <select
+                    value={selectedServiceToAdd}
+                    onChange={(e) => {
+                      const svcId = e.target.value
+                      setSelectedServiceToAdd(svcId)
+                      if (svcId && serviceCommissions[svcId] !== undefined) {
+                        setCustomPctToAdd(String(serviceCommissions[svcId]))
+                      } else if (svcId) {
+                        const found = (servicesList || []).find(s => s.id === svcId)
+                        setCustomPctToAdd(found?.commission_pct ? String(found.commission_pct) : String(commissionPct))
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                  >
+                    <option value="">Seleccionar servicio...</option>
+                    {(servicesList || [])
+                      .filter(s => !s.isProduct)
+                      .map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} (${s.price_usd}) {serviceCommissions[s.id] !== undefined ? `[Asignado: ${serviceCommissions[s.id]}%]` : ''}
+                        </option>
+                      ))}
+                  </select>
+
+                  {/* Fila 2: Input de % y Botón Asignar */}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-xs">% com</span>
                       <input
                         type="number"
                         min="1"
                         max="100"
-                        placeholder="%"
+                        placeholder="Ej. 30"
                         value={customPctToAdd}
                         onChange={(e) => setCustomPctToAdd(e.target.value)}
-                        className="w-full px-2 py-1.5 rounded-xl bg-dark-900 border border-dark-700 text-xs font-mono font-bold text-center text-white focus:outline-none focus:border-gold-500"
+                        className="w-full pl-3 pr-12 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs font-mono font-bold text-white focus:outline-none focus:border-gold-500"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={() => {
                         if (!selectedServiceToAdd) {
-                          alert('Selecciona un servicio de la lista')
+                          alert('Selecciona un servicio de la lista primero')
                           return
                         }
                         const pct = parseFloat(customPctToAdd)
@@ -1212,25 +1223,26 @@ export default function CommissionsView({
                         setSelectedServiceToAdd('')
                         setCustomPctToAdd('')
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shrink-0 flex items-center gap-1 shadow-sm transition-all"
+                      className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shrink-0 flex items-center justify-center gap-1 shadow-md transition-all active:scale-95"
                     >
-                      <span>Asignar</span>
+                      <span>+ Asignar</span>
                     </button>
                   </div>
                 </div>
               </div>
 
+              {/* Botones de Acción (Fijos al final del formulario) */}
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsStaffModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-dark-800 text-slate-300 text-xs font-bold"
+                  className="flex-1 py-3 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 text-xs font-bold transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-black text-xs font-black shadow-lg shadow-gold-500/20"
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black text-xs font-black shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
                 >
                   {editingStaff ? 'Guardar Cambios' : 'Agregar al Equipo'}
                 </button>
