@@ -90,7 +90,21 @@ export default function App() {
 
   // Global state
   const initialBrand = getActiveBrand()
-  const [currentNiche, setCurrentNiche] = useState(initialBrand.code === 'glamos' ? 'estetica' : 'barberia')
+  const [currentNiche, setCurrentNiche] = useState(() => {
+    try {
+      const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+      if (loggedId) {
+        const scoped = localStorage.getItem(`barber_ws_${loggedId}`)
+        if (scoped) {
+          const parsed = JSON.parse(scoped)
+          if (parsed && parsed.currentNiche) return parsed.currentNiche
+        }
+      }
+      const savedNiche = typeof window !== 'undefined' ? localStorage.getItem('barber_current_niche') : null
+      if (savedNiche) return savedNiche
+    } catch (e) {}
+    return initialBrand.code === 'glamos' ? 'estetica' : 'barberia'
+  })
   const [activeTab, setActiveTab] = useState('dashboard')
   const [isPublicPreview, setIsPublicPreview] = useState(isDirectClientLink)
   const [isSuperAdminOpen, setIsSuperAdminOpen] = useState(isAdminDomain)
@@ -377,6 +391,7 @@ export default function App() {
   useEffect(() => {
     if (!activeTenantId) return
     const ws = {
+      currentNiche,
       transactions,
       clients,
       appointments,
@@ -396,6 +411,7 @@ export default function App() {
       localStorage.setItem('barber_appointments', JSON.stringify(appointments))
       localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
       localStorage.setItem('barber_rate', exchangeRate.toString())
+      localStorage.setItem('barber_current_niche', currentNiche)
       localStorage.setItem('barber_daily_closings', JSON.stringify(dailyClosings))
     } catch (storageErr) {
       console.warn('Storage quota warning, continuing with in-memory state:', storageErr)
@@ -415,7 +431,7 @@ export default function App() {
     }, 1200)
 
     return () => clearTimeout(timeout)
-  }, [activeTenantId, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate])
+  }, [activeTenantId, currentNiche, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings])
 
   // Real-time auto-sync for active barber: polls for new web bookings without overwriting local changes
   useEffect(() => {
@@ -1357,18 +1373,23 @@ export default function App() {
 
   // 2. If in Public Client Landing Mode (?reserva=1 or Owner Preview)
   if (isPublicPreview) {
+    const bookingNiche = (publicTenantWs && publicTenantWs.currentNiche) || currentNiche
+    const baseNicheObj = NICHES[bookingNiche] || nicheData
     const bookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || businessProfile
-    const bookingServices = (publicTenantWs && publicTenantWs.servicesByNiche && publicTenantWs.servicesByNiche[currentNiche]) || currentServices
-    const bookingStaff = (publicTenantWs && publicTenantWs.staffByNiche && publicTenantWs.staffByNiche[currentNiche]) || currentStaff
+    const bookingServices = (publicTenantWs && publicTenantWs.servicesByNiche && publicTenantWs.servicesByNiche[bookingNiche]) || (servicesByNiche[bookingNiche] || currentServices)
+    const bookingStaff = (publicTenantWs && publicTenantWs.staffByNiche && publicTenantWs.staffByNiche[bookingNiche]) || (staffByNiche[bookingNiche] || currentStaff)
+    const bookingProducts = (publicTenantWs && publicTenantWs.productsByNiche && publicTenantWs.productsByNiche[bookingNiche]) || (productsByNiche[bookingNiche] || currentProducts)
     const bookingAppointments = (publicTenantWs && publicTenantWs.appointments) || appointments
     const bookingExchangeRate = (publicTenantWs && publicTenantWs.exchangeRate && !isNaN(Number(publicTenantWs.exchangeRate)))
       ? Number(publicTenantWs.exchangeRate)
       : exchangeRate
 
     const bookingNicheData = {
-      ...nicheData,
+      ...baseNicheObj,
+      nicheId: bookingNiche,
       staff: bookingStaff,
-      services: bookingServices
+      services: bookingServices,
+      products: bookingProducts
     }
 
     const handlePublicBookAppointment = async (newApt) => {

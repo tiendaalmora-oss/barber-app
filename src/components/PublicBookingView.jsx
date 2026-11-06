@@ -1,20 +1,51 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { Scissors, Sparkles, MapPin, Clock, Phone, Calendar as CalendarIcon, CheckCircle2, ArrowLeft, MessageSquare, ShoppingBag, CreditCard, User, Check, Instagram, Package, Timer } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, timeToMinutes, isTimeSlotInPast, inferServiceDuration, getScheduleForDate, getDayLabelFromDate } from '../lib/dateUtils'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
+import {
+  Scissors,
+  Sparkles,
+  MapPin,
+  Clock,
+  Calendar as CalendarIcon,
+  CheckCircle2,
+  ArrowLeft,
+  MessageSquare,
+  ShoppingBag,
+  Check,
+  Instagram,
+  Package,
+  ChevronRight,
+  Star,
+  ShieldCheck,
+  User,
+  Zap
+} from 'lucide-react'
+import {
+  getLocalDateIso,
+  normalizeWhatsAppPhone,
+  normalizeTimeSlot,
+  timeToMinutes,
+  isTimeSlotInPast,
+  inferServiceDuration,
+  getScheduleForDate,
+  getDayLabelFromDate
+} from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 import PhoneCountryInput from './PhoneCountryInput'
 
+const SHORT_DAY_NAMES = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
+const SHORT_MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
 export default function PublicBookingView({
-  businessProfile,
-  nicheData,
-  customServices,
-  exchangeRate,
-  appointments,
+  businessProfile = {},
+  nicheData = {},
+  customServices = [],
+  exchangeRate = 889.26,
+  appointments = [],
   onBookAppointment,
-  isOwnerPreview,
+  isOwnerPreview = false,
   onExitPreview
 }) {
   const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 889.26
+  const isSalonNiche = nicheData?.nicheId === 'estetica' || (nicheData?.roleName || '').toLowerCase().includes('estilista') || (nicheData?.roleName || '').toLowerCase().includes('especialista')
 
   const catalogProducts = (nicheData?.products || []).filter(p => p.showInCatalog !== false)
 
@@ -25,13 +56,60 @@ export default function PublicBookingView({
     return getLocalDateIso(d)
   }
 
-  const allServices = [...(customServices || []), ...nicheData.services]
+  const allServices = useMemo(() => {
+    return [...(customServices || []), ...(nicheData?.services || [])]
+  }, [customServices, nicheData?.services])
+
   const bookingRef = useRef(null)
+  const customDateInputRef = useRef(null)
 
   const [catalogTab, setCatalogTab] = useState('servicios')
+  const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [selectedService, setSelectedService] = useState(allServices[0]?.name || '')
-  const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || 'any')
+  const [selectedStaff, setSelectedStaff] = useState(nicheData?.staff?.[0]?.id || 'any')
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
+
+  // Keep selectedService valid when allServices changes (e.g. when tenant workspace finishes loading)
+  useEffect(() => {
+    if (allServices.length > 0 && !allServices.some(s => s.name === selectedService)) {
+      setSelectedService(allServices[0].name)
+    }
+  }, [allServices, selectedService])
+
+  // Categories for horizontal filter
+  const categories = useMemo(() => {
+    const cats = new Set()
+    allServices.forEach(s => {
+      if (s.category && s.category.trim()) cats.add(s.category.trim())
+    })
+    return ['Todos', ...Array.from(cats)]
+  }, [allServices])
+
+  const filteredServices = useMemo(() => {
+    if (selectedCategory === 'Todos') return allServices
+    return allServices.filter(s => (s.category || '').trim() === selectedCategory)
+  }, [allServices, selectedCategory])
+
+  // Generate next 7 days for the iOS / Booksy horizontal date carousel
+  const upcomingDays = useMemo(() => {
+    const days = []
+    const base = new Date()
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(base)
+      d.setDate(base.getDate() + i)
+      const iso = getLocalDateIso(d)
+      const sched = getScheduleForDate(businessProfile, iso, DEFAULT_BOOKING_SLOTS)
+      const isClosed = !sched.enabled || sched.slots.length === 0
+      days.push({
+        iso,
+        dayName: i === 0 ? 'HOY' : i === 1 ? 'MAÑ' : SHORT_DAY_NAMES[d.getDay()],
+        dayNumber: String(d.getDate()).padStart(2, '0'),
+        monthShort: SHORT_MONTH_NAMES[d.getMonth()],
+        isClosed
+      })
+    }
+    return days
+  }, [businessProfile])
 
   // Dynamic day-of-week schedule awareness
   const dateSchedule = getScheduleForDate(businessProfile, selectedDate, DEFAULT_BOOKING_SLOTS)
@@ -43,29 +121,24 @@ export default function PublicBookingView({
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [bookedTicket, setBookedTicket] = useState(null)
-  const [timePeriodFilter, setTimePeriodFilter] = useState('all') // 'all' | 'morning' | 'afternoon' | 'evening'
+  const [timePeriodFilter, setTimePeriodFilter] = useState('all')
 
   const staffList = nicheData?.staff || []
-  // Single-chair mode is active if explicitly set to true OR by default if undefined OR if shop has <= 1 staff
   const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
 
   const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
-  const currentStaffObj = staffList.find(s => s.id === selectedStaff)
   const selectedDuration = currentServiceObj?.duration_min || inferServiceDuration(currentServiceObj)
 
-  // Helper to check if a slot is already in the past on the selected date
   const isSlotInPast = (timeStr) => {
     return isTimeSlotInPast(timeStr, selectedDate, 10)
   }
 
-  // Check if a slot is already booked in the owner's calendar (duration-aware & staff-aware)
   const isSlotBooked = (timeStr) => {
     if (!Array.isArray(appointments) || appointments.length === 0) return false
     const reqStart = timeToMinutes(timeStr)
     const reqEnd = reqStart + (selectedDuration || 30)
     const totalStaffCount = Math.max(1, staffList.length)
 
-    // Find all active appointments that overlap with [reqStart, reqEnd)
     const overlappingApts = appointments.filter(apt => {
       if (!apt || !apt.date || !apt.time) return false
       if (apt.date !== selectedDate) return false
@@ -75,20 +148,15 @@ export default function PublicBookingView({
       const aptDur = apt.duration_min || inferServiceDuration(apt.service)
       const aptEnd = aptStart + aptDur
 
-      // Check if intervals [reqStart, reqEnd) and [aptStart, aptEnd) overlap
       return Math.max(reqStart, aptStart) < Math.min(reqEnd, aptEnd)
     })
 
     if (overlappingApts.length === 0) return false
 
-    // Case 1: Solo business / Single Chair Mode (1 client at a time in the shop)
-    // Any overlapping active appointment blocks this time slot completely!
     if (isSingleChair) {
       return true
     }
 
-    // Case 2: Customer selected "El 1ro Libre" ('any') in multi-chair mode
-    // Slot is booked ONLY if all barbers/workers are busy during this time window
     if (selectedStaff === 'any') {
       const busyStaffIds = new Set()
       let unassignedCount = 0
@@ -107,7 +175,6 @@ export default function PublicBookingView({
       return (busyStaffIds.size + unassignedCount) >= totalStaffCount
     }
 
-    // Case 3: Customer selected a specific staff member
     return overlappingApts.some(apt => {
       if (apt.staff_id === selectedStaff) return true
       const staffObj = staffList.find(s => s.id === selectedStaff)
@@ -117,15 +184,10 @@ export default function PublicBookingView({
     })
   }
 
-  // Unified slot availability helper
   const isSlotUnavailable = (timeStr) => {
     return isSlotInPast(timeStr) || isSlotBooked(timeStr)
   }
 
-  // Backward compatibility alias
-  const isSlotTaken = (timeStr) => isSlotUnavailable(timeStr)
-
-  // Auto-switch selectedTime if user changes date or staff and current slot is occupied or unavailable on this day
   useEffect(() => {
     if (activeSlots.length === 0) return
     if (!activeSlots.includes(selectedTime) || isSlotUnavailable(selectedTime)) {
@@ -141,7 +203,8 @@ export default function PublicBookingView({
   const morningFree = morningSlots.filter(s => !isSlotUnavailable(s)).length
   const afternoonFree = afternoonSlots.filter(s => !isSlotUnavailable(s)).length
   const eveningFree = eveningSlots.filter(s => !isSlotUnavailable(s)).length
-  const allTodayUnavailable = activeSlots.length > 0 && activeSlots.every(s => isSlotUnavailable(s))
+  const totalFreeToday = activeSlots.filter(s => !isSlotUnavailable(s)).length
+  const allTodayUnavailable = activeSlots.length > 0 && totalFreeToday === 0
 
   const displayedSlots = activeSlots.filter(slot => {
     if (timePeriodFilter === 'all') return true
@@ -178,7 +241,6 @@ export default function PublicBookingView({
       return
     }
 
-    // Staff assignment: Single chair mode assigns directly to primary staff
     let assignedStaffId = selectedStaff
     if (isSingleChair) {
       assignedStaffId = staffList[0]?.id || 'e1'
@@ -199,7 +261,7 @@ export default function PublicBookingView({
           const directMatch = staffList.find(s => s.id === apt.staff_id || s.name === apt.staff_id || s.name === apt.staff_name)
           return directMatch ? directMatch.id : apt.staff_id
         })
-      
+
       const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
       assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
     }
@@ -222,9 +284,10 @@ export default function PublicBookingView({
     onBookAppointment(newApt)
     setBookedTicket({
       ...newApt,
-      staffName: assignedStaffObj ? assignedStaffObj.name : (businessProfile?.businessName || 'Equipo Disponible'),
+      code: 'VIP-' + String(Date.now()).slice(-4),
+      staffName: assignedStaffObj ? assignedStaffObj.name : (businessProfile?.businessName || 'Especialista Asignado'),
       priceUsd: currentServiceObj?.price_usd || 0,
-      priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toFixed(2),
+      priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       durationMin: selectedDuration
     })
   }
@@ -232,10 +295,11 @@ export default function PublicBookingView({
   const handleSendWhatsAppConfirmation = () => {
     if (!bookedTicket) return
     const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
-    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de apartar mi turno por su página web:\n\n` +
+    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de apartar mi turno desde su Ventana Digital:\n\n` +
+      `🎫 *Pase:* #${bookedTicket.code}\n` +
       `👤 *Cliente:* ${bookedTicket.client_name}\n` +
-      `✂️ *Servicio:* ${bookedTicket.service} ($${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n` +
-      `⏱️ *Tiempo estimado:* ${bookedTicket.durationMin || 30} min\n` +
+      `✨ *Servicio:* ${bookedTicket.service} ($${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n` +
+      `⏱️ *Duración:* ~${bookedTicket.durationMin || 30} min\n` +
       `💈 *Atiende:* ${bookedTicket.staffName}\n` +
       `📅 *Fecha:* ${bookedTicket.date}\n` +
       `⏰ *Hora:* ${bookedTicket.time}\n\n` +
@@ -248,7 +312,7 @@ export default function PublicBookingView({
 
   const handleOrderProductWhatsApp = (prod) => {
     const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
-    const bs = (prod.price_usd * safeRate).toFixed(2)
+    const bs = (prod.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* ($${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
@@ -256,222 +320,396 @@ export default function PublicBookingView({
     window.open(url, '_blank')
   }
 
+  const handleDirectWhatsAppContact = () => {
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
+    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Estoy viendo su catálogo online y quisiera hacer una consulta.`
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`
+    window.open(url, '_blank')
+  }
+
+  const handleOpenInstagram = () => {
+    if (!businessProfile?.instagram) return
+    const handle = businessProfile.instagram.replace('@', '').trim()
+    window.open(`https://instagram.com/${handle}`, '_blank')
+  }
+
+  const isCustomDateSelected = !upcomingDays.some(d => d.iso === selectedDate)
+
   return (
-    <div className="min-h-screen bg-dark-950 text-slate-100 pb-16 font-sans">
+    <div className="min-h-screen bg-[#07080b] text-slate-100 pb-24 font-sans selection:bg-gold-500 selection:text-black relative overflow-x-hidden">
       
+      {/* Ambient Luxury Top Spotlight */}
+      <div
+        className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[520px] h-[320px] rounded-full blur-[130px] opacity-25 z-0"
+        style={{
+          background: isSalonNiche
+            ? 'radial-gradient(circle, rgba(244,114,182,0.45) 0%, rgba(212,175,55,0.25) 50%, transparent 80%)'
+            : 'radial-gradient(circle, rgba(212,175,55,0.45) 0%, rgba(180,83,9,0.2) 55%, transparent 80%)'
+        }}
+      />
+
       {/* Owner Preview Floating Top Bar */}
       {isOwnerPreview && (
-        <div className="sticky top-0 z-50 bg-gradient-to-r from-gold-500 to-amber-500 text-black px-4 py-2.5 shadow-lg">
-          <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs font-black">
-              <span>👀 VISTA CLIENTE: Así ven las personas tu catálogo y agenda</span>
+        <div className="sticky top-0 z-50 bg-dark-900/95 backdrop-blur-xl border-b border-gold-500/30 text-white px-4 py-2.5 shadow-2xl">
+          <div className="max-w-xl mx-auto flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-xs font-bold">
+              <span className="w-2 h-2 rounded-full bg-gold-400 animate-ping" />
+              <span className="text-gold-400 uppercase tracking-wider text-[10px] font-black">Vista Previa VIP</span>
+              <span className="text-slate-300 hidden sm:inline">• Así ven tus clientes tu Ventana Digital</span>
             </div>
             <button
               onClick={onExitPreview}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black text-gold-400 hover:bg-dark-900 text-xs font-bold transition-all shrink-0"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 text-black hover:opacity-95 text-xs font-black transition-all shrink-0 shadow-md"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Volver a Mi Panel</span>
+              <ArrowLeft className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>Volver al Panel</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Main Mobile-First Landing Container */}
-      <div className="max-w-2xl mx-auto px-4 pt-6 space-y-6">
+      {/* Main Boutique Container */}
+      <div className="relative z-10 max-w-xl mx-auto px-4 pt-5 space-y-6">
         
-        {/* Hero Business Presentation Card */}
-        <div className="bg-gradient-to-b from-dark-900 to-dark-950 border border-dark-800 rounded-3xl p-6 text-center relative overflow-hidden shadow-2xl">
-          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-gold-500/20 to-amber-500/5 border border-gold-500/40 mx-auto flex items-center justify-center mb-3 shadow-inner overflow-hidden">
-            {businessProfile?.logoUrl ? (
-              <img src={businessProfile.logoUrl} alt={businessProfile.businessName} className="w-full h-full object-cover" />
-            ) : (
-              <Scissors className="w-9 h-9 text-gold-400" />
-            )}
-          </div>
+        {/* =====================================================================
+            1. PORTADA EDITORIAL DE LUJO (HERO STOREFRONT)
+           ===================================================================== */}
+        <section className="relative rounded-[28px] bg-gradient-to-b from-[#11131a] to-[#0a0c10] border border-white/[0.08] shadow-[0_24px_60px_rgba(0,0,0,0.75)] overflow-hidden">
+          
+          {/* Top Subtle Gold Hairline */}
+          <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-gold-500/60 to-transparent" />
 
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold mb-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Agenda Online Abierta • Reserva sin Hacer Cola</span>
-          </div>
-
-          <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-            {businessProfile.businessName}
-          </h1>
-
-          <p className="text-xs sm:text-sm text-slate-300 mt-2 max-w-md mx-auto leading-relaxed">
-            {businessProfile.slogan}
-          </p>
-
-          {/* Promo Banner if configured */}
-          {businessProfile.promoBanner && (
-            <div className="mt-4 px-4 py-2.5 rounded-xl bg-gold-500/15 border border-gold-500/30 text-gold-400 text-xs font-bold">
-              {businessProfile.promoBanner}
-            </div>
-          )}
-
-          {/* Location & Schedule Pills */}
-          <div className="mt-4 pt-4 border-t border-dark-800/80 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-400">
-            {businessProfile.address && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-850 border border-dark-750">
-                <MapPin className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                <span>{businessProfile.address}</span>
+          <div className="p-6 sm:p-7 text-center">
+            
+            {/* Brand Avatar / Logo with Luxury Ring */}
+            <div className="relative inline-block mb-3.5">
+              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-[22px] bg-gradient-to-br from-dark-800 to-dark-950 p-0.5 ring-1 ring-gold-500/35 shadow-[0_10px_30px_rgba(212,175,55,0.15)] mx-auto overflow-hidden flex items-center justify-center">
+                {businessProfile?.logoUrl ? (
+                  <img
+                    src={businessProfile.logoUrl}
+                    alt={businessProfile.businessName}
+                    className="w-full h-full object-cover rounded-[20px]"
+                  />
+                ) : isSalonNiche ? (
+                  <Sparkles className="w-9 h-9 text-gold-400" />
+                ) : (
+                  <Scissors className="w-9 h-9 text-gold-400" />
+                )}
               </div>
-            )}
-            {businessProfile.schedule && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-850 border border-dark-750">
-                <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                <span>{businessProfile.schedule}</span>
-              </div>
-            )}
-            {businessProfile.instagram && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-850 border border-dark-750">
-                <Instagram className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                <span>{businessProfile.instagram}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Accepted Payment Methods & BCV Rate */}
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-            <span className="text-[10px] px-2.5 py-1 rounded-lg bg-dark-800 text-slate-300 border border-dark-700 font-semibold">
-              💵 Tasa BCV Hoy: <strong className="text-gold-400">Bs. {safeRate.toFixed(2)}</strong>
-            </span>
-            {(businessProfile.paymentMethods || []).map(pm => (
+              {/* Live Verified Dot */}
               <span
-                key={pm}
-                className="text-[10px] px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold"
+                className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#0a0c10] flex items-center justify-center border border-white/10 shadow"
+                title="Reserva Online Activa"
               >
-                ✓ {pm}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Catalog Switcher Tabs */}
-        <div className="grid grid-cols-2 gap-2 bg-dark-900 p-1.5 rounded-2xl border border-dark-800">
-          <button
-            onClick={() => setCatalogTab('servicios')}
-            className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
-              catalogTab === 'servicios'
-                ? 'bg-gold-500 text-black shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <Scissors className="w-4 h-4" />
-            <span>Catálogo de Servicios ({allServices.length})</span>
-          </button>
-
-          <button
-            onClick={() => setCatalogTab('productos')}
-            className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
-              catalogTab === 'productos'
-                ? 'bg-gold-500 text-black shadow-md'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Productos en Venta ({catalogProducts.length})</span>
-          </button>
-        </div>
-
-        {/* TAB 1: Catálogo de Servicios */}
-        {catalogTab === 'servicios' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm font-black text-white uppercase tracking-wider">
-                Nuestros Servicios y Precios
-              </h2>
-              <span className="text-[11px] text-slate-400">
-                Toca uno para apartar turno
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
               </span>
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5">
-              {allServices.map(svc => {
+            {/* Minimal Status Eyebrow */}
+            <div className=" flex items-center justify-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-gold-400/90 mb-1.5">
+              <span>Agenda Digital Abierta</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-emerald-400">Cero Colas</span>
+            </div>
+
+            {/* Business Name */}
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight leading-tight">
+              {businessProfile?.businessName || 'Estudio & Barbería VIP'}
+            </h1>
+
+            {/* Slogan */}
+            {businessProfile?.slogan && (
+              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-md mx-auto leading-relaxed font-normal">
+                {businessProfile.slogan}
+              </p>
+            )}
+
+            {/* Editorial Location & Schedule Line (Clean & Uncluttered) */}
+            {(businessProfile?.address || businessProfile?.schedule) && (
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-3 text-xs text-slate-300/90">
+                {businessProfile?.address && (
+                  <div className="inline-flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-gold-400 shrink-0" />
+                    <span>{businessProfile.address}</span>
+                  </div>
+                )}
+                {businessProfile?.address && businessProfile?.schedule && (
+                  <span className="hidden sm:inline text-slate-600">•</span>
+                )}
+                {businessProfile?.schedule && (
+                  <div className="inline-flex items-center gap-1.5 text-slate-400">
+                    <Clock className="w-3.5 h-3.5 text-gold-400/80 shrink-0" />
+                    <span>{businessProfile.schedule}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quick Interactive Social / Contact Dock */}
+            {(businessProfile?.instagram || businessProfile?.whatsapp) && (
+              <div className="mt-4 flex items-center justify-center gap-2.5">
+                {businessProfile?.instagram && (
+                  <button
+                    type="button"
+                    onClick={handleOpenInstagram}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-200 transition-all active:scale-95"
+                  >
+                    <Instagram className="w-3.5 h-3.5 text-gold-400" />
+                    <span>{businessProfile.instagram}</span>
+                  </button>
+                )}
+                {businessProfile?.whatsapp && (
+                  <button
+                    type="button"
+                    onClick={handleDirectWhatsAppContact}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-xs font-semibold text-slate-200 transition-all active:scale-95"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>WhatsApp Directo</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Exclusive VIP Promo Card (if configured) */}
+            {businessProfile?.promoBanner && (
+              <div className="mt-5 relative rounded-2xl bg-gradient-to-r from-gold-500/[0.12] via-amber-500/[0.08] to-gold-500/[0.12] border border-gold-500/30 px-4 py-3 text-left flex items-center gap-3 shadow-inner">
+                <div className="w-8 h-8 rounded-xl bg-gold-500/20 border border-gold-500/40 flex items-center justify-center shrink-0">
+                  <Sparkles className="w-4 h-4 text-gold-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <span className="block text-[9px] font-black uppercase tracking-[0.15em] text-gold-400">
+                    Beneficio Destacado
+                  </span>
+                  <p className="text-xs font-bold text-white leading-snug mt-0.5">
+                    {businessProfile.promoBanner.replace(/^🔥\s*/, '')}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Unified Glass Footer Strip: BCV & Accepted Payment Methods */}
+          <div className="bg-white/[0.02] border-t border-white/[0.06] px-4 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
+            <div className="inline-flex items-center gap-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-gold-400" />
+              <span>Tasa BCV:</span>
+              <strong className="text-white font-mono">Bs. {safeRate.toFixed(2)}</strong>
+            </div>
+            {(businessProfile?.paymentMethods || []).length > 0 && (
+              <>
+                <span className="text-slate-700">|</span>
+                <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-slate-300">
+                  {(businessProfile.paymentMethods || []).map((pm, idx) => (
+                    <React.Fragment key={pm}>
+                      {idx > 0 && <span className="text-slate-600">·</span>}
+                      <span>{pm}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* =====================================================================
+            2. CONMUTADOR DE SECCIÓN (SERVICIOS VS BOUTIQUE DE PRODUCTOS)
+           ===================================================================== */}
+        {catalogProducts.length > 0 && (
+          <div className="grid grid-cols-2 gap-1.5 bg-[#0e1017] p-1.5 rounded-2xl border border-white/[0.07]">
+            <button
+              type="button"
+              onClick={() => setCatalogTab('servicios')}
+              className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
+                catalogTab === 'servicios'
+                  ? 'bg-gradient-to-r from-gold-500 to-amber-500 text-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {isSalonNiche ? <Sparkles className="w-3.5 h-3.5" /> : <Scissors className="w-3.5 h-3.5" />}
+              <span>Menú de Servicios ({allServices.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCatalogTab('productos')}
+              className={`py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all ${
+                catalogTab === 'productos'
+                  ? 'bg-gradient-to-r from-gold-500 to-amber-500 text-black shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              <span>Tienda & Productos ({catalogProducts.length})</span>
+            </button>
+          </div>
+        )}
+
+        {/* =====================================================================
+            3. MENÚ DE SERVICIOS ESTILO "CARTA VIP" (CERO SATURACIÓN DE COLORES)
+           ===================================================================== */}
+        {catalogTab === 'servicios' && (
+          <section className="space-y-3.5">
+            <div className="flex items-end justify-between px-1">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-gold-400 block">
+                  Experiencia & Precios
+                </span>
+                <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+                  Selecciona tu Servicio
+                </h2>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                {allServices.length} opciones disponibles
+              </span>
+            </div>
+
+            {/* Category Filter Pills (if multiple categories exist) */}
+            {categories.length > 2 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+                {categories.map(cat => {
+                  const active = selectedCategory === cat
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all border ${
+                        active
+                          ? 'bg-white text-black border-white shadow-sm'
+                          : 'bg-[#10121a] text-slate-400 border-white/[0.07] hover:text-white'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Luxury Service List */}
+            <div className="space-y-2.5">
+              {filteredServices.map(svc => {
                 const isSelected = selectedService === svc.name
-                const priceBs = (svc.price_usd * safeRate).toFixed(2)
+                const dur = svc.duration_min || inferServiceDuration(svc)
+                const priceBs = (svc.price_usd * safeRate).toLocaleString('es-VE', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                })
+
                 return (
                   <div
                     key={svc.id}
                     onClick={() => handleSelectServiceFromCatalog(svc.name)}
-                    className={`cursor-pointer p-4 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                    className={`group cursor-pointer rounded-2xl p-4 transition-all duration-200 border flex items-center justify-between gap-3 ${
                       isSelected
-                        ? 'bg-gold-500/10 border-gold-500 shadow-lg shadow-gold-500/10'
-                        : 'bg-dark-900 border-dark-800 hover:border-dark-700'
+                        ? 'bg-gradient-to-r from-gold-500/[0.12] via-[#13151f] to-[#10121a] border-gold-500/70 shadow-[0_8px_25px_rgba(212,175,55,0.12)]'
+                        : 'bg-[#0f1118] border-white/[0.07] hover:border-white/20 hover:bg-[#131620]'
                     }`}
                   >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-white text-sm">{svc.name}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold">
-                          ⏱️ {svc.duration_min || inferServiceDuration(svc)} min
+                    {/* Left: Service Name & Clean Monochromatic Metadata */}
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className={`font-bold text-sm sm:text-base leading-snug transition-colors ${
+                          isSelected ? 'text-gold-400' : 'text-white group-hover:text-gold-300'
+                        }`}>
+                          {svc.name}
+                        </h3>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-400">
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-300">
+                          <Clock className="w-3 h-3 text-gold-400/80" />
+                          <span>{dur} min</span>
+                        </span>
+                        <span className="text-slate-600">•</span>
+                        <span>
+                          Bs. <strong className="text-slate-300 font-mono font-semibold">{priceBs}</strong>
                         </span>
                         {svc.category && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-dark-800 text-slate-400 border border-dark-700">
-                            {svc.category}
-                          </span>
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-[11px] text-slate-500">{svc.category}</span>
+                          </>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400">
-                        Al cambio hoy: <span className="text-slate-200 font-semibold">Bs. {priceBs}</span>
-                      </p>
                     </div>
 
-                    <div className="flex items-center gap-2.5 shrink-0">
+                    {/* Right: Price & Action Pill */}
+                    <div className="flex items-center gap-3 shrink-0">
                       <div className="text-right">
-                        <span className="block text-base font-black text-emerald-400 font-mono">
+                        <span className={`block text-lg sm:text-xl font-black font-mono tracking-tight ${
+                          isSelected ? 'text-gold-400' : 'text-white'
+                        }`}>
                           ${svc.price_usd}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className={`px-3 py-2 rounded-xl text-xs font-black transition-all ${
+
+                      <div
+                        className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1 ${
                           isSelected
-                            ? 'bg-gold-500 text-black'
-                            : 'bg-dark-800 text-gold-400 border border-gold-500/30 hover:bg-gold-500 hover:text-black'
+                            ? 'bg-gradient-to-r from-gold-500 to-amber-500 text-black shadow-md shadow-gold-500/20'
+                            : 'bg-white/[0.05] text-slate-200 border border-white/[0.09] group-hover:border-gold-500/40 group-hover:text-gold-400'
                         }`}
                       >
-                        {isSelected ? '✓ Elegido' : 'Reservar'}
-                      </button>
+                        {isSelected ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span>Elegido</span>
+                          </>
+                        ) : (
+                          <span>Reservar</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
               })}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* TAB 2: Catálogo de Productos */}
+        {/* =====================================================================
+            3B. BOUTIQUE DE PRODUCTOS
+           ===================================================================== */}
         {catalogTab === 'productos' && (
-          <div className="space-y-3 animate-fadeIn">
-            <div className="flex items-center justify-between px-1">
-              <h2 className="text-sm font-black text-white uppercase tracking-wider">
-                Productos Disponibles en el Local
-              </h2>
+          <section className="space-y-3.5 animate-fadeIn">
+            <div className="flex items-end justify-between px-1">
+              <div>
+                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-gold-400 block">
+                  Boutique del Local
+                </span>
+                <h2 className="text-base sm:text-lg font-black text-white">
+                  Productos Disponibles
+                </h2>
+              </div>
               <span className="text-[11px] text-slate-400">
-                Encárgalo o pídelo en tu cita
+                Pídelo en tu cita o por WhatsApp
               </span>
             </div>
 
             {catalogProducts.length === 0 ? (
-              <div className="bg-dark-900 border border-dark-800 rounded-2xl p-8 text-center space-y-2">
+              <div className="bg-[#0f1118] border border-white/[0.07] rounded-2xl p-8 text-center space-y-2">
                 <ShoppingBag className="w-8 h-8 text-slate-600 mx-auto" />
-                <p className="text-sm font-bold text-white">No hay productos disponibles en la web</p>
-                <p className="text-xs text-slate-400">Pregunta directamente en el local para adquirir productos o insumos.</p>
+                <p className="text-sm font-bold text-white">No hay productos publicados</p>
+                <p className="text-xs text-slate-400">Consulta directamente en el local por productos de cuidado personal.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {catalogProducts.map(prod => {
-                  const priceBs = (prod.price_usd * safeRate).toFixed(2)
+                  const priceBs = (prod.price_usd * safeRate).toLocaleString('es-VE', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  })
                   return (
                     <div
                       key={prod.id}
-                      className="bg-dark-900 border border-dark-800 hover:border-dark-700 rounded-2xl p-3.5 flex flex-col justify-between gap-3 transition-all"
+                      className="bg-[#0f1118] border border-white/[0.08] hover:border-gold-500/30 rounded-2xl p-4 flex flex-col justify-between gap-3.5 transition-all"
                     >
-                      <div className="flex gap-3">
-                        {/* Product Thumbnail */}
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-dark-850 border border-dark-750 shrink-0 overflow-hidden flex items-center justify-center relative shadow-sm">
+                      <div className="flex gap-3.5">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-dark-900 border border-white/[0.06] shrink-0 overflow-hidden flex items-center justify-center">
                           {prod.imageUrl ? (
                             <img
                               src={prod.imageUrl}
@@ -480,31 +718,32 @@ export default function PublicBookingView({
                               loading="lazy"
                             />
                           ) : (
-                            <Package className="w-7 h-7 text-slate-600" />
+                            <Package className="w-7 h-7 text-gold-400/60" />
                           )}
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-1.5">
-                            <h3 className="font-bold text-white text-xs sm:text-sm leading-tight">
+                          <div className="flex items-start justify-between gap-2">
+                            <h3 className="font-bold text-white text-sm leading-snug">
                               {prod.name}
                             </h3>
-                            <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono font-black text-xs shrink-0">
+                            <span className="text-base font-black text-gold-400 font-mono shrink-0">
                               ${prod.price_usd}
                             </span>
                           </div>
-                          <p className="text-xs text-gold-400/90 mt-1 font-mono font-semibold">
+                          <p className="text-xs text-slate-300 mt-1 font-mono">
                             Bs. {priceBs}
                           </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            Disponible en mostrador
+                          <p className="text-[10px] text-emerald-400 mt-1 font-semibold">
+                            ● Disponible en tienda
                           </p>
                         </div>
                       </div>
 
                       <button
+                        type="button"
                         onClick={() => handleOrderProductWhatsApp(prod)}
-                        className="w-full py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                        className="w-full py-2.5 rounded-xl bg-white/[0.05] hover:bg-gold-500 hover:text-black text-white border border-white/[0.08] text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
                       >
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>Encargar por WhatsApp</span>
@@ -514,120 +753,181 @@ export default function PublicBookingView({
                 })}
               </div>
             )}
-          </div>
+          </section>
         )}
 
-        {/* BOOKING ENGINE: Apartar Turno Conectado al Calendario */}
-        <div ref={bookingRef} className="bg-dark-900 border-2 border-gold-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl">
+        {/* =====================================================================
+            4. MOTOR DE RESERVA VIP (ESTILO BOOKSY / APPLE WALLET)
+           ===================================================================== */}
+        <section
+          ref={bookingRef}
+          className="relative rounded-[28px] bg-gradient-to-b from-[#12151f] to-[#0b0d13] border border-gold-500/35 p-5 sm:p-7 shadow-[0_25px_70px_rgba(0,0,0,0.85)]"
+        >
           {bookedTicket ? (
-            /* Ticket de Confirmación */
-            <div className="text-center space-y-4 py-3 animate-fadeIn">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 text-emerald-400 mx-auto flex items-center justify-center">
-                <CheckCircle2 className="w-9 h-9" />
-              </div>
-
-              <div>
-                <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
-                  ¡Reserva Registrada en el Calendario!
+            /* ===============================================================
+               PASE VIP DE CONFIRMACIÓN (BOARDING PASS / APPLE WALLET STYLE)
+               =============================================================== */
+            <div className="py-2 animate-fadeIn space-y-5">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <span className="inline-block text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">
+                  Turno Confirmado en Agenda
                 </span>
-                <h3 className="text-2xl font-black text-white mt-1">
-                  ¡Listo, {bookedTicket.client_name}!
+                <h3 className="text-2xl font-black text-white">
+                  ¡Te esperamos, {bookedTicket.client_name}!
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Tu turno ya quedó anotado en la agenda de {businessProfile.businessName}.
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Presenta o envía tu pase digital al llegar a <strong className="text-slate-200">{businessProfile?.businessName}</strong>.
                 </p>
               </div>
 
-              {/* Resumen del Ticket */}
-              <div className="bg-dark-950 border border-dark-800 rounded-2xl p-4 text-left space-y-2.5 max-w-md mx-auto text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Servicio:</span>
-                  <span className="font-bold text-white">{bookedTicket.service}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Duración estimada:</span>
-                  <span className="font-bold text-purple-300 font-mono">⏱️ ~{bookedTicket.durationMin || 30} minutos</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Profesional:</span>
-                  <span className="font-bold text-gold-400">{bookedTicket.staffName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Fecha y Hora:</span>
-                  <span className="font-bold text-emerald-400 font-mono">{bookedTicket.date} a las {bookedTicket.time}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-dark-800">
-                  <span className="text-slate-400">Monto Estimado:</span>
-                  <span className="font-black text-white">
-                    ${bookedTicket.priceUsd} <span className="text-slate-400 font-normal">(Bs. {bookedTicket.priceBs})</span>
+              {/* Boarding Pass Ticket Card */}
+              <div className="relative bg-[#08090d] border border-white/10 rounded-3xl overflow-hidden max-w-md mx-auto shadow-2xl">
+                {/* Top Ticket Header */}
+                <div className="bg-gradient-to-r from-gold-500/20 via-amber-500/10 to-transparent px-5 py-3.5 border-b border-white/[0.08] flex items-center justify-between">
+                  <div>
+                    <span className="text-[9px] font-black uppercase tracking-[0.18em] text-gold-400 block">
+                      PASE DE RESERVA VIP
+                    </span>
+                    <span className="text-xs font-bold text-white">
+                      {businessProfile?.businessName}
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-lg bg-black/60 border border-gold-500/30 font-mono text-[11px] font-black text-gold-400">
+                    #{bookedTicket.code}
                   </span>
+                </div>
+
+                {/* Ticket Body */}
+                <div className="p-5 space-y-3.5 text-xs">
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-slate-400">Servicio elegido</span>
+                    <span className="font-bold text-white text-right">{bookedTicket.service}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Especialista</span>
+                    <span className="font-bold text-gold-400">{bookedTicket.staffName}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Duración estimada</span>
+                    <span className="font-semibold text-slate-200 font-mono">⏱ ~{bookedTicket.durationMin || 30} min</span>
+                  </div>
+
+                  {/* Perforated Divider Line */}
+                  <div className="relative py-2 flex items-center">
+                    <div className="w-4 h-4 rounded-full bg-[#10121b] border border-white/10 -ml-7 shrink-0" />
+                    <div className="w-full border-t border-dashed border-white/15 mx-2" />
+                    <div className="w-4 h-4 rounded-full bg-[#10121b] border border-white/10 -mr-7 shrink-0" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 bg-white/[0.02] p-3 rounded-2xl border border-white/[0.05]">
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 block">Fecha</span>
+                      <span className="font-black text-white font-mono text-sm">{bookedTicket.date}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 block">Hora Exacta</span>
+                      <span className="font-black text-emerald-400 font-mono text-sm">{bookedTicket.time}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-1">
+                    <span className="text-slate-400 font-medium">Valor del Servicio</span>
+                    <div className="text-right">
+                      <span className="text-base font-black text-white font-mono">${bookedTicket.priceUsd}</span>
+                      <span className="text-[11px] text-slate-400 block font-mono">Bs. {bookedTicket.priceBs}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 max-w-md mx-auto">
+              {/* Confirmation Actions */}
+              <div className="space-y-2.5 max-w-md mx-auto pt-1">
                 <button
+                  type="button"
                   onClick={handleSendWhatsAppConfirmation}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all"
+                  className="w-full py-3.5 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all active:scale-98"
                 >
                   <MessageSquare className="w-4 h-4 stroke-[2.5]" />
-                  <span>Enviar mi Ticket por WhatsApp al Local</span>
+                  <span>Enviar mi Pase por WhatsApp al Local</span>
                 </button>
 
                 <button
+                  type="button"
                   onClick={() => {
                     setBookedTicket(null)
                     setClientName('')
                     const nextFree = activeSlots.find(s => !isSlotUnavailable(s))
                     if (nextFree) setSelectedTime(nextFree)
                   }}
-                  className="w-full py-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 text-xs font-semibold"
+                  className="w-full py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs font-bold transition-all"
                 >
-                  Apartar otro turno
+                  Agendar otro turno adicional
                 </button>
               </div>
             </div>
           ) : (
-            /* Formulario Interactivo de Reserva */
-            <form onSubmit={handleConfirmBooking} className="space-y-5">
-              <div className="flex items-center justify-between border-b border-dark-800 pb-3">
+            /* ===============================================================
+               FLUJO INTERACTIVO DE RESERVA VIP
+               =============================================================== */
+            <form onSubmit={handleConfirmBooking} className="space-y-6">
+              
+              {/* Section Header */}
+              <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
                 <div>
-                  <span className="text-[10px] font-black uppercase tracking-wider text-gold-400">
-                    Agenda Directa
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-gold-400 block">
+                    Reserva Instantánea
                   </span>
-                  <h3 className="text-lg font-black text-white">
-                    Aparta tu Turno en {isSingleChair ? '3 Pasos' : '4 Pasos'}
+                  <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                    Personaliza tu Cita
                   </h3>
                 </div>
-                <CalendarIcon className="w-6 h-6 text-gold-400" />
+                <div className="w-10 h-10 rounded-2xl bg-gold-500/15 border border-gold-500/30 flex items-center justify-center">
+                  <CalendarIcon className="w-5 h-5 text-gold-400" />
+                </div>
               </div>
 
-              {/* Paso 1: Servicio Seleccionado */}
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  1. ¿Qué servicio te vas a realizar?
-                </label>
-                <select
-                  value={selectedService}
-                  onChange={(e) => setSelectedService(e.target.value)}
-                  className="w-full px-3.5 py-3 rounded-xl bg-dark-850 border border-dark-700 text-xs font-bold text-white focus:outline-none focus:border-gold-500"
-                >
-                  {allServices.map(s => {
-                    const dur = s.duration_min || inferServiceDuration(s)
-                    return (
-                      <option key={s.id} value={s.name}>
-                        {s.name} (⏱️ {dur}m) — ${s.price_usd} (Bs. {(s.price_usd * safeRate).toFixed(2)})
-                      </option>
-                    )
-                  })}
-                </select>
-              </div>
-
-              {/* Paso 2: Elegir Profesional (Solo en modo equipo con más de 1 barbero) */}
-              {!isSingleChair && staffList.length > 1 && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                    2. ¿Con quién te quieres atender? ({nicheData.roleName})
+              {/* PASO 1: Servicio Activo */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-gold-500 text-black font-black text-[11px] inline-flex items-center justify-center">1</span>
+                    <span>Servicio Seleccionado</span>
                   </label>
+                  <span className="text-[11px] font-mono text-gold-400 font-bold">
+                    ⏱ {selectedDuration} min
+                  </span>
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={selectedService}
+                    onChange={(e) => setSelectedService(e.target.value)}
+                    className="w-full px-4 py-3.5 rounded-2xl bg-[#090b10] border border-white/10 hover:border-gold-500/40 text-xs sm:text-sm font-bold text-white focus:outline-none focus:border-gold-500 transition-colors"
+                  >
+                    {allServices.map(s => {
+                      const dur = s.duration_min || inferServiceDuration(s)
+                      const bs = (s.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                      return (
+                        <option key={s.id} value={s.name}>
+                          {s.name} ({dur} min) — ${s.price_usd} / Bs. {bs}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              {/* PASO 2: Especialista (Solo en modo multi-profesional) */}
+              {!isSingleChair && staffList.length > 1 && (
+                <div className="space-y-2.5">
+                  <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-gold-500 text-black font-black text-[11px] inline-flex items-center justify-center">2</span>
+                    <span>Elige a tu {nicheData?.roleName || 'Especialista'}</span>
+                  </label>
+
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {staffList.map(st => {
                       const active = selectedStaff === st.id
@@ -636,161 +936,223 @@ export default function PublicBookingView({
                           type="button"
                           key={st.id}
                           onClick={() => setSelectedStaff(st.id)}
-                          className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                          className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                             active
-                              ? 'bg-gold-500/15 border-gold-500 text-white'
-                              : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                              ? 'bg-gradient-to-br from-gold-500/20 to-amber-500/5 border-gold-500 text-white shadow-md shadow-gold-500/10'
+                              : 'bg-[#090b10] border-white/[0.07] text-slate-400 hover:text-white hover:border-white/20'
                           }`}
                         >
-                          <span className="text-base">{st.avatar}</span>
-                          <span className="text-xs font-bold truncate">{st.name}</span>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${
+                            active ? 'bg-gold-500 text-black' : 'bg-white/[0.05]'
+                          }`}>
+                            {st.avatar || '✂️'}
+                          </div>
+                          <div className="min-w-0">
+                            <span className="block text-xs font-bold text-white truncate">{st.name}</span>
+                            <span className="block text-[10px] text-emerald-400">Disponible</span>
+                          </div>
                         </button>
                       )
                     })}
+
                     <button
                       type="button"
                       onClick={() => setSelectedStaff('any')}
-                      className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all ${
+                      className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                         selectedStaff === 'any'
-                          ? 'bg-gold-500/15 border-gold-500 text-white'
-                          : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                          ? 'bg-gradient-to-br from-gold-500/20 to-amber-500/5 border-gold-500 text-white shadow-md shadow-gold-500/10'
+                          : 'bg-[#090b10] border-white/[0.07] text-slate-400 hover:text-white hover:border-white/20'
                       }`}
                     >
-                      <span className="text-base">⚡</span>
-                      <span className="text-xs font-bold truncate">El 1ro Libre</span>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${
+                        selectedStaff === 'any' ? 'bg-gold-500 text-black' : 'bg-white/[0.05]'
+                      }`}>
+                        ⚡
+                      </div>
+                      <div className="min-w-0">
+                        <span className="block text-xs font-bold text-white truncate">Primero Libre</span>
+                        <span className="block text-[10px] text-gold-400">Más rápido</span>
+                      </div>
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Paso 3: Fecha y Hora */}
-              <div className="space-y-3">
-                <label className="block text-xs font-bold text-slate-300">
-                  {isSingleChair ? '2' : '3'}. Elige el Día y la Hora Disponible
-                </label>
+              {/* PASO 3: Carrusel de Días Estilo iOS + Grilla de Horas */}
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-gold-500 text-black font-black text-[11px] inline-flex items-center justify-center">
+                      {isSingleChair ? '2' : '3'}
+                    </span>
+                    <span>Selecciona Día y Hora</span>
+                  </label>
 
-                {/* Selector rápido Hoy / Mañana / Calendario */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDate(getTodayStr())}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                      selectedDate === getTodayStr()
-                        ? 'bg-purple-600 text-white border-purple-500'
-                        : 'bg-dark-850 text-slate-400 border-dark-750'
-                    }`}
-                  >
-                    Hoy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDate(getTomorrowStr())}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-all ${
-                      selectedDate === getTomorrowStr()
-                        ? 'bg-purple-600 text-white border-purple-500'
-                        : 'bg-dark-850 text-slate-400 border-dark-750'
-                    }`}
-                  >
-                    Mañana
-                  </button>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    min={getTodayStr()}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="px-2.5 py-2 rounded-xl bg-dark-850 border border-dark-750 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
-                  />
+                  {/* Botón discreto para elegir otra fecha del calendario */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (customDateInputRef.current?.showPicker) {
+                          customDateInputRef.current.showPicker()
+                        } else if (customDateInputRef.current) {
+                          customDateInputRef.current.focus()
+                        }
+                      }}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1.5 ${
+                        isCustomDateSelected
+                          ? 'bg-gold-500 text-black border-gold-400'
+                          : 'bg-white/[0.04] text-slate-300 border-white/10 hover:text-white'
+                      }`}
+                    >
+                      <CalendarIcon className="w-3 h-3" />
+                      <span>{isCustomDateSelected ? selectedDate : 'Otra fecha'}</span>
+                    </button>
+                    <input
+                      ref={customDateInputRef}
+                      type="date"
+                      value={selectedDate}
+                      min={getTodayStr()}
+                      onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                      className="sr-only"
+                    />
+                  </div>
                 </div>
 
-                {/* Horas disponibles o aviso si el día está cerrado */}
+                {/* Carrusel Horizontal de 7 Días (Estilo App Nativa) */}
+                <div className="grid grid-cols-7 gap-1.5">
+                  {upcomingDays.map((d) => {
+                    const isSelected = selectedDate === d.iso
+                    return (
+                      <button
+                        type="button"
+                        key={d.iso}
+                        onClick={() => setSelectedDate(d.iso)}
+                        className={`py-2.5 px-1 rounded-2xl border flex flex-col items-center justify-center transition-all ${
+                          isSelected
+                            ? 'bg-gradient-to-b from-gold-500 to-amber-500 text-black border-gold-400 shadow-lg shadow-gold-500/20 scale-[1.03]'
+                            : d.isClosed
+                            ? 'bg-[#090a0f]/60 border-white/[0.04] text-slate-600 opacity-60'
+                            : 'bg-[#090b10] border-white/[0.07] text-slate-300 hover:border-white/20'
+                        }`}
+                      >
+                        <span className={`text-[9px] font-black uppercase tracking-wider ${
+                          isSelected ? 'text-black/80' : 'text-slate-400'
+                        }`}>
+                          {d.dayName}
+                        </span>
+                        <span className={`text-sm sm:text-base font-black font-mono leading-tight my-0.5 ${
+                          isSelected ? 'text-black' : 'text-white'
+                        }`}>
+                          {d.dayNumber}
+                        </span>
+                        <span className={`text-[9px] font-semibold ${
+                          isSelected
+                            ? 'text-black/80'
+                            : d.isClosed
+                            ? 'text-red-400/70'
+                            : 'text-slate-500'
+                        }`}>
+                          {d.isClosed ? 'Cerrado' : d.monthShort}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Horarios del Día Seleccionado */}
                 {isDayClosed ? (
-                  <div className="p-4 rounded-xl bg-dark-950 border border-dark-800 text-center space-y-1.5 mt-2">
-                    <p className="text-xs font-bold text-slate-300">
-                      💈 El local permanece cerrado los {selectedDayLabel}s
+                  <div className="p-5 rounded-2xl bg-[#090b10] border border-white/[0.07] text-center space-y-1.5">
+                    <p className="text-xs font-bold text-slate-200">
+                      El local permanece cerrado los {selectedDayLabel}s
                     </p>
                     <p className="text-[11px] text-slate-500">
-                      Por favor selecciona otra fecha arriba para consultar los horarios disponibles.
+                      Toca otro día en la barra superior para ver los turnos libres.
                     </p>
                   </div>
                 ) : (
                   <>
-                    {/* Alerta inteligente si se agotaron o pasaron los turnos de hoy */}
+                    {/* Alerta si ya pasaron o se llenaron los turnos de hoy */}
                     {allTodayUnavailable && selectedDate === getTodayStr() && (
-                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-center space-y-1.5 my-2">
-                        <p className="text-xs font-bold text-amber-300">
-                          ⚡ Ya no quedan turnos disponibles para el día de hoy
+                      <div className="p-4 rounded-2xl bg-gold-500/10 border border-gold-500/30 text-center space-y-2">
+                        <p className="text-xs font-bold text-gold-300">
+                          ⚡ Agenda completada por el día de hoy
                         </p>
                         <p className="text-[11px] text-slate-400">
-                          Las horas de hoy ya transcurrieron o fueron reservadas.
+                          Todos los turnos de hoy ya transcurrieron o fueron reservados.
                         </p>
                         <button
                           type="button"
                           onClick={() => setSelectedDate(getTomorrowStr())}
-                          className="mt-1 px-3 py-1.5 rounded-lg bg-gold-500 hover:bg-gold-400 text-black text-xs font-black shadow-md transition-all inline-flex items-center gap-1.5"
+                          className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-black text-xs font-black shadow-md transition-all inline-flex items-center gap-1.5"
                         >
                           <CalendarIcon className="w-3.5 h-3.5" />
-                          <span>Ver turnos disponibles para Mañana</span>
+                          <span>Ver horarios de Mañana</span>
                         </button>
                       </div>
                     )}
 
-                    {/* Selector de Horarios Móvil-Friendly (Mañana / Tarde / Noche) */}
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar">
+                    {/* Filtros de Franja Horaria (Mañana / Tarde / Noche en paleta Obsidiana + Blanco) */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
                       {[
-                        { id: 'all', label: 'Todos', count: activeSlots.filter(s => !isSlotUnavailable(s)).length },
+                        { id: 'all', label: 'Todos', count: totalFreeToday },
                         { id: 'morning', label: '☀️ Mañana', count: morningFree },
                         { id: 'afternoon', label: '⛅ Tarde', count: afternoonFree },
                         { id: 'evening', label: '🌙 Noche', count: eveningFree }
-                      ].map(tab => (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => setTimePeriodFilter(tab.id)}
-                          className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold shrink-0 border transition-all flex items-center gap-1.5 ${
-                            timePeriodFilter === tab.id
-                              ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                              : 'bg-dark-850 text-slate-400 border-dark-750 hover:text-white hover:border-dark-700'
-                          }`}
-                        >
-                          <span>{tab.label}</span>
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
-                            timePeriodFilter === tab.id ? 'bg-black/30 text-white' : 'bg-dark-900 text-slate-500'
-                          }`}>
-                            {tab.count}
-                          </span>
-                        </button>
-                      ))}
+                      ].map(tab => {
+                        const active = timePeriodFilter === tab.id
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setTimePeriodFilter(tab.id)}
+                            className={`px-3 py-1.5 rounded-xl text-[11px] font-bold shrink-0 border transition-all flex items-center gap-1.5 ${
+                              active
+                                ? 'bg-white text-black border-white shadow-sm'
+                                : 'bg-[#090b10] text-slate-400 border-white/[0.07] hover:text-white'
+                            }`}
+                          >
+                            <span>{tab.label}</span>
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                              active ? 'bg-black/15 text-black' : 'bg-white/[0.05] text-slate-400'
+                            }`}>
+                              {tab.count}
+                            </span>
+                          </button>
+                        )
+                      })}
                     </div>
 
-                    {/* Grid de Horas Disponibles (Adaptable a 15, 30, 45, 60m) */}
+                    {/* Grilla de Horas */}
                     {displayedSlots.length === 0 ? (
-                      <div className="text-center py-4 text-xs text-slate-500 bg-dark-900/50 rounded-xl border border-dark-800">
-                        No hay turnos registrados en este horario
+                      <div className="text-center py-5 text-xs text-slate-500 bg-[#090b10] rounded-2xl border border-white/[0.06]">
+                        No hay turnos configurados en esta franja horaria
                       </div>
                     ) : (
-                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-1">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                         {displayedSlots.map(slot => {
                           const isPast = isSlotInPast(slot)
                           const isBooked = isSlotBooked(slot)
                           const unavailable = isPast || isBooked
                           const active = selectedTime === slot && !unavailable
+
                           return (
                             <button
                               type="button"
                               key={slot}
                               disabled={unavailable}
                               onClick={() => setSelectedTime(slot)}
-                              className={`py-2 px-1 rounded-xl text-[11px] font-mono font-bold border transition-all text-center ${
+                              className={`py-2.5 px-2 rounded-xl text-xs font-mono font-bold border transition-all text-center ${
                                 isPast
-                                  ? 'bg-dark-950/80 text-slate-600 border-dark-850/60 line-through cursor-not-allowed opacity-40'
+                                  ? 'bg-[#08090d] text-slate-700 border-white/[0.03] line-through cursor-not-allowed opacity-45'
                                   : isBooked
-                                  ? 'bg-red-950/20 text-red-400/80 border-red-900/30 line-through cursor-not-allowed'
+                                  ? 'bg-[#08090d] text-slate-600 border-white/[0.04] line-through cursor-not-allowed opacity-60'
                                   : active
-                                  ? 'bg-gold-500 text-black border-gold-400 shadow-md font-black scale-[1.02]'
-                                  : 'bg-dark-850 text-slate-300 border-dark-750 hover:border-gold-500/40 hover:text-white'
+                                  ? 'bg-gradient-to-r from-gold-500 to-amber-500 text-black border-gold-400 shadow-lg shadow-gold-500/20 font-black scale-[1.02]'
+                                  : 'bg-[#090b10] text-slate-200 border-white/[0.08] hover:border-gold-500/50 hover:text-white'
                               }`}
                             >
-                              {isPast ? 'Pasada' : isBooked ? 'Ocupado' : slot}
+                              {isBooked ? 'Ocupado' : slot}
                             </button>
                           )
                         })}
@@ -800,52 +1162,96 @@ export default function PublicBookingView({
                 )}
               </div>
 
-              {/* Paso 4 (o 3 en modo silla única): Datos del Cliente */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    {isSingleChair ? '3' : '4'}. Tu Nombre y Apellido *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ej. Carlos Rodríguez"
-                    value={clientName}
-                    onChange={(e) => setClientName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Tu Teléfono / WhatsApp *
-                  </label>
-                  <PhoneCountryInput
-                    value={clientPhone}
-                    onChange={setClientPhone}
-                    required
-                  />
+              {/* PASO 4: Datos del Cliente */}
+              <div className="space-y-3 pt-2 border-t border-white/[0.07]">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-gold-500 text-black font-black text-[11px] inline-flex items-center justify-center">
+                    {isSingleChair ? '3' : '4'}
+                  </span>
+                  <span>Tus Datos para el Pase VIP</span>
+                </label>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                      Nombre y Apellido *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. Carlos Rodríguez"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#090b10] border border-white/10 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-gold-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                      WhatsApp de Contacto *
+                    </label>
+                    <PhoneCountryInput
+                      value={clientPhone}
+                      onChange={setClientPhone}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Botón Confirmar */}
+              {/* Resumen Previo a Confirmar */}
+              {!isDayClosed && !isSlotUnavailable(selectedTime) && currentServiceObj && (
+                <div className="rounded-2xl bg-[#090b10] border border-white/[0.07] px-4 py-3 flex items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0">
+                    <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
+                      Resumen de tu Cita
+                    </span>
+                    <p className="font-bold text-white truncate">
+                      {currentServiceObj.name} • <span className="text-gold-400 font-mono">{selectedTime}</span>
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-base font-black text-white font-mono">
+                      ${currentServiceObj.price_usd}
+                    </span>
+                    <span className="block text-[10px] text-slate-400 font-mono">
+                      Bs. {(currentServiceObj.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* CTA Final */}
               <button
                 type="submit"
                 disabled={isDayClosed || activeSlots.length === 0 || isSlotUnavailable(selectedTime)}
-                className={`w-full py-3.5 rounded-2xl font-black text-sm shadow-xl transition-all ${
+                className={`w-full py-4 rounded-2xl font-black text-sm tracking-wide shadow-2xl transition-all flex items-center justify-center gap-2 ${
                   isDayClosed || activeSlots.length === 0 || isSlotUnavailable(selectedTime)
-                    ? 'bg-dark-800 text-slate-500 border border-dark-700 cursor-not-allowed opacity-60'
-                    : 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/20 active:scale-98'
+                    ? 'bg-dark-850 text-slate-500 border border-white/[0.05] cursor-not-allowed opacity-60'
+                    : 'bg-gradient-to-r from-gold-500 via-amber-500 to-gold-500 hover:opacity-95 text-black shadow-gold-500/20 active:scale-98'
                 }`}
               >
-                {isDayClosed
-                  ? `Cerrado los ${selectedDayLabel}s`
-                  : isSlotUnavailable(selectedTime)
-                  ? 'Selecciona una hora disponible'
-                  : 'Confirmar Mi Turno Ahora'}
+                {isDayClosed ? (
+                  <span>Cerrado los {selectedDayLabel}s</span>
+                ) : isSlotUnavailable(selectedTime) ? (
+                  <span>Selecciona una hora libre arriba</span>
+                ) : (
+                  <>
+                    <span>Confirmar Mi Reserva VIP</span>
+                    <ChevronRight className="w-4 h-4 stroke-[3]" />
+                  </>
+                )}
               </button>
             </form>
           )}
-        </div>
+        </section>
+
+        {/* Minimal Luxury Brand Signature Footer */}
+        <footer className="pt-2 pb-6 text-center space-y-1">
+          <div className="inline-flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5 text-gold-400/70" />
+            <span>Reserva Oficial garantizada por <strong className="text-slate-400">{businessProfile?.businessName}</strong></span>
+          </div>
+        </footer>
 
       </div>
     </div>
