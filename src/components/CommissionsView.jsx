@@ -318,35 +318,45 @@ export default function CommissionsView({
     window.open(url, '_blank')
   }
 
+  // Team Totals for Hero Command Center
+  const totalTeamNetUSD = staffStats.reduce((sum, s) => sum + Math.max(0, s.netBalanceUSD), 0)
+  const totalTeamNetBs = totalTeamNetUSD * exchangeRate
+  const totalTeamServices = staffStats.reduce((sum, s) => sum + s.servicesCount, 0)
+  const totalTeamEarnedUSD = staffStats.reduce((sum, s) => sum + s.totalEarnedUSD, 0)
+
   return (
     <div className="space-y-5 animate-fadeIn">
       
-      {/* Header con Pestañas y Acciones */}
-      <div className="bg-dark-900 border border-dark-800 p-4 sm:p-5 rounded-2xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-black text-white flex items-center gap-2">
-              Equipo, Comisiones & Vales
-              <span className="text-xs px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
-                {rolePlural} ({staffList.length})
-              </span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Controla las comisiones, entrega vales/adelantos y liquida cuentas claras sin enredos de papel
-            </p>
+      {/* ─── HERO COMMAND CENTER: EQUIPO & LIQUIDACIONES ─── */}
+      <div className="relative overflow-hidden bg-gradient-to-b from-dark-850 via-dark-900 to-dark-950 border border-dark-750/80 p-5 sm:p-7 rounded-3xl shadow-2xl">
+        
+        {/* Subtle Ambient Glow */}
+        <div className="absolute -top-24 -right-24 w-72 h-72 bg-gold-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Header Row */}
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-dark-800/80">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-gold-400 animate-pulse ring-4 ring-gold-500/20" />
+            <span className="text-[11px] font-black uppercase tracking-wider text-gold-400">
+              Control de Comisiones & Liquidaciones • {rolePlural}
+            </span>
+            <span className="text-slate-600">•</span>
+            <span className="text-xs text-slate-300 font-medium">
+              {staffList.length} {staffList.length === 1 ? roleName : rolePlural}
+            </span>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
             <button
               onClick={() => openCreateValeModal()}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs shadow-md shadow-amber-500/20 active:scale-95 transition-all"
             >
               <Receipt className="w-4 h-4 stroke-[2.5]" />
               <span>+ Entregar Vale</span>
             </button>
             <button
               onClick={openCreateStaffModal}
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-gold-400 border border-gold-500/30 font-bold text-xs active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Nuevo {roleName}</span>
@@ -354,12 +364,63 @@ export default function CommissionsView({
           </div>
         </div>
 
-        {/* Tab Switcher: Equipo vs Libro de Vales */}
-        <div className="flex items-center justify-between gap-2 border-t border-dark-800 pt-3 flex-wrap">
-          <div className="flex items-center gap-1.5 bg-dark-850 p-1 rounded-xl border border-dark-750">
+        {/* Main Hero Metric: Total a Liquidar */}
+        <div className="relative z-10 py-5">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                Total Neto a Liquidar al Equipo ({periodFilter === 'pending' ? 'Cuenta Corriente' : periodFilter === 'today' ? 'Hoy' : 'Periodo Activo'})
+              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
+                  ${totalTeamNetUSD.toFixed(2)}
+                </span>
+                <span className="text-base sm:text-lg font-bold text-gold-400">
+                  USD
+                </span>
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 text-xs sm:text-sm">
+                <span className="font-mono font-bold text-slate-300">
+                  ≈ Bs. {totalTeamNetBs.toFixed(2)}
+                </span>
+                <span className="text-slate-600">•</span>
+                <span className="text-gold-400/90 text-xs font-medium">
+                  Listo para pagar tras descontar vales y adelantos
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Status Breakdown */}
+            <div className="flex items-center gap-2 bg-dark-950/80 border border-dark-800 p-2.5 rounded-2xl flex-wrap">
+              <div className="px-3 py-1.5 rounded-xl bg-dark-850 border border-dark-750 text-left">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">✂️ Atenciones</span>
+                <span className="text-xs font-black font-mono text-white">{totalTeamServices} cortes</span>
+              </div>
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-left">
+                <span className="text-[10px] uppercase font-bold text-emerald-400 block">📈 Comisiones</span>
+                <span className="text-xs font-black font-mono text-white">${totalTeamEarnedUSD.toFixed(2)}</span>
+              </div>
+              {pendingValesTotalUSD > 0 && (
+                <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-left">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block">🧾 Vales Activos</span>
+                  <span className="text-xs font-black font-mono text-white">-${pendingValesTotalUSD.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ─── TABS & PERIOD FILTER BAR ─── */}
+      <div className="bg-dark-900 border border-dark-800/80 p-3 sm:p-4 rounded-3xl shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
+          
+          {/* Subtab Buttons */}
+          <div className="flex items-center gap-1.5 bg-dark-850 p-1 rounded-2xl border border-dark-750/80 w-full sm:w-auto">
             <button
               onClick={() => setActiveTab('equipo')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
                 activeTab === 'equipo'
                   ? 'bg-gold-500 text-black shadow-sm font-black'
                   : 'text-slate-400 hover:text-white'
@@ -370,7 +431,7 @@ export default function CommissionsView({
             </button>
             <button
               onClick={() => setActiveTab('vales')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${
                 activeTab === 'vales'
                   ? 'bg-gold-500 text-black shadow-sm font-black'
                   : 'text-slate-400 hover:text-white'
@@ -382,17 +443,17 @@ export default function CommissionsView({
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black ${
                   activeTab === 'vales' ? 'bg-black text-gold-400' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
                 }`}>
-                  {pendingValesTotal.length} pend. (${pendingValesTotalUSD.toFixed(0)})
+                  {pendingValesTotal.length} pend.
                 </span>
               )}
             </button>
           </div>
 
-          {/* Filtro de Período (para el balance) */}
+          {/* Period Filter Pills (Only in equipo tab) */}
           {activeTab === 'equipo' && (
-            <div className="flex items-center gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750 overflow-x-auto text-xs">
+            <div className="flex items-center gap-1 bg-dark-850 p-1 rounded-2xl border border-dark-750/80 overflow-x-auto w-full sm:w-auto">
               {[
-                { id: 'pending', label: '⚖️ Cuenta Corriente (Por Liquidar)' },
+                { id: 'pending', label: '⚖️ Cuenta Corriente' },
                 { id: 'today', label: '📅 Hoy' },
                 { id: 'week', label: '🗓️ Esta Semana' },
                 { id: 'all', label: '📋 Todo' },
@@ -400,10 +461,10 @@ export default function CommissionsView({
                 <button
                   key={f.id}
                   onClick={() => setPeriodFilter(f.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all ${
+                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold shrink-0 transition-all ${
                     periodFilter === f.id
-                      ? 'bg-dark-700 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200'
+                      ? 'bg-dark-700 text-white shadow-sm font-black'
+                      : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   {f.label}
@@ -411,24 +472,27 @@ export default function CommissionsView({
               ))}
             </div>
           )}
+
         </div>
       </div>
 
-      {/* VISTA 1: TARJETAS DEL EQUIPO */}
+      {/* ─── VISTA 1: TARJETAS DEL EQUIPO (ESTADOS DE CUENTA) ─── */}
       {activeTab === 'equipo' && (
         <>
           {staffStats.length === 0 ? (
-            <div className="bg-dark-900 border border-dark-800 rounded-2xl p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-gold-500/10 text-gold-400 border border-gold-500/20 mx-auto flex items-center justify-center">
-                <Users className="w-6 h-6" />
+            <div className="bg-dark-900 border border-dark-800/80 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xl">
+              <div className="w-14 h-14 rounded-3xl bg-gold-500/10 text-gold-400 border border-gold-500/20 mx-auto flex items-center justify-center shadow-inner">
+                <Users className="w-7 h-7" />
               </div>
-              <h3 className="font-bold text-white text-base">Tu equipo está vacío</h3>
-              <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Agrega a tus barberos o especialistas y asígnales su porcentaje de comisión (ej. 50%, 60%) para liquidar de forma automática.
-              </p>
+              <div className="space-y-1">
+                <h3 className="font-black text-white text-base sm:text-lg">Tu equipo está vacío</h3>
+                <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                  Agrega a tus especialistas y asígnales su porcentaje de comisión para liquidar de forma automática sin calculadoras.
+                </p>
+              </div>
               <button
                 onClick={openCreateStaffModal}
-                className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-black text-xs font-black"
+                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black text-xs font-black shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
               >
                 + Agregar mi primer {roleName}
               </button>
@@ -443,49 +507,62 @@ export default function CommissionsView({
                 return (
                   <div 
                     key={st.id} 
-                    className="bg-dark-900 border border-dark-800 hover:border-dark-700 rounded-2xl p-5 flex flex-col justify-between shadow-lg transition-all"
+                    className={`relative overflow-hidden bg-dark-900 border hover:border-dark-700/90 rounded-3xl p-5 shadow-xl transition-all group flex flex-col justify-between gap-4 ${
+                      isNegative 
+                        ? 'border-rose-500/30 bg-gradient-to-br from-rose-950/15 via-dark-900 to-dark-900' 
+                        : isZero 
+                        ? 'border-dark-800/90' 
+                        : 'border-gold-500/30 bg-gradient-to-br from-amber-950/10 via-dark-900 to-dark-900'
+                    }`}
                   >
-                    <div className="space-y-4">
-                      {/* Profile Bar */}
-                      <div className="flex items-start justify-between pb-3 border-b border-dark-800 gap-2">
+                    {/* Status accent edge */}
+                    <div className={`absolute top-0 left-0 bottom-0 w-1.5 ${
+                      isNegative ? 'bg-rose-500' : isZero ? 'bg-dark-700' : 'bg-gold-500'
+                    }`} />
+
+                    <div className="space-y-3.5 pl-2">
+                      {/* Profile Header */}
+                      <div className="flex items-start justify-between pb-3 border-b border-dark-800/80 gap-2">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                          <div className="w-12 h-12 rounded-2xl bg-dark-800 border border-dark-700 flex items-center justify-center text-2xl shadow-inner shrink-0">
                             {st.avatar}
                           </div>
                           <div className="min-w-0">
                             <h3 className="font-black text-white text-base leading-snug truncate">{st.name}</h3>
-                            <button
-                              type="button"
-                              onClick={() => openEditStaffModal(st)}
-                              className="mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gold-500/15 hover:bg-gold-500/25 border border-gold-500/30 text-xs text-gold-400 font-bold transition-all"
-                            >
-                              <span>Comisión: {st.commission_pct}%</span>
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                            {st.service_commissions && Object.keys(st.service_commissions).length > 0 && (
-                              <span 
-                                title={`${Object.keys(st.service_commissions).length} servicios con porcentaje personalizado`}
-                                className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/30 font-medium"
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => openEditStaffModal(st)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gold-500/15 hover:bg-gold-500/25 border border-gold-500/30 text-[11px] text-gold-400 font-bold transition-all"
                               >
-                                🏷️ {Object.keys(st.service_commissions).length} esp.
-                              </span>
-                            )}
+                                <span>{st.commission_pct}% base</span>
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
+                              {st.service_commissions && Object.keys(st.service_commissions).length > 0 && (
+                                <span 
+                                  title={`${Object.keys(st.service_commissions).length} servicios con porcentaje personalizado`}
+                                  className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-300 border border-blue-500/30 font-medium"
+                                >
+                                  🏷️ {Object.keys(st.service_commissions).length} esp.
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
-                        {/* Edit & Delete Buttons */}
+                        {/* Top Actions: Vale, Edit, Delete */}
                         <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => openCreateValeModal(st.id)}
-                            className="px-2 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all"
-                            title="Dar un vale a este barbero"
+                            className="px-2 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 text-xs font-bold transition-all"
+                            title="Entregar vale a este especialista"
                           >
                             + Vale
                           </button>
                           <button
                             onClick={() => openEditStaffModal(st)}
-                            className="p-1.5 rounded-lg bg-dark-850 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-750"
-                            title="Editar profesional"
+                            className="p-1.5 rounded-xl bg-dark-850 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-750"
+                            title="Editar especialista"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -495,28 +572,28 @@ export default function CommissionsView({
                                 onDeleteStaff(st.id)
                               }
                             }}
-                            className="p-1.5 rounded-lg bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
-                            title="Eliminar profesional"
+                            className="p-1.5 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
+                            title="Eliminar especialista"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </div>
 
-                      {/* Stats Grid: Atenciones y Generado */}
+                      {/* Micro Stats Grid */}
                       <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="p-2.5 rounded-xl bg-dark-850 border border-dark-750">
+                        <div className="p-2.5 rounded-2xl bg-dark-850 border border-dark-750/80">
                           <span className="text-slate-400 block text-[10px] uppercase font-bold">Atenciones</span>
-                          <span className="text-base font-black text-white">{st.servicesCount} cortes</span>
+                          <span className="text-sm font-black text-white">{st.servicesCount} cortes</span>
                         </div>
-                        <div className="p-2.5 rounded-xl bg-dark-850 border border-dark-750">
+                        <div className="p-2.5 rounded-2xl bg-dark-850 border border-dark-750/80">
                           <span className="text-slate-400 block text-[10px] uppercase font-bold">Generó en Caja</span>
-                          <span className="text-base font-black text-slate-200">${st.totalBilledUSD.toFixed(2)}</span>
+                          <span className="text-sm font-black text-slate-200">${st.totalBilledUSD.toFixed(2)}</span>
                         </div>
                       </div>
 
-                      {/* Desglose de Dinero Vivo (Comisiones + Propinas - Vales) */}
-                      <div className="space-y-1.5 text-xs bg-dark-950 p-3 rounded-xl border border-dark-800">
+                      {/* Revenue Flow Breakdown */}
+                      <div className="space-y-1.5 text-xs bg-dark-950/80 p-3 rounded-2xl border border-dark-800/80">
                         <div className="flex justify-between items-center text-slate-300">
                           <span>📈 Comisiones ganadas:</span>
                           <span className="font-mono font-bold text-white">+${st.totalEarnedUSD.toFixed(2)}</span>
@@ -529,18 +606,16 @@ export default function CommissionsView({
                         )}
                         {hasPendingVales && (
                           <div className="flex justify-between items-center text-amber-400 pt-1 border-t border-dark-800">
-                            <span className="flex items-center gap-1">
-                              <span>🧾 Vales a descontar ({st.valesCount}):</span>
-                            </span>
+                            <span>🧾 Vales a descontar ({st.valesCount}):</span>
                             <span className="font-mono font-black">-${st.valesUSD.toFixed(2)}</span>
                           </div>
                         )}
                       </div>
 
-                      {/* Caja de Balance / Neto a Liquidar */}
-                      <div className={`p-3.5 rounded-xl border transition-all ${
+                      {/* Net Balance Box (Fintech Total Due) */}
+                      <div className={`p-4 rounded-2xl border transition-all ${
                         isNegative
-                          ? 'bg-rose-950/20 border-rose-500/40 text-rose-300'
+                          ? 'bg-rose-950/30 border-rose-500/40 text-rose-300'
                           : isZero
                           ? 'bg-dark-850 border-dark-750 text-slate-400'
                           : 'bg-gradient-to-r from-amber-500/10 to-gold-500/15 border-gold-500/40 text-white'
@@ -549,7 +624,7 @@ export default function CommissionsView({
                           <span className="text-[10px] font-black uppercase tracking-wider">
                             {isNegative ? '⚠️ Saldo en Contra (Debe al Local)' : '💰 Saldo Neto a Liquidar'}
                           </span>
-                          <span className="text-[10px] font-mono">
+                          <span className="text-[10px] font-mono text-slate-400">
                             Tasa: {exchangeRate.toFixed(0)}
                           </span>
                         </div>
@@ -557,44 +632,42 @@ export default function CommissionsView({
                         <div className="text-2xl font-black mt-1">
                           ${st.netBalanceUSD.toFixed(2)} <span className="text-xs font-normal text-slate-400">USD</span>
                         </div>
-                        <div className="text-xs text-gold-400/90 font-mono mt-0.5">
+                        <div className="text-xs text-gold-400 font-mono mt-0.5">
                           Bs. {st.netBalanceBs.toFixed(2)}
                         </div>
 
                         {isNegative && (
                           <p className="text-[10px] text-rose-300/80 mt-1">
-                            El barbero tomó más vales de lo que ha generado. Se descontará con sus siguientes cortes.
+                            El profesional tomó más vales de lo que ha generado. Se descontará con sus siguientes atenciones.
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* Botones de Acción */}
-                    <div className="space-y-2 mt-4 pt-3 border-t border-dark-800">
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => handleSendWhatsAppReceipt(st)}
-                          disabled={isZero && !hasPendingVales}
-                          className="py-2 px-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-emerald-400 border border-dark-750 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40"
-                          title="Enviar resumen por WhatsApp al barbero"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>WhatsApp</span>
-                        </button>
+                    {/* Bottom Action Buttons */}
+                    <div className="pl-2 pt-2 border-t border-dark-800/80 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleSendWhatsAppReceipt(st)}
+                        disabled={isZero && !hasPendingVales}
+                        className="py-2.5 px-2.5 rounded-2xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-emerald-400 border border-dark-750 text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 active:scale-95"
+                        title="Enviar resumen por WhatsApp"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>WhatsApp</span>
+                      </button>
 
-                        <button
-                          onClick={() => openLiquidateModal(st)}
-                          disabled={st.netBalanceUSD <= 0}
-                          className={`py-2 px-2.5 rounded-xl text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition-all ${
-                            st.netBalanceUSD > 0
-                              ? 'bg-gold-500 hover:bg-gold-400 text-black shadow-md shadow-gold-500/20 active:scale-95'
-                              : 'bg-dark-800 text-slate-600 border border-dark-750 cursor-not-allowed'
-                          }`}
-                        >
-                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                          <span>Liquidar</span>
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => openLiquidateModal(st)}
+                        disabled={st.netBalanceUSD <= 0}
+                        className={`py-2.5 px-2.5 rounded-2xl text-xs font-black uppercase tracking-wide flex items-center justify-center gap-1.5 transition-all ${
+                          st.netBalanceUSD > 0
+                            ? 'bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black shadow-md shadow-gold-500/20 active:scale-95'
+                            : 'bg-dark-800 text-slate-600 border border-dark-750 cursor-not-allowed'
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Liquidar</span>
+                      </button>
                     </div>
 
                   </div>
@@ -605,9 +678,9 @@ export default function CommissionsView({
         </>
       )}
 
-      {/* VISTA 2: LIBRO DE VALES (HISTORIAL COMPLETO) */}
+      {/* ─── VISTA 2: LIBRO DE VALES (HISTORIAL COMPLETO) ─── */}
       {activeTab === 'vales' && (
-        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-5 space-y-4">
+        <div className="bg-dark-900 border border-dark-800/80 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
               <h3 className="font-black text-white text-base flex items-center gap-2">
@@ -617,13 +690,13 @@ export default function CommissionsView({
                 </span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Registro auditable de cada vale entregado, el motivo y su estado de descuento
+                Registro auditable de cada vale entregado, motivo y estado de descuento
               </p>
             </div>
 
             <button
               onClick={() => openCreateValeModal()}
-              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs shadow-md transition-all flex items-center gap-1.5"
+              className="px-4 py-2 rounded-2xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[3]" />
               <span>Entregar Nuevo Vale</span>
@@ -631,11 +704,11 @@ export default function CommissionsView({
           </div>
 
           {allVales.length === 0 ? (
-            <div className="text-center py-10 space-y-2 bg-dark-950 rounded-xl border border-dark-800">
+            <div className="text-center py-10 space-y-2 bg-dark-950 rounded-2xl border border-dark-800">
               <Receipt className="w-8 h-8 text-slate-600 mx-auto" />
               <p className="text-sm font-bold text-slate-300">No hay vales registrados</p>
               <p className="text-xs text-slate-500">
-                Cuando un barbero pida plata para almuerzo o pasaje, regístralo con el botón "+ Entregar Vale".
+                Cuando un empleado pida plata para almuerzo o pasaje, regístralo con el botón "+ Entregar Vale".
               </p>
             </div>
           ) : (
@@ -643,13 +716,13 @@ export default function CommissionsView({
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-dark-800 text-slate-400 uppercase text-[10px] tracking-wider">
-                    <th className="pb-2.5 font-bold">Fecha / Hora</th>
-                    <th className="pb-2.5 font-bold">Profesional</th>
-                    <th className="pb-2.5 font-bold">Motivo</th>
-                    <th className="pb-2.5 font-bold">Origen del Pago</th>
-                    <th className="pb-2.5 font-bold text-right">Monto USD</th>
-                    <th className="pb-2.5 font-bold text-center">Estado</th>
-                    <th className="pb-2.5 font-bold text-right">Acción</th>
+                    <th className="pb-3 font-bold">Fecha / Hora</th>
+                    <th className="pb-3 font-bold">Profesional</th>
+                    <th className="pb-3 font-bold">Motivo</th>
+                    <th className="pb-3 font-bold">Origen del Pago</th>
+                    <th className="pb-3 font-bold text-right">Monto USD</th>
+                    <th className="pb-3 font-bold text-center">Estado</th>
+                    <th className="pb-3 font-bold text-right">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dark-800/60 font-mono">
@@ -667,7 +740,7 @@ export default function CommissionsView({
                           {v.staff_name || 'Empleado'}
                         </td>
                         <td className="py-3 text-slate-300 font-sans text-xs">
-                          <span className="px-2 py-0.5 rounded-md bg-dark-800 border border-dark-700 text-[11px]">
+                          <span className="px-2 py-0.5 rounded-lg bg-dark-800 border border-dark-750 text-[11px]">
                             {v.motivo || 'Vale'}
                           </span>
                         </td>
@@ -697,7 +770,7 @@ export default function CommissionsView({
                                   onDeleteTransaction(v.id)
                                 }
                               }}
-                              className="p-1 rounded-md text-slate-500 hover:text-red-400 hover:bg-dark-800"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-dark-800 transition-colors"
                               title="Anular vale"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
