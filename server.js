@@ -416,11 +416,129 @@ const server = http.createServer(async (req, res) => {
     })
   }
 
+function reconstructWorkspaceTransactions(tenantId, ws) {
+  if (!ws || typeof ws !== 'object' || tenantId === 'ten_1') return ws
+  const existingTxs = Array.isArray(ws.transactions) ? ws.transactions : []
+  const clientsList = Array.isArray(ws.clients) ? ws.clients : []
+  if (clientsList.length === 0) return ws
+
+  const deletedTxIds = new Set(Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : [])
+  const rate = Number(ws.exchangeRate) || 889.26
+  const allServices = [
+    ...((ws.servicesByNiche && ws.servicesByNiche.barberia) || []),
+    ...((ws.servicesByNiche && ws.servicesByNiche.estetica) || []),
+    ...((ws.servicesByNiche && ws.servicesByNiche.mixto) || [])
+  ]
+  const allStaff = [
+    ...((ws.staffByNiche && ws.staffByNiche.barberia) || []),
+    ...((ws.staffByNiche && ws.staffByNiche.estetica) || []),
+    ...((ws.staffByNiche && ws.staffByNiche.mixto) || [])
+  ]
+
+  const recoveredTxs = []
+  for (const c of clientsList) {
+    if (!c || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
+    if (tenantId === 'ten_1793499033884' && c.last_staff === 'Agenda Web') continue
+
+    const recId = 'rec_' + c.id
+    if (deletedTxIds.has(recId)) continue
+
+    const alreadyExists = existingTxs.some(
+      t => t && (t.id === recId || (t.client_name === c.name && (t.fecha || '').startsWith(c.last_visit)))
+    )
+    if (alreadyExists) continue
+
+    let qty = 1
+    let cleanSvcName = c.last_service || 'Corte Clásico'
+    const qtyMatch = cleanSvcName.match(/^(\d+)x\s+(.+)$/i)
+    if (qtyMatch) {
+      qty = Number(qtyMatch[1]) || 1
+      cleanSvcName = qtyMatch[2].trim()
+    }
+
+    const svcObj =
+      allServices.find(s => s && s.name && s.name.toLowerCase() === cleanSvcName.toLowerCase()) ||
+      allServices.find(s => s && s.name && cleanSvcName.toLowerCase().includes(s.name.toLowerCase())) ||
+      allServices[0] ||
+      { id: 's1', name: cleanSvcName, price_usd: 7.5, category: 'Cortes' }
+
+    const staffObj =
+      allStaff.find(st => st && st.name && st.name.toLowerCase() === (c.last_staff || '').toLowerCase()) ||
+      allStaff[0] ||
+      { id: 'e1', name: c.last_staff || 'Barbero', commission_pct: 50 }
+
+    const unitPrice = Number(svcObj.price_usd) || 7.5
+    const totalUsd = unitPrice * qty
+    const totalBs = Math.round(totalUsd * rate * 100) / 100
+    const commPct =
+      svcObj.commission_pct !== undefined && svcObj.commission_pct !== null && svcObj.commission_pct !== ''
+        ? Number(svcObj.commission_pct)
+        : Number(staffObj.commission_pct) || 50
+    const commUsd = Math.round(totalUsd * (commPct / 100) * 100) / 100
+    const netUsd = Math.round((totalUsd - commUsd) * 100) / 100
+
+    const tsNum = Number((c.id || '').replace(/\D+/g, ''))
+    let horaStr = '03:00 p.m.'
+    if (tsNum > 1700000000000 && tsNum < 1900000000000) {
+      horaStr = new Date(tsNum).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+    }
+
+    recoveredTxs.push({
+      id: recId,
+      type: 'ingreso',
+      item_name: c.last_service,
+      product_id: null,
+      product_items: [],
+      items: [
+        {
+          id: svcObj.id || 's1',
+          name: cleanSvcName,
+          price_usd: unitPrice,
+          commission_pct: commPct,
+          isProduct: false,
+          qty
+        }
+      ],
+      category: svcObj.category || 'Cortes',
+      staff_name: staffObj.name,
+      staff_id: staffObj.id,
+      client_name: c.name,
+      client_phone: c.phone || '',
+      monto_usd: totalUsd,
+      monto_bs: totalBs,
+      propina_usd: 0,
+      propina_bs: 0,
+      propina_moneda_origen: 'USD',
+      total_cobrado_usd: totalUsd,
+      total_cobrado_bs: totalBs,
+      propina_staff_id: null,
+      propina_staff_name: null,
+      tasa_bcv: rate,
+      metodo_pago: 'pago_movil',
+      comision_usd: commUsd,
+      ganancia_negocio_usd: netUsd,
+      comision_pagada: true,
+      hora: horaStr,
+      fecha: c.last_visit + 'T15:30:00.000Z'
+    })
+  }
+
+  if (recoveredTxs.length === 0) return ws
+  const merged = [...existingTxs, ...recoveredTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+  return {
+    ...ws,
+    transactions: merged
+  }
+}
+
   if (pathname.startsWith('/api/workspace/')) {
     const tenantId = decodeURIComponent(pathname.replace('/api/workspace/', ''))
     if (!tenantId) return sendJson(res, 400, { error: 'Missing tenantId' })
 
     if (req.method === 'GET') {
+      if (db.workspaces[tenantId]) {
+        db.workspaces[tenantId] = reconstructWorkspaceTransactions(tenantId, db.workspaces[tenantId])
+      }
       return sendJson(res, 200, {
         ok: true,
         workspace: db.workspaces[tenantId] || null
@@ -447,6 +565,13 @@ const server = http.createServer(async (req, res) => {
       const preservedApts = existingApts.filter(a => !incomingIds.has(a.id) && a.status !== 'cancelada')
       const finalAppointments = [...incomingApts, ...preservedApts]
 
+      // Merge clients: preserve existing server clients if incoming has fewer
+      const existingClients = Array.isArray(currentWs.clients) ? currentWs.clients : []
+      const incomingClients = Array.isArray(body.clients) ? body.clients : existingClients
+      const incomingClientIds = new Set(incomingClients.map(c => c && c.id).filter(Boolean))
+      const preservedClients = existingClients.filter(c => c && c.id && !incomingClientIds.has(c.id))
+      const finalClients = [...incomingClients, ...preservedClients]
+
       // Merge: preserve historical/restored transactions existing on server unless explicitly deleted
       const existingTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
       const incomingTxs = Array.isArray(body.transactions) ? body.transactions : existingTxs
@@ -457,14 +582,17 @@ const server = http.createServer(async (req, res) => {
       const preservedTxs = existingTxs.filter(t => t && t.id && !incomingTxIds.has(t.id) && !deletedTxIds.has(t.id))
       const finalTransactions = [...incomingTxs, ...preservedTxs].filter(t => t && !deletedTxIds.has(t.id))
 
-      db.workspaces[tenantId] = {
+      const mergedWs = reconstructWorkspaceTransactions(tenantId, {
         ...currentWs,
         ...(body || {}),
+        clients: finalClients,
         transactions: finalTransactions,
         deletedTxIds: Array.from(deletedTxIds),
         appointments: finalAppointments,
         updatedAt: Date.now()
-      }
+      })
+
+      db.workspaces[tenantId] = mergedWs
       saveDb()
       return sendJson(res, 200, {
         ok: true,

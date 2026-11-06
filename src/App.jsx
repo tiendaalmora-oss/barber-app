@@ -433,6 +433,116 @@ export default function App() {
     return () => clearTimeout(timeout)
   }, [activeTenantId, currentNiche, transactions, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings])
 
+  // Auto-reconstruct historical transactions from client visit history if wiped by legacy reset button
+  useEffect(() => {
+    if (!activeTenantId || activeTenantId === 'ten_1' || !Array.isArray(clients) || clients.length === 0) return
+
+    const rate = Number(exchangeRate) || 889.26
+    const allServices = [
+      ...((servicesByNiche && servicesByNiche.barberia) || []),
+      ...((servicesByNiche && servicesByNiche.estetica) || []),
+      ...((servicesByNiche && servicesByNiche.mixto) || [])
+    ]
+    const allStaff = [
+      ...((staffByNiche && staffByNiche.barberia) || []),
+      ...((staffByNiche && staffByNiche.estetica) || []),
+      ...((staffByNiche && staffByNiche.mixto) || [])
+    ]
+
+    setTransactions(prev => {
+      const existingTxs = Array.isArray(prev) ? prev : []
+      const recoveredTxs = []
+
+      for (const c of clients) {
+        if (!c || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
+        if (activeTenantId === 'ten_1793499033884' && c.last_staff === 'Agenda Web') continue
+
+        const recId = 'rec_' + c.id
+        const alreadyExists = existingTxs.some(
+          t => t && (t.id === recId || (t.client_name === c.name && (t.fecha || '').startsWith(c.last_visit)))
+        )
+        if (alreadyExists) continue
+
+        let qty = 1
+        let cleanSvcName = c.last_service || 'Corte Clásico'
+        const qtyMatch = cleanSvcName.match(/^(\d+)x\s+(.+)$/i)
+        if (qtyMatch) {
+          qty = Number(qtyMatch[1]) || 1
+          cleanSvcName = qtyMatch[2].trim()
+        }
+
+        const svcObj =
+          allServices.find(s => s && s.name && s.name.toLowerCase() === cleanSvcName.toLowerCase()) ||
+          allServices.find(s => s && s.name && cleanSvcName.toLowerCase().includes(s.name.toLowerCase())) ||
+          allServices[0] ||
+          { id: 's1', name: cleanSvcName, price_usd: 7.5, category: 'Cortes' }
+
+        const staffObj =
+          allStaff.find(st => st && st.name && st.name.toLowerCase() === (c.last_staff || '').toLowerCase()) ||
+          allStaff[0] ||
+          { id: 'e1', name: c.last_staff || 'Barbero', commission_pct: 50 }
+
+        const unitPrice = Number(svcObj.price_usd) || 7.5
+        const totalUsd = unitPrice * qty
+        const totalBs = Math.round(totalUsd * rate * 100) / 100
+        const commPct =
+          svcObj.commission_pct !== undefined && svcObj.commission_pct !== null && svcObj.commission_pct !== ''
+            ? Number(svcObj.commission_pct)
+            : Number(staffObj.commission_pct) || 50
+        const commUsd = Math.round(totalUsd * (commPct / 100) * 100) / 100
+        const netUsd = Math.round((totalUsd - commUsd) * 100) / 100
+
+        const tsNum = Number((c.id || '').replace(/\D+/g, ''))
+        let horaStr = '03:00 p.m.'
+        if (tsNum > 1700000000000 && tsNum < 1900000000000) {
+          horaStr = new Date(tsNum).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+        }
+
+        recoveredTxs.push({
+          id: recId,
+          type: 'ingreso',
+          item_name: c.last_service,
+          product_id: null,
+          product_items: [],
+          items: [
+            {
+              id: svcObj.id || 's1',
+              name: cleanSvcName,
+              price_usd: unitPrice,
+              commission_pct: commPct,
+              isProduct: false,
+              qty
+            }
+          ],
+          category: svcObj.category || 'Cortes',
+          staff_name: staffObj.name,
+          staff_id: staffObj.id,
+          client_name: c.name,
+          client_phone: c.phone || '',
+          monto_usd: totalUsd,
+          monto_bs: totalBs,
+          propina_usd: 0,
+          propina_bs: 0,
+          propina_moneda_origen: 'USD',
+          total_cobrado_usd: totalUsd,
+          total_cobrado_bs: totalBs,
+          propina_staff_id: null,
+          propina_staff_name: null,
+          tasa_bcv: rate,
+          metodo_pago: 'pago_movil',
+          comision_usd: commUsd,
+          ganancia_negocio_usd: netUsd,
+          comision_pagada: true,
+          hora: horaStr,
+          fecha: c.last_visit + 'T15:30:00.000Z'
+        })
+      }
+
+      if (recoveredTxs.length === 0) return prev
+      return [...existingTxs, ...recoveredTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+    })
+  }, [activeTenantId, clients, servicesByNiche, staffByNiche, exchangeRate])
+
   // Real-time auto-sync for active barber: polls for new web bookings and restored server transactions without overwriting local changes
   useEffect(() => {
     if (!activeTenantId || isPublicPreview) return
@@ -450,6 +560,17 @@ export default function App() {
                 const newIncoming = serverApts.filter(a => a && a.id && !prevIds.has(a.id))
                 if (newIncoming.length > 0) {
                   return [...newIncoming, ...prev]
+                }
+                return prev
+              })
+            }
+            if (Array.isArray(data.workspace.clients)) {
+              const serverClients = data.workspace.clients
+              setClients(prev => {
+                const prevIds = new Set((prev || []).map(c => c.id))
+                const newIncomingClients = serverClients.filter(c => c && c.id && !prevIds.has(c.id))
+                if (newIncomingClients.length > 0) {
+                  return [...prev, ...newIncomingClients]
                 }
                 return prev
               })
