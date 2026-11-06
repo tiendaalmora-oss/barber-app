@@ -278,6 +278,13 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_RETARGETING_CONFIG
   })
 
+  // Daily cash drawer closures & audit history
+  const [dailyClosings, setDailyClosings] = useState(() => {
+    if (initWs && Array.isArray(initWs.dailyClosings)) return initWs.dailyClosings
+    const saved = localStorage.getItem('barber_daily_closings')
+    return saved ? JSON.parse(saved) : []
+  })
+
   // Modals
   const [isCashModalOpen, setIsCashModalOpen] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState(null)
@@ -365,7 +372,8 @@ export default function App() {
       staffByNiche,
       servicesByNiche,
       productsByNiche,
-      exchangeRate
+      exchangeRate,
+      dailyClosings
     }
     // 1. Save in local browser storage isolated for this tenant
     try {
@@ -376,6 +384,7 @@ export default function App() {
       localStorage.setItem('barber_appointments', JSON.stringify(appointments))
       localStorage.setItem('barber_profile', JSON.stringify(businessProfile))
       localStorage.setItem('barber_rate', exchangeRate.toString())
+      localStorage.setItem('barber_daily_closings', JSON.stringify(dailyClosings))
     } catch (storageErr) {
       console.warn('Storage quota warning, continuing with in-memory state:', storageErr)
     }
@@ -1285,6 +1294,15 @@ export default function App() {
     setTransactions(prev => prev.filter(t => t.id !== txId))
   }
 
+  const handleSaveDailyClose = (closingRecord) => {
+    setDailyClosings(prev => {
+      const filtered = prev.filter(c => c.id !== closingRecord.id)
+      return [closingRecord, ...filtered]
+    })
+    setOfflineToast('🔒 Cierre de jornada guardado en el historial con éxito')
+    setTimeout(() => setOfflineToast(null), 3500)
+  }
+
   const handleLiquidateStaff = (payoutTx, settledTxIds = [], settledValeIds = []) => {
     const nowIso = new Date().toISOString()
     setTransactions(prev => {
@@ -1670,6 +1688,10 @@ export default function App() {
             <MonthlyReportView
               transactions={transactions}
               exchangeRate={exchangeRate}
+              dailyClosings={dailyClosings}
+              businessProfile={businessProfile}
+              staffList={currentStaff}
+              onDeleteTransaction={handleDeleteTransaction}
             />
           )}
         </main>
@@ -1729,13 +1751,8 @@ export default function App() {
         nicheData={nicheData}
         businessProfile={businessProfile}
         staffList={currentStaff}
-        onResetDay={() => {
-          // Clear only today's closed transactions, keeping previous days intact for historical monthly reports!
-          setTransactions(prev => prev.filter(t => !isDateToday(t.fecha)))
-        }}
-        onResetDailyTransactions={() => {
-          setTransactions(prev => prev.filter(t => !isDateToday(t.fecha)))
-        }}
+        onSaveDailyClose={handleSaveDailyClose}
+        onResetDay={handleSaveDailyClose}
       />
 
       {/* Payment / Subscription Modal (When in 24h trial and clicking "Activar mes completo") */}

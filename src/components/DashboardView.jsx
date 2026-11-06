@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Lock, Receipt, Smartphone, X } from 'lucide-react'
+import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Lock, Receipt, Smartphone, X, Calendar as CalendarIcon } from 'lucide-react'
 import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import ReceiptModal from './ReceiptModal'
 
 export default function DashboardView({ 
   transactions, 
@@ -13,25 +14,50 @@ export default function DashboardView({
   nicheData,
   businessProfile = {}
 }) {
-  const [filterPeriod, setFilterPeriod] = useState('hoy')
+  const todayIso = getLocalDateIso()
+  const yesterdayDate = new Date()
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+  const yesterdayIso = getLocalDateIso(yesterdayDate)
+
+  // Selected date for viewing cash register (defaults to today)
+  const [selectedDate, setSelectedDate] = useState(todayIso)
   const [viewingReceiptTx, setViewingReceiptTx] = useState(null)
 
-  // Calculate totals
-  const totalIncomeUSD = transactions
+  const isViewingToday = selectedDate === todayIso
+  const isViewingYesterday = selectedDate === yesterdayIso
+
+  const formatDateLabel = (dateStr) => {
+    if (!dateStr) return ''
+    if (dateStr === todayIso) return 'Hoy'
+    if (dateStr === yesterdayIso) return 'Ayer'
+    const parts = dateStr.split('-')
+    if (parts.length < 3) return dateStr
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+    return `${parts[2]} de ${months[parseInt(parts[1], 10) - 1]}`
+  }
+
+  // Filter transactions strictly for the selected date
+  const dateTransactions = transactions.filter(t => {
+    if (!t.fecha) return isViewingToday
+    return getLocalDateIso(t.fecha) === selectedDate
+  })
+
+  // Calculate totals strictly for the selected date
+  const totalIncomeUSD = dateTransactions
     .filter(t => t.monto_usd > 0)
     .reduce((sum, t) => sum + t.monto_usd, 0)
   
-  const totalExpensesUSD = Math.abs(transactions
+  const totalExpensesUSD = Math.abs(dateTransactions
     .filter(t => t.monto_usd < 0)
     .reduce((sum, t) => sum + t.monto_usd, 0))
 
-  const totalCommissionsUSD = transactions
+  const totalCommissionsUSD = dateTransactions
     .filter(t => t.comision_usd > 0)
     .reduce((sum, t) => sum + t.comision_usd, 0)
 
   // Net profit = Income - Expenses - Commissions
   const totalBusinessNetUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
-  const totalServicesCount = transactions.filter(t => t.monto_usd > 0).length
+  const totalServicesCount = dateTransactions.filter(t => t.monto_usd > 0).length
 
   // 1. DYNAMIC 7-day revenue trend based strictly on REAL transactions (Local Timezone Resilient)
   const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -66,7 +92,7 @@ export default function DashboardView({
   const hasWeeklySales = weeklyData.some(d => d.revenue > 0)
   const bestDay = hasWeeklySales ? [...weeklyData].sort((a, b) => b.revenue - a.revenue)[0] : null
 
-  // 2. DYNAMIC real payment methods breakdown (Unified IDs & Normalized Methods)
+  // 2. DYNAMIC real payment methods breakdown (Unified IDs & Normalized Methods) for selected date
   const paymentMethodsList = [
     { id: 'pago_movil', label: 'Pago Móvil (Bs)', color: 'bg-blue-500' },
     { id: 'efectivo', label: 'Efectivo $ (Gaveta)', color: 'bg-emerald-500' },
@@ -74,7 +100,7 @@ export default function DashboardView({
     { id: 'punto', label: 'Punto de Venta', color: 'bg-teal-500' },
     { id: 'fiado', label: 'Fiados (Por Cobrar)', color: 'bg-amber-500' },
   ].map(m => {
-    const sum = transactions
+    const sum = dateTransactions
       .filter(t => {
         if (t.monto_usd <= 0) return false
         if (m.id === 'efectivo') return isEfectivoMethod(t.metodo_pago)
@@ -89,16 +115,16 @@ export default function DashboardView({
     return { ...m, sum, pct }
   })
 
-  // Physical Cash (Gaveta) vs Digital / Banks vs Fiados (Real-time Criollo split)
-  const cashUSD = transactions
+  // Physical Cash (Gaveta) vs Digital / Banks vs Fiados (Real-time Criollo split) for selected date
+  const cashUSD = dateTransactions
     .filter(t => t.monto_usd > 0 && isEfectivoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
-  const digitalUSD = transactions
+  const digitalUSD = dateTransactions
     .filter(t => t.monto_usd > 0 && !isEfectivoMethod(t.metodo_pago) && !isFiadoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
-  const fiadoUSD = transactions
+  const fiadoUSD = dateTransactions
     .filter(t => t.monto_usd > 0 && isFiadoMethod(t.metodo_pago))
     .reduce((sum, t) => sum + t.monto_usd, 0)
 
@@ -119,26 +145,80 @@ export default function DashboardView({
 
         {/* Top Header Row inside Hero */}
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-dark-800/80">
-          <div className="flex items-center gap-2.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20" />
-            <span className="text-[11px] font-black uppercase tracking-wider text-emerald-400">
-              Control Financiero • Hoy
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className={`w-2.5 h-2.5 rounded-full ${
+              isViewingToday ? 'bg-emerald-400 animate-pulse ring-4 ring-emerald-500/20' : 'bg-blue-400'
+            }`} />
+            <span className={`text-[11px] font-black uppercase tracking-wider ${
+              isViewingToday ? 'text-emerald-400' : 'text-blue-400'
+            }`}>
+              {isViewingToday ? 'Caja en Vivo • Hoy' : isViewingYesterday ? 'Auditoría de Caja • Ayer' : `Auditoría • ${formatDateLabel(selectedDate)}`}
             </span>
             <span className="text-slate-600">•</span>
             <span className="text-xs text-slate-400 font-medium">
               {totalServicesCount} {totalServicesCount === 1 ? 'servicio' : 'servicios'}
             </span>
+            {!isViewingToday && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayIso)}
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 transition-all ml-1"
+              >
+                ↩️ Volver a Hoy
+              </button>
+            )}
           </div>
 
-          {/* Quick Action Pills */}
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          {/* Date Selector Pills (Hoy / Ayer / Otra Fecha) & Quick Actions */}
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+            {/* Quick Date Switcher */}
+            <div className="flex items-center gap-1 bg-dark-950/90 p-1 rounded-2xl border border-dark-750">
+              <button
+                type="button"
+                onClick={() => setSelectedDate(todayIso)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  isViewingToday 
+                    ? 'bg-emerald-500 text-black font-black shadow-sm' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Hoy
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(yesterdayIso)}
+                className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                  isViewingYesterday 
+                    ? 'bg-blue-500 text-white font-black shadow-sm' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Ayer
+              </button>
+              <label className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold cursor-pointer transition-all relative ${
+                !isViewingToday && !isViewingYesterday 
+                  ? 'bg-purple-600 text-white font-black shadow-sm' 
+                  : 'text-slate-400 hover:text-white'
+              }`}>
+                <CalendarIcon className="w-3 h-3" />
+                <span className="hidden sm:inline">Fecha</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                  className="w-0 h-0 opacity-0 absolute pointer-events-none"
+                />
+              </label>
+            </div>
+
+            {/* Quick Action Pills */}
             <button
               onClick={onOpenDailyCloseModal || onOpenWhatsAppModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all active:scale-95 shadow-sm"
               title="Arqueo de gaveta en efectivo, comisiones y cierre diario"
             >
               <Lock className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Cuadre Gaveta</span>
+              <span className="hidden sm:inline">Cuadre</span>
             </button>
             <button
               onClick={onOpenExpenseModal}
@@ -423,8 +503,10 @@ export default function DashboardView({
             <span className="text-gold-400 font-bold block mb-0.5">💡 Control de Caja Criollo:</span>
             <span className="text-slate-400">
               {totalIncomeUSD === 0
-                ? 'Mantén tu caja al día anotando cada servicio y gasto para tener tu arqueo perfecto al final del día.'
-                : `Tienes $${totalIncomeUSD.toFixed(2)} facturados hoy. Recuerda hacer tu arqueo de gaveta antes de cerrar.`}
+                ? (isViewingToday 
+                    ? 'Mantén tu caja al día anotando cada servicio y gasto para tener tu arqueo perfecto al final del día.'
+                    : `No se registraron ventas en esta fecha (${selectedDate}).`)
+                : `Tienes $${totalIncomeUSD.toFixed(2)} facturados (${formatDateLabel(selectedDate)}). ${isViewingToday ? 'Recuerda hacer tu arqueo de gaveta antes de cerrar la jornada.' : 'Registro auditado de fecha anterior.'}`}
             </span>
           </div>
         </div>
@@ -462,8 +544,17 @@ export default function DashboardView({
       <div className="bg-dark-900 border border-dark-800/80 rounded-3xl shadow-xl overflow-hidden">
         <div className="p-4 sm:p-5 border-b border-dark-800/80 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="font-bold text-white text-base">Movimientos de Caja de Hoy ({transactions.length})</h3>
-            <p className="text-xs text-slate-400">Historial en tiempo real de entradas y salidas (puedes borrar si te equivocas)</p>
+            <h3 className="font-bold text-white text-base flex items-center gap-2">
+              <span>Movimientos de Caja ({dateTransactions.length})</span>
+              <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-dark-800 text-gold-400 border border-gold-500/30">
+                {formatDateLabel(selectedDate)}
+              </span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              {isViewingToday 
+                ? 'Historial en tiempo real de entradas y salidas de hoy' 
+                : `Auditoría histórica de movimientos del ${selectedDate}`}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button 
@@ -482,13 +573,19 @@ export default function DashboardView({
         </div>
 
         <div className="divide-y divide-dark-800">
-          {transactions.length === 0 ? (
+          {dateTransactions.length === 0 ? (
             <div className="p-8 text-center space-y-2">
-              <p className="text-sm font-bold text-white">La caja está en $0.00 (Lista para empezar)</p>
-              <p className="text-xs text-slate-400">Usa el botón dorado "+ Anotar Cobro" arriba para registrar tu primera venta real.</p>
+              <p className="text-sm font-bold text-white">
+                {isViewingToday ? 'La caja está en $0.00 (Lista para empezar)' : `No hubo movimientos el ${selectedDate}`}
+              </p>
+              <p className="text-xs text-slate-400">
+                {isViewingToday 
+                  ? 'Usa el botón dorado "+ Cobro" arriba para registrar tu primera venta real.' 
+                  : 'Puedes regresar a "Hoy" pulsando el botón rápido en la parte superior.'}
+              </p>
             </div>
           ) : (
-              transactions.map((tx) => {
+              dateTransactions.map((tx) => {
                 const isExpense = tx.monto_usd < 0
                 return (
                   <div key={tx.id} className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-dark-850/40 transition-colors">
@@ -582,140 +679,14 @@ export default function DashboardView({
           </div>
         </div>
 
-      {/* Modal Comprobante / Factura Digital */}
-      {viewingReceiptTx && (() => {
-        const tx = viewingReceiptTx
-        const cleanPhone = normalizeWhatsAppPhone(tx.client_phone || '')
-        const bizName = businessProfile?.businessName || 'Mi Negocio'
-        
-        const handleSendWhatsApp = () => {
-          let msg = `🧾 *FACTURA / RECIBO DE PAGO • ${bizName.toUpperCase()}*\n`
-          msg += `👤 *Cliente:* ${tx.client_name || 'Cliente'}\n`
-          msg += `💈 *Atendido por:* ${tx.staff_name || 'Personal'}\n`
-          msg += `📅 *Fecha:* ${tx.fecha ? tx.fecha.split('T')[0] : 'Hoy'} - ${tx.hora || ''}\n`
-          msg += `------------------------------------\n`
-          msg += `✂️ *DETALLE DE SU CUENTA:*\n`
-          if (tx.items && tx.items.length > 0) {
-            tx.items.forEach(it => {
-              msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: $${(it.price_usd * (it.qty || 1)).toFixed(2)}\n`
-            })
-          } else {
-            msg += `• ${tx.item_name}: $${tx.monto_usd.toFixed(2)}\n`
-          }
-          if (tx.propina_usd > 0) {
-            msg += `🪙 *Propina:* $${tx.propina_usd.toFixed(2)} USD (Bs. ${(tx.propina_bs || (tx.propina_usd * exchangeRate)).toFixed(2)})\n`
-          }
-          msg += `------------------------------------\n`
-          const totalCobradoUSD = tx.total_cobrado_usd || (tx.monto_usd + (tx.propina_usd || 0))
-          const totalCobradoBs = tx.total_cobrado_bs || (totalCobradoUSD * exchangeRate)
-          msg += `💰 *TOTAL PAGADO: $${totalCobradoUSD.toFixed(2)} USD*\n`
-          msg += `👉 *Al cambio BCV: Bs. ${totalCobradoBs.toFixed(2)}*\n`
-          msg += `💳 *Método de pago:* ${(tx.metodo_pago || '').replace(/_/g, ' ').toUpperCase()}\n\n`
-          msg += `¡Gracias por visitarnos, te esperamos pronto! ✨`
-
-          const url = cleanPhone
-            ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
-            : `https://wa.me/?text=${encodeURIComponent(msg)}`
-          window.open(url, '_blank')
-        }
-
-        const totalUSD = tx.total_cobrado_usd || (tx.monto_usd + (tx.propina_usd || 0))
-        const totalBs = tx.total_cobrado_bs || (totalUSD * exchangeRate)
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
-            <div className="bg-dark-900 border-2 border-emerald-500/50 w-full max-w-md rounded-3xl p-6 shadow-2xl text-center space-y-4 relative">
-              <button
-                onClick={() => setViewingReceiptTx(null)}
-                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full bg-dark-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 mx-auto flex items-center justify-center">
-                <Receipt className="w-7 h-7" />
-              </div>
-
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                  ✓ Comprobante Digital de Caja
-                </span>
-                <h3 className="text-xl font-black text-white mt-1">
-                  Factura de Pago
-                </h3>
-                <p className="text-xs text-slate-400">
-                  {bizName} • {tx.fecha ? tx.fecha.split('T')[0] : 'Hoy'} ({tx.hora})
-                </p>
-              </div>
-
-              {/* Ticket Body */}
-              <div className="bg-dark-950 p-4 rounded-2xl border border-dark-800 text-left space-y-2 text-xs font-mono">
-                <div className="flex justify-between font-sans">
-                  <span className="text-slate-400">Cliente:</span>
-                  <span className="font-bold text-white">{tx.client_name || 'Cliente Mostrador'}</span>
-                </div>
-                <div className="flex justify-between font-sans">
-                  <span className="text-slate-400">Atendió:</span>
-                  <span className="font-bold text-gold-400">{tx.staff_name || 'Personal'}</span>
-                </div>
-                {tx.client_phone && (
-                  <div className="flex justify-between font-sans">
-                    <span className="text-slate-400">WhatsApp:</span>
-                    <span className="font-bold text-slate-300">{tx.client_phone}</span>
-                  </div>
-                )}
-                <div className="pt-2 border-t border-dark-800 space-y-1">
-                  {tx.items && tx.items.length > 0 ? (
-                    tx.items.map((it, idx) => (
-                      <div key={idx} className="flex justify-between text-slate-300">
-                        <span className="truncate pr-2">{it.qty > 1 ? `${it.qty}x ` : ''}{it.name}</span>
-                        <span className="font-bold">${(it.price_usd * (it.qty || 1)).toFixed(2)}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex justify-between text-slate-300">
-                      <span className="truncate pr-2">{tx.item_name}</span>
-                      <span className="font-bold">${tx.monto_usd.toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {tx.propina_usd > 0 && (
-                    <div className="flex justify-between text-amber-400">
-                      <span>🪙 Propina:</span>
-                      <span className="font-bold">+${tx.propina_usd.toFixed(2)}</span>
-                    </div>
-                  )}
-                </div>
-                <div className="pt-2 border-t border-dark-800 flex justify-between font-sans text-sm font-black">
-                  <span className="text-white">TOTAL PAGADO:</span>
-                  <span className="text-emerald-400 font-mono text-base">${totalUSD.toFixed(2)}</span>
-                </div>
-                <div className="text-right text-[11px] text-slate-400">
-                  Bs. {totalBs.toFixed(2)} (Método: {(tx.metodo_pago || '').replace(/_/g, ' ').toUpperCase()})
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-2">
-                <button
-                  onClick={handleSendWhatsApp}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all"
-                >
-                  <Smartphone className="w-4 h-4 stroke-[2.5]" />
-                  <span>Reenviar Factura por WhatsApp</span>
-                </button>
-
-                <button
-                  onClick={() => setViewingReceiptTx(null)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 font-bold text-xs transition-colors"
-                >
-                  Cerrar
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      })()}
+      {/* Modal Comprobante / Factura Digital Reutilizable */}
+      <ReceiptModal
+        isOpen={Boolean(viewingReceiptTx)}
+        onClose={() => setViewingReceiptTx(null)}
+        transaction={viewingReceiptTx}
+        exchangeRate={exchangeRate}
+        businessProfile={businessProfile}
+      />
 
     </div>
   )

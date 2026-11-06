@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
-import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
+import { isDateToday, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
 
 export default function DailyCloseModal({
@@ -11,11 +11,12 @@ export default function DailyCloseModal({
   businessProfile,
   staffList,
   onResetDay,
-  onResetDailyTransactions
+  onResetDailyTransactions,
+  onSaveDailyClose
 }) {
   const [cashInDrawerCounted, setCashInDrawerCounted] = useState('')
   const [copied, setCopied] = useState(false)
-  const [confirmedReset, setConfirmedReset] = useState(false)
+  const [closingSaved, setClosingSaved] = useState(false)
   const [tipDeliveryMode, setTipDeliveryMode] = useState('individual') // 'individual' | 'grupal'
 
   const handleResetAction = onResetDay || onResetDailyTransactions
@@ -509,42 +510,64 @@ export default function DailyCloseModal({
             </button>
           </div>
 
-          {handleResetAction && (
-            <div className="w-full sm:w-auto flex justify-end">
-              {!confirmedReset ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirmedReset(true)}
-                  className="px-3 py-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750 text-xs font-bold flex items-center gap-1"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Cerrar Día y Reiniciar Caja</span>
-                </button>
+          <div className="w-full sm:w-auto flex items-center justify-end gap-2">
+            <button
+              type="button"
+              disabled={closingSaved}
+              onClick={() => {
+                const closingRecord = {
+                  id: `close_${Date.now()}`,
+                  fecha: getLocalDateIso(),
+                  timestamp: new Date().toISOString(),
+                  totalIncomeUSD,
+                  totalIncomeBs,
+                  totalExpensesUSD,
+                  totalValesUSD,
+                  totalTipsUSD,
+                  efectivoUSD,
+                  pagoMovilUSD,
+                  pagoMovilBs,
+                  zelleUSD,
+                  puntoUSD,
+                  fiadoUSD,
+                  expectedCashInDrawer,
+                  cashInDrawerCounted: hasCounted ? countedNum : expectedCashInDrawer,
+                  differenceUSD: hasCounted ? differenceUSD : 0,
+                  netProfitUSD,
+                  transactionsCount: todayTx.length,
+                  commissionsByStaff,
+                  tipsByStaff,
+                  exchangeRate
+                }
+
+                if (onSaveDailyClose) {
+                  onSaveDailyClose(closingRecord)
+                }
+                if (handleResetAction) {
+                  handleResetAction(closingRecord)
+                }
+
+                setClosingSaved(true)
+                setTimeout(() => {
+                  setClosingSaved(false)
+                  onClose()
+                }, 1200)
+              }}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black text-xs font-black flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+            >
+              {closingSaved ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-black" />
+                  <span>¡Cierre Guardado!</span>
+                </>
               ) : (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-red-400 font-bold">¿Seguro?</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleResetAction()
-                      setConfirmedReset(false)
-                      onClose()
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-black"
-                  >
-                    Sí, Dejar en Cero
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmedReset(false)}
-                    className="px-2 py-1.5 rounded-lg bg-dark-800 text-slate-300 text-xs font-bold"
-                  >
-                    No
-                  </button>
-                </div>
+                <>
+                  <Lock className="w-4 h-4 stroke-[2.5]" />
+                  <span>Guardar Cuadre & Cerrar Jornada</span>
+                </>
               )}
-            </div>
-          )}
+            </button>
+          </div>
         </div>
 
       </div>
