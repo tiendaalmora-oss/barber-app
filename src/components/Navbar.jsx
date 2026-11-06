@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, Check, Settings, Calculator, Wifi, WifiOff, Zap } from 'lucide-react'
+import { 
+  Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, 
+  AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, 
+  Check, Settings, Calculator, Wifi, WifiOff, Zap, Menu, X, MoreHorizontal, 
+  ChevronRight, ShieldCheck, DollarSign
+} from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
 
 export default function Navbar({ 
@@ -20,10 +25,14 @@ export default function Navbar({
   activeTab,
   onSelectTab,
   isOnline = true,
+  syncStatus,
+  overdueClientsCount = 0,
   showReconnectedBanner = false
 }) {
   const [bioSupported, setBioSupported] = useState(false)
   const [bioLinked, setBioLinked] = useState(Boolean(activeTenant?.biometricEnabled))
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
 
   useEffect(() => {
     isBiometricSupported().then(setBioSupported)
@@ -60,10 +69,11 @@ export default function Navbar({
       alert('No se completó el registro de huella en este dispositivo.')
     }
   }
+
   const nicheIcons = {
-    barberia: <Scissors className="w-5 h-5 text-gold-400" />,
-    estetica: <Sparkles className="w-5 h-5 text-pink-400" />,
-    mixto: <Store className="w-5 h-5 text-purple-400" />
+    barberia: <Scissors className="w-4 h-4 text-gold-400" />,
+    estetica: <Sparkles className="w-4 h-4 text-pink-400" />,
+    mixto: <Store className="w-4 h-4 text-purple-400" />
   }
 
   const nicheNames = {
@@ -73,256 +83,420 @@ export default function Navbar({
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-dark-900/95 backdrop-blur-md border-b border-dark-700/60 px-4 py-3">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        
-        {/* Brand & Niche Switcher */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+    <>
+      {/* HEADER SUPERIOR ÚNICO (Elegante y Limpio) */}
+      <header className="sticky top-0 z-30 bg-dark-900/90 backdrop-blur-xl border-b border-dark-800/80 px-3 sm:px-6 py-2.5 transition-all">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          
+          {/* Brand Logo & Name */}
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
               onClick={onOpenSettingsModal}
-              className="w-11 h-11 rounded-xl bg-dark-800 border border-dark-700 hover:border-gold-500/50 shadow-inner flex items-center justify-center overflow-hidden shrink-0 transition-all group"
-              title="Haz clic para cambiar el Logo y datos de tu Barbería"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-dark-800/80 border border-dark-700/70 hover:border-gold-500/50 shadow-inner flex items-center justify-center overflow-hidden shrink-0 transition-all group"
+              title="Cambiar Logo y datos del negocio"
             >
               {businessProfile?.logoUrl ? (
-                <img src={businessProfile.logoUrl} alt="Logo" className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform" />
+                <img src={businessProfile.logoUrl} alt="Logo" className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform" />
               ) : (
-                nicheIcons[currentNiche] || <Scissors className="w-5 h-5 text-gold-400 group-hover:rotate-12 transition-transform" />
+                nicheIcons[currentNiche] || <Scissors className="w-4 h-4 text-gold-400" />
               )}
             </button>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={onOpenSettingsModal}
-                  className="font-bold text-lg text-white hover:text-gold-400 tracking-tight flex items-center gap-1.5 text-left transition-colors"
-                  title="Configurar Negocio"
+                  className="font-black text-sm sm:text-base text-white hover:text-gold-400 tracking-tight truncate text-left transition-colors"
                 >
                   {businessProfile?.businessName || nicheNames[currentNiche] || 'Mi Negocio'}
                 </button>
                 {activeTenant?.isTrial24h ? (
                   <button
                     onClick={onOpenPaymentModal}
-                    title="Click para ver métodos de pago y activar mes completo"
-                    className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-1 animate-pulse transition-all cursor-pointer"
+                    className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-0.5 shrink-0"
                   >
-                    <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
-                    <span>PRUEBA 24H ({
-                      activeTenant?.trialExpiresAt
-                        ? `${Math.max(1, Math.ceil((new Date(activeTenant.trialExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))}h`
-                        : '24h'
-                    }) • Activar $6</span>
+                    <Zap className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                    <span>Prueba 24h</span>
                   </button>
                 ) : (
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold flex items-center gap-1">
-                    <span>🟢 ACTIVO ({activeTenant?.daysRemaining ?? 30}d)</span>
-                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Cuenta Activa" />
                 )}
               </div>
-              <p className="text-xs text-slate-400 truncate max-w-[200px] sm:max-w-xs">
-                {businessProfile?.slogan || (activeTenant?.email ? `Sesión: ${activeTenant.email}` : 'Control de Caja & Cuentas Claras')}
+              <p className="text-[11px] text-slate-400 truncate max-w-[160px] sm:max-w-xs">
+                {businessProfile?.slogan || 'Control de Caja & Cuentas Claras'}
               </p>
             </div>
           </div>
 
-          {/* Quick Niche Switcher on Mobile (Only Beauty/Barber) */}
-          <div className="md:hidden flex items-center gap-1.5 bg-dark-850 p-1 rounded-lg border border-dark-700">
+          {/* Center: Desktop Niche Switcher (Only visible on tablet/desktop) */}
+          <div className="hidden md:flex items-center gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750">
             {[
-              { id: 'barberia', icon: '💈', label: 'Barbería' },
-              { id: 'estetica', icon: '💅', label: 'Salón' },
-              { id: 'mixto', icon: '🏬', label: 'Mixto' }
-            ].map((n) => (
-              <button
-                key={n.id}
-                onClick={() => onSelectNiche(n.id)}
-                className={`p-1.5 rounded-md text-xs transition-all ${
-                  currentNiche === n.id 
-                    ? 'bg-gold-500/20 text-gold-400 border border-gold-500/40 shadow-sm' 
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title={n.label}
-              >
-                {n.icon}
-              </button>
-            ))}
+              { id: 'barberia', icon: Scissors, label: 'Barbería' },
+              { id: 'estetica', icon: Sparkles, label: 'Salón & Uñas' },
+              { id: 'mixto', icon: Store, label: 'Mixto' }
+            ].map(n => {
+              const NIcon = n.icon
+              const isSel = currentNiche === n.id
+              return (
+                <button
+                  key={n.id}
+                  onClick={() => onSelectNiche(n.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                    isSel 
+                      ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30 shadow-sm' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <NIcon className="w-3.5 h-3.5" />
+                  <span>{n.label}</span>
+                </button>
+              )
+            })}
           </div>
-        </div>
 
-        {/* Center / Desktop Niche Switcher (Removed Autolavado) */}
-        <div className="hidden md:flex items-center gap-2 bg-dark-850 p-1 rounded-xl border border-dark-700">
-          <button
-            onClick={() => onSelectNiche('barberia')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
-              currentNiche === 'barberia' 
-                ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Scissors className="w-3.5 h-3.5" />
-            Solo Barbería
-          </button>
-          <button
-            onClick={() => onSelectNiche('estetica')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
-              currentNiche === 'estetica' 
-                ? 'bg-pink-500/15 text-pink-400 border border-pink-500/30' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Solo Salón & Uñas
-          </button>
-          <button
-            onClick={() => onSelectNiche('mixto')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${
-              currentNiche === 'mixto' 
-                ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30' 
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Store className="w-3.5 h-3.5" />
-            Local Mixto (Ambos)
-          </button>
-        </div>
-
-        {/* Right side: Tasa BCV + Action CTAs */}
-        <div className="flex items-center gap-2 justify-end flex-wrap">
-          {/* Botón Vincular Huella Digital / FaceID */}
-          {bioSupported && (
-            <button
-              onClick={handleLinkFingerprint}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all ${
-                bioLinked
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                  : 'bg-dark-800 hover:bg-emerald-500/15 text-gold-400 border-gold-500/30'
-              }`}
-              title="Vincular tu Huella Digital o FaceID en este teléfono para entrar en 1 toque"
+          {/* Right: Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Tasa BCV Pill (Compacta y Minimalista) */}
+            <button 
+              onClick={onOpenRateModal}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 border border-dark-700/80 text-xs text-slate-300 transition-all group"
+              title="Click para ajustar la Tasa BCV oficial"
             >
-              <Fingerprint className="w-3.5 h-3.5" />
-              <span>{bioLinked ? 'Huella Activa ✓' : 'Activar Huella'}</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[11px] text-slate-400 hidden sm:inline">BCV:</span>
+              <span className="text-white font-mono font-bold group-hover:text-gold-400 text-xs">
+                Bs. {exchangeRate.toFixed(2)}
+              </span>
             </button>
-          )}
 
-          {/* Botón Cerrar Sesión */}
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-red-500/15 text-slate-300 hover:text-red-400 border border-dark-700 hover:border-red-500/30 text-xs font-bold transition-all"
-            title="Cerrar sesión de tu cuenta"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Salir</span>
-          </button>
+            {/* Desktop Only CTAs */}
+            <div className="hidden md:flex items-center gap-2">
+              <button
+                onClick={onOpenDailyCloseModal}
+                className="px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all flex items-center gap-1.5"
+                title="Cuadre y Arqueo Diario de Caja"
+              >
+                <Calculator className="w-3.5 h-3.5 text-purple-400" />
+                <span>Cuadre</span>
+              </button>
 
-          {/* Estado de Conexión en Vivo para Grabación de Videos y Uso Diario */}
-          {!isOnline && (
-            <div 
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xs font-bold animate-pulse shadow-sm"
-              title="Estás trabajando en MODO LOCAL (sin conexión a internet). Toda la caja y clientes se guardan seguros en tu teléfono."
-            >
-              <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>MODO LOCAL (Sin Internet)</span>
+              <button
+                onClick={onOpenWhatsAppModal}
+                className="px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-emerald-400 border border-dark-700 text-xs font-bold transition-all flex items-center gap-1.5"
+                title="Cierre por WhatsApp"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Cierre WA</span>
+              </button>
+
+              <button
+                onClick={onOpenExpenseModal}
+                className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all flex items-center gap-1"
+                title="Anotar gasto de caja"
+              >
+                <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>Gasto</span>
+              </button>
             </div>
-          )}
 
-          {showReconnectedBanner && isOnline && (
-            <div 
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-bold animate-bounce shadow-sm"
+            {/* Principal CTA: ANOTAR COBRO (El rey de la interfaz) */}
+            <button
+              onClick={onOpenCashModal}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
             >
-              <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>¡En Línea! Sincronizado ✓</span>
+              <Plus className="w-3.5 h-3.5 stroke-[3]" />
+              <span className="hidden sm:inline">ANOTAR COBRO</span>
+              <span className="sm:hidden">Cobro</span>
+            </button>
+
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-slate-300 hover:text-white transition-colors"
+              title="Más opciones"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+
+            {/* Desktop Settings & Logout */}
+            <div className="hidden md:flex items-center gap-1 border-l border-dark-800 pl-2">
+              <button
+                onClick={onOpenSettingsModal}
+                className="p-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-700 transition-colors"
+                title="Configuración"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button
+                onClick={onLogout}
+                className="p-2 rounded-xl bg-dark-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-700 transition-colors"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
-          )}
+          </div>
 
-          {/* Tasa BCV Pill */}
-          <button 
-            onClick={onOpenRateModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800 border border-dark-700 hover:border-gold-500/50 text-xs text-slate-300 transition-all hover:bg-dark-750 group"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-slate-400">Tasa BCV:</span>
-            <span className="text-white font-bold group-hover:text-gold-400">Bs. {exchangeRate.toFixed(2)}</span>
-            <span className="text-[10px] text-slate-500 underline ml-0.5">Editar</span>
-          </button>
-
-          {/* Botón Cuadre y Arqueo Diario de Caja */}
-          <button
-            onClick={onOpenDailyCloseModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25 text-xs font-bold transition-all shadow-sm"
-            title="Cuadre y Arqueo Diario de Caja (Efectivo, Pago Móvil, Gastos y Ganancias)"
-          >
-            <Calculator className="w-3.5 h-3.5 text-purple-400" />
-            <span>Cuadre Diario</span>
-          </button>
-
-          {/* Botón Configuración de Negocio (Logo, WhatsApp, Redes) */}
-          <button
-            onClick={onOpenSettingsModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-gold-400 border border-dark-700 hover:border-gold-500/40 text-xs font-bold transition-all"
-            title="Configurar Logo, Redes Sociales, WhatsApp y Datos del Negocio"
-          >
-            <Settings className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Configuración</span>
-          </button>
-
-          {/* Botón WhatsApp Cierre */}
-          <button
-            onClick={onOpenWhatsAppModal}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/20 text-xs font-bold transition-all shadow-sm"
-            title="Generar y enviar cierre diario por WhatsApp"
-          >
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Cierre WhatsApp</span>
-          </button>
-
-          {/* Botón Gasto Rápido */}
-          <button
-            onClick={onOpenExpenseModal}
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/25 hover:bg-red-500/20 text-xs font-bold transition-all"
-            title="Anotar gasto de caja"
-          >
-            <Minus className="w-3.5 h-3.5 stroke-[3]" />
-            <span>Gasto</span>
-          </button>
-
-          {/* Botón Cobro Rápido */}
-          <button
-            onClick={onOpenCashModal}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>ANOTAR COBRO</span>
-          </button>
         </div>
+      </header>
 
-      </div>
-
-      {/* Mobile Navigation Tabs */}
-      <nav className="flex md:hidden items-center justify-around gap-1 mt-3 pt-2.5 border-t border-dark-800 overflow-x-auto">
+      {/* BARRA DE NAVEGACIÓN INFERIOR MÓVIL (Estilo iOS / Nubank / Linear) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-2xl border-t border-dark-800/90 px-2 py-1.5 flex items-center justify-around shadow-2xl">
         {[
           { id: 'dashboard', label: 'Caja', icon: TrendingUp },
-          { id: 'catalogo', label: 'Mi Link', icon: Globe },
-          { id: 'retargeting', label: 'Radar', icon: BellRing },
           { id: 'appointments', label: 'Turnos', icon: Calendar },
           { id: 'commissions', label: 'Equipo', icon: Users },
-          { id: 'debts', label: 'Fiados', icon: AlertCircle },
-          { id: 'inventory', label: 'Pomadas', icon: Package },
-          { id: 'monthly', label: 'Mes', icon: BarChart3 },
+          { id: 'debts', label: 'Fiados', icon: AlertCircle, badgeCount: overdueClientsCount },
+          { id: 'more', label: 'Más', icon: MoreHorizontal, isAction: true },
         ].map(tab => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
           return (
             <button
               key={tab.id}
-              onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center gap-1 py-1 px-1.5 rounded-lg text-[10px] font-medium transition-all ${
-                isActive ? 'text-gold-400 font-bold' : 'text-slate-400 hover:text-slate-200'
+              onClick={() => {
+                if (tab.isAction) {
+                  setIsMoreSheetOpen(true)
+                } else {
+                  onSelectTab(tab.id)
+                }
+              }}
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all relative ${
+                isActive && !tab.isAction
+                  ? 'text-gold-400 font-bold scale-105'
+                  : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
+              <div className="relative">
+                <Icon className="w-5 h-5 mb-0.5" />
+                {tab.badgeCount > 0 && (
+                  <span className="absolute -top-1 -right-2 w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse border-2 border-dark-900" />
+                )}
+              </div>
+              <span className="text-[10px] tracking-tight">{tab.label}</span>
             </button>
           )
         })}
       </nav>
-    </header>
+
+      {/* HOJA INFERIOR: MÁS MÓDULOS (Estilo Bottom Sheet) */}
+      {isMoreSheetOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div 
+            className="flex-1"
+            onClick={() => setIsMoreSheetOpen(false)} 
+          />
+          <div className="bg-dark-900 border-t border-dark-750 rounded-t-3xl p-5 shadow-2xl space-y-4 animate-slideUp max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2 border-b border-dark-800">
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-1 bg-dark-700 rounded-full mx-auto block mb-1" />
+                <h3 className="font-bold text-white text-sm">Más Módulos de Tu Negocio</h3>
+              </div>
+              <button 
+                onClick={() => setIsMoreSheetOpen(false)}
+                className="p-1 rounded-full bg-dark-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { id: 'catalogo', label: 'Mi Link Web', desc: 'Catálogo de servicios', icon: Globe, color: 'text-blue-400' },
+                { id: 'retargeting', label: 'Radar Clientes', desc: 'Retención y avisos', icon: BellRing, color: 'text-amber-400' },
+                { id: 'inventory', label: 'Pomadas & Stock', desc: 'Productos de reventa', icon: Package, color: 'text-emerald-400' },
+                { id: 'monthly', label: 'Mes a Mes', desc: 'Balance mensual', icon: BarChart3, color: 'text-purple-400' },
+              ].map(m => {
+                const MIcon = m.icon
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      onSelectTab(m.id)
+                      setIsMoreSheetOpen(false)
+                    }}
+                    className={`p-3 rounded-2xl border text-left transition-all flex flex-col gap-1.5 ${
+                      activeTab === m.id 
+                        ? 'bg-gold-500/15 border-gold-500/50' 
+                        : 'bg-dark-850 border-dark-750/70 hover:bg-dark-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <MIcon className={`w-5 h-5 ${m.color}`} />
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white">{m.label}</div>
+                      <div className="text-[10px] text-slate-400 leading-tight">{m.desc}</div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Accesos Rápidos de Operación Diaria */}
+            <div className="pt-2 border-t border-dark-800 grid grid-cols-2 gap-2">
+              <button
+                onClick={() => {
+                  setIsMoreSheetOpen(false)
+                  onOpenDailyCloseModal()
+                }}
+                className="p-2.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <Calculator className="w-4 h-4 text-purple-400" />
+                <span>Cuadre Diario</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setIsMoreSheetOpen(false)
+                  onOpenExpenseModal()
+                }}
+                className="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <Minus className="w-4 h-4" />
+                <span>Anotar Gasto</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MENÚ LATERAL DRAWER (Opciones y Configuración) */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="flex-1" onClick={() => setIsMobileMenuOpen(false)} />
+          <div className="w-full max-w-xs bg-dark-900 border-l border-dark-800 h-full p-5 flex flex-col justify-between shadow-2xl animate-slideLeft overflow-y-auto">
+            <div className="space-y-4">
+              {/* Header Drawer */}
+              <div className="flex items-center justify-between pb-3 border-b border-dark-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-dark-800 border border-dark-700 flex items-center justify-center overflow-hidden">
+                    {businessProfile?.logoUrl ? (
+                      <img src={businessProfile.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <Scissors className="w-4 h-4 text-gold-400" />
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-white text-sm truncate max-w-[170px]">
+                      {businessProfile?.businessName || activeTenant?.businessName || 'Mi Negocio'}
+                    </h4>
+                    <span className="text-[10px] text-slate-400">Panel de Control</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1.5 rounded-full hover:bg-dark-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Selector de Nicho */}
+              <div>
+                <label className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1.5">
+                  Tipo de Negocio
+                </label>
+                <div className="grid grid-cols-3 gap-1.5 bg-dark-850 p-1 rounded-xl border border-dark-750 text-xs">
+                  {[
+                    { id: 'barberia', icon: '💈', label: 'Barber' },
+                    { id: 'estetica', icon: '💅', label: 'Salón' },
+                    { id: 'mixto', icon: '🏬', label: 'Mixto' }
+                  ].map(n => (
+                    <button
+                      key={n.id}
+                      onClick={() => {
+                        onSelectNiche(n.id)
+                        setIsMobileMenuOpen(false)
+                      }}
+                      className={`py-1.5 rounded-lg text-center font-bold transition-all ${
+                        currentNiche === n.id
+                          ? 'bg-gold-500/20 text-gold-400 border border-gold-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-base">{n.icon}</div>
+                      <div className="text-[10px]">{n.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Opciones del Local */}
+              <div className="space-y-1.5 pt-2 border-t border-dark-800">
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false)
+                    onOpenSettingsModal()
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Settings className="w-4 h-4 text-gold-400" />
+                    <span>Configuración del Negocio</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false)
+                    onOpenDailyCloseModal()
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Calculator className="w-4 h-4 text-purple-400" />
+                    <span>Cuadre Diario (Arqueo)</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false)
+                    onOpenWhatsAppModal()
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <MessageSquare className="w-4 h-4 text-emerald-400" />
+                    <span>Cierre Diario por WhatsApp</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                {bioSupported && (
+                  <button
+                    onClick={handleLinkFingerprint}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Fingerprint className="w-4 h-4 text-emerald-400" />
+                      <span>{bioLinked ? 'Huella Digital Activa ✓' : 'Vincular Huella / FaceID'}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Logout CTA */}
+            <div className="pt-4 border-t border-dark-800 space-y-2">
+              <button
+                onClick={onLogout}
+                className="w-full py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Cerrar Sesión</span>
+              </button>
+              <p className="text-[10px] text-slate-500 text-center">
+                GlamOS • Versión Premium 2.0
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

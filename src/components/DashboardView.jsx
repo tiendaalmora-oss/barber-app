@@ -385,105 +385,99 @@ export default function DashboardView({
               <p className="text-xs text-slate-400">Usa el botón dorado "+ Anotar Cobro" arriba para registrar tu primera venta real.</p>
             </div>
           ) : (
-            transactions.map((tx) => {
-              const isExpense = tx.monto_usd < 0
-              return (
-                <div key={tx.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-dark-850/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl border flex items-center justify-center text-lg ${
-                      isExpense 
-                        ? 'bg-red-500/10 border-red-500/30 text-red-400' 
-                        : 'bg-dark-800 border-dark-700 text-gold-400'
-                    }`}>
-                      {isExpense ? '📉' : '✂️'}
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-white flex items-center gap-2">
-                        {tx.item_name}
-                        {isExpense && (
-                          <span className="text-[10px] px-2 py-0.2 rounded-full bg-red-500/15 text-red-400 font-semibold border border-red-500/25">
-                            GASTO
-                          </span>
-                        )}
+              transactions.map((tx) => {
+                const isExpense = tx.monto_usd < 0
+                return (
+                  <div key={tx.id} className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-dark-850/40 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-2xl border flex items-center justify-center text-base shrink-0 ${
+                        isExpense 
+                          ? 'bg-red-500/10 border-red-500/20 text-red-400' 
+                          : 'bg-dark-800/80 border-dark-700/80 text-gold-400'
+                      }`}>
+                        {isExpense ? '📉' : '✂️'}
                       </div>
-                      <div className="text-xs text-slate-400 flex items-center gap-2 mt-0.5">
-                        <span>{isExpense ? 'Salida de caja' : `Atendió: ${tx.staff_name}`}</span>
-                        {tx.client_name && tx.client_name !== '-' && (
-                          <>
-                            <span>•</span>
-                            <span className="text-slate-300">Cliente: {tx.client_name}</span>
-                          </>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                          <span className="truncate">{tx.item_name}</span>
+                          {isExpense ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-red-500/15 text-red-400 font-bold border border-red-500/20">
+                              GASTO
+                            </span>
+                          ) : (
+                            <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-dark-800 text-slate-400 border border-dark-750">
+                              {isPagoMovilMethod(tx.metodo_pago) ? 'Pago Móvil' :
+                               isEfectivoMethod(tx.metodo_pago) ? 'Efectivo $' :
+                               isPuntoMethod(tx.metodo_pago) ? 'Punto Venta' :
+                               isFiadoMethod(tx.metodo_pago) ? 'Fiado' : (tx.metodo_pago || 'Otro')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                          <span>{isExpense ? 'Salida' : tx.staff_name}</span>
+                          {tx.client_name && tx.client_name !== '-' && (
+                            <>
+                              <span className="text-slate-600">•</span>
+                              <span className="text-slate-300 truncate">{tx.client_name}</span>
+                            </>
+                          )}
+                          {tx.propina_usd > 0 && (
+                            <>
+                              <span className="text-slate-600">•</span>
+                              <span className="text-amber-400 font-bold">🪙 +${tx.propina_usd.toFixed(2)}</span>
+                            </>
+                          )}
+                          <span className="text-slate-600">•</span>
+                          <span className="font-mono text-[11px] text-slate-500">{tx.hora}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1 sm:pt-0 border-t border-dark-800/60 sm:border-0">
+                      {/* Amount */}
+                      <div className="text-left sm:text-right">
+                        <div className={`text-sm font-black font-mono ${isExpense ? 'text-red-400' : 'text-white'}`}>
+                          {isExpense ? `-$${Math.abs(tx.monto_usd).toFixed(2)}` : `+$${tx.monto_usd.toFixed(2)}`}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          Bs. {Math.abs(tx.monto_bs).toFixed(1)}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons: Factura & Borrar */}
+                      <div className="flex items-center gap-1">
+                        {!isExpense && (
+                          <button
+                            onClick={() => setViewingReceiptTx(tx)}
+                            className="p-1.5 px-2.5 rounded-xl bg-dark-800 hover:bg-gold-500/15 text-slate-300 hover:text-gold-400 border border-dark-700 hover:border-gold-500/30 transition-all flex items-center gap-1 text-xs font-bold shadow-sm"
+                            title="Ver factura / recibo de pago"
+                          >
+                            <Receipt className="w-3.5 h-3.5 text-gold-400" />
+                            <span className="text-[11px]">Recibo</span>
+                          </button>
                         )}
-                        {tx.propina_usd > 0 && (
-                          <>
-                            <span>•</span>
-                            <span className="text-amber-400 font-bold">🪙 Propina: +${tx.propina_usd.toFixed(2)}</span>
-                          </>
+
+                        {onDeleteTransaction && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Seguro que deseas borrar este movimiento (${tx.item_name}) de la caja?`)) {
+                                onDeleteTransaction(tx.id)
+                              }
+                            }}
+                            className="p-1.5 rounded-xl hover:bg-red-500/15 text-slate-500 hover:text-red-400 transition-colors"
+                            title="Eliminar movimiento por error"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
-                        <span>•</span>
-                        <span className="font-mono text-[11px]">{tx.hora}</span>
                       </div>
                     </div>
                   </div>
-
-                  <div className="flex items-center justify-between sm:justify-end gap-3">
-                    {/* Payment Method Badge */}
-                    <span className={`text-[11px] px-2.5 py-1 rounded-full font-medium border ${
-                      isPagoMovilMethod(tx.metodo_pago) ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                      isEfectivoMethod(tx.metodo_pago) ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                      isPuntoMethod(tx.metodo_pago) ? 'bg-teal-500/10 text-teal-400 border-teal-500/20' :
-                      isFiadoMethod(tx.metodo_pago) ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                      'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                    }`}>
-                      {isPagoMovilMethod(tx.metodo_pago) ? 'PAGO MÓVIL' :
-                       isEfectivoMethod(tx.metodo_pago) ? 'EFECTIVO $' :
-                       isPuntoMethod(tx.metodo_pago) ? 'PUNTO DE VENTA' :
-                       isFiadoMethod(tx.metodo_pago) ? 'FIADO' : (tx.metodo_pago || 'OTRO').toUpperCase()}
-                    </span>
-
-                    {/* Amount */}
-                    <div className="text-right">
-                      <div className={`text-sm font-black ${isExpense ? 'text-red-400' : 'text-white'}`}>
-                        {isExpense ? `-$${Math.abs(tx.monto_usd).toFixed(2)}` : `+$${tx.monto_usd.toFixed(2)}`} USD
-                      </div>
-                      <div className="text-xs text-gold-400 font-mono">
-                        Bs. {Math.abs(tx.monto_bs).toFixed(2)}
-                      </div>
-                    </div>
-
-                    {/* Ver Factura Button */}
-                    {!isExpense && (
-                      <button
-                        onClick={() => setViewingReceiptTx(tx)}
-                        className="p-2 rounded-xl bg-dark-850 hover:bg-gold-500/20 text-slate-400 hover:text-gold-400 border border-dark-750 transition-colors flex items-center gap-1.5 text-xs font-bold"
-                        title="Ver factura / recibo de pago"
-                      >
-                        <Receipt className="w-4 h-4 text-gold-400" />
-                        <span className="hidden sm:inline">Factura</span>
-                      </button>
-                    )}
-
-                    {/* Delete Transaction Button */}
-                    {onDeleteTransaction && (
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Seguro que deseas borrar este movimiento (${tx.item_name}) de la caja?`)) {
-                            onDeleteTransaction(tx.id)
-                          }
-                        }}
-                        className="p-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-colors"
-                        title="Eliminar movimiento por error"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })
-          )}
+                )
+              })
+            )}
+          </div>
         </div>
-      </div>
 
       {/* Modal Comprobante / Factura Digital */}
       {viewingReceiptTx && (() => {

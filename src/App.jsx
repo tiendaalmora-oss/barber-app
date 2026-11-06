@@ -1428,7 +1428,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col font-sans pb-16 md:pb-6">
+    <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col font-sans pb-24 md:pb-6">
       
       {/* Top Navigation */}
       <Navbar
