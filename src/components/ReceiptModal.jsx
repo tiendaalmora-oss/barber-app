@@ -1,6 +1,6 @@
 import React from 'react'
 import { X, Receipt, Smartphone } from 'lucide-react'
-import { normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
+import { normalizeWhatsAppPhone, formatMethodName, getLocalDateIso } from '../lib/dateUtils'
 
 export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRate = 889.26, businessProfile }) {
   if (!isOpen || !transaction) return null
@@ -15,7 +15,7 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
     let msg = `🧾 *FACTURA / RECIBO DE PAGO • ${bizName.toUpperCase()}*\n`
     msg += `👤 *Cliente:* ${tx.client_name || 'Cliente'}\n`
     msg += `💈 *Atendido por:* ${tx.staff_name || 'Personal'}\n`
-    msg += `📅 *Fecha:* ${tx.fecha ? tx.fecha.split('T')[0] : 'Hoy'} - ${tx.hora || ''}\n`
+    msg += `📅 *Fecha:* ${tx.fecha ? getLocalDateIso(tx.fecha) : 'Hoy'} - ${tx.hora || ''}\n`
     msg += `------------------------------------\n`
     msg += `✂️ *DETALLE DE SU CUENTA:*\n`
     if (tx.items && tx.items.length > 0) {

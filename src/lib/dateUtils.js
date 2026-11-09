@@ -6,11 +6,11 @@
  */
 export function getLocalDateIso(d = new Date()) {
   if (!d) return ''
-  // If already a valid YYYY-MM-DD string, return directly to prevent UTC midnight timezone shifts!
+  // If already a pure YYYY-MM-DD string (without time component), return directly
   if (typeof d === 'string') {
-    const clean = d.split('T')[0].trim()
-    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
-      return clean
+    const trimmed = d.trim()
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed
     }
   }
   const date = d instanceof Date ? d : new Date(d)
@@ -24,9 +24,7 @@ export function getLocalDateIso(d = new Date()) {
  */
 export function isDateToday(dateString) {
   if (!dateString) return false
-  const str = String(dateString)
-  const targetIso = str.includes('T') ? str.split('T')[0] : str
-  return targetIso === getLocalDateIso()
+  return getLocalDateIso(dateString) === getLocalDateIso()
 }
 
 /**

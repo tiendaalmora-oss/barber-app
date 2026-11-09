@@ -479,7 +479,7 @@ export default function App() {
         if (delSet.has(recId)) continue
 
         const alreadyExists = existingTxs.some(
-          t => t && (t.id === recId || (t.client_name === c.name && (t.fecha || '').startsWith(c.last_visit)))
+          t => t && (t.id === recId || (t.client_name === c.name && getLocalDateIso(t.fecha) === c.last_visit))
         )
         if (alreadyExists) continue
 
@@ -1038,15 +1038,17 @@ export default function App() {
             setExchangeRate(Number(ws.exchangeRate))
             localStorage.setItem('barber_rate', String(ws.exchangeRate))
           }
-          try {
-            localStorage.setItem(`barber_ws_${tid}`, JSON.stringify(ws))
-          } catch (e) {}
-        }
+          }
+        syncedTenantIdRef.current = tid
+        serverSyncReadyRef.current = true
+      } else {
         syncedTenantIdRef.current = tid
         serverSyncReadyRef.current = true
       }
     } catch (e) {
       console.warn('Workspace server load offline')
+      syncedTenantIdRef.current = tid
+      serverSyncReadyRef.current = true
     }
   }
 

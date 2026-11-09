@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award, FileText, Calendar, Clock, ArrowDownRight, MessageSquare, AlertCircle, Receipt, Wallet, Check, AlertTriangle } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getLocalDateIso, isDateToday, normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 const AVATAR_OPTIONS = ['✂️', '💈', '⚡', '👑', '🔥', '💅', '✨', '🧔', '💄', '💇']
 
@@ -19,11 +19,6 @@ const isDateInCurrentWeek = (dateStr) => {
   sunday.setDate(monday.getDate() + 6)
   sunday.setHours(23, 59, 59, 999)
   return d >= monday && d <= sunday
-}
-
-const isDateToday = (dateStr) => {
-  if (!dateStr) return false
-  return dateStr.startsWith(getLocalDateIso())
 }
 
 export default function CommissionsView({

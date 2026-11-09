@@ -336,7 +336,7 @@ export default function QuickCashModal({
       let msg = `🧾 *FACTURA / RECIBO DE PAGO • ${bizName.toUpperCase()}*\n`
       msg += `👤 *Cliente:* ${completedTx.client_name}\n`
       msg += `💈 *Atendido por:* ${completedTx.staff_name}\n`
-      msg += `📅 *Fecha:* ${completedTx.fecha ? completedTx.fecha.split('T')[0] : 'Hoy'} - ${completedTx.hora}\n`
+      msg += `📅 *Fecha:* ${completedTx.fecha ? getLocalDateIso(completedTx.fecha) : 'Hoy'} - ${completedTx.hora}\n`
       msg += `------------------------------------\n`
       msg += `✂️ *DETALLE DE SU CUENTA:*\n`
       ;(completedTx.items || []).forEach(it => {

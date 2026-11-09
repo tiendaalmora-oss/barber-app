@@ -46,7 +46,7 @@ export default function MonthlyReportView({
   // Period filtering logic
   const isInPeriod = (dateStr) => {
     if (!dateStr || typeof dateStr !== 'string') return false
-    const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+    const cleanDate = getLocalDateIso(dateStr)
     const parts = cleanDate.split('-')
     if (parts.length !== 3) return true
     
@@ -94,7 +94,7 @@ export default function MonthlyReportView({
   const monthlyMap = {}
   safeTransactions.forEach(t => {
     if (!t || !t.fecha || typeof t.fecha !== 'string') return
-    const cleanDate = t.fecha.includes('T') ? t.fecha.split('T')[0] : t.fecha
+    const cleanDate = getLocalDateIso(t.fecha)
     const parts = cleanDate.split('-')
     if (parts.length !== 3) return
     const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
@@ -221,7 +221,7 @@ export default function MonthlyReportView({
 
   const formatTxDateBadge = (fecha, hora) => {
     if (!fecha) return hora || ''
-    const clean = fecha.includes('T') ? fecha.split('T')[0] : fecha
+    const clean = getLocalDateIso(fecha)
     const todayIso = getLocalDateIso()
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
