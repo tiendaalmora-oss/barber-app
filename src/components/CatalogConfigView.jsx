@@ -634,69 +634,85 @@ export default function CatalogConfigView({
                 />
               </div>
 
-              {/* Selector de Duración del Servicio (Soporta Servicios Largos de Uñas, Pestañas y Salón) */}
-              <div className="space-y-1.5 pt-0.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400 font-semibold">⏱️ Duración del Servicio:</span>
-                  <div className="flex items-center gap-1">
+              {/* Duración a mano y Comisión opcional (Diseño Ultra Limpio, Cero Saturación) */}
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                {/* 1. Duración en minutos colocada a mano */}
+                <div className="bg-dark-900 border border-dark-750 focus-within:border-purple-500/80 rounded-xl p-2.5 transition-all">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                      <span>⏱️ Tiempo</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-purple-400 font-mono">
+                      {formatDurationLabel(Number(newSvcDuration) || 30, true)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
                     <input
                       type="number"
                       min="5"
                       max="480"
                       step="5"
+                      placeholder="30"
                       value={newSvcDuration}
-                      onChange={(e) => setNewSvcDuration(Math.max(5, parseInt(e.target.value, 10) || 15))}
-                      className="w-14 px-1.5 py-0.5 rounded bg-dark-900 border border-dark-700 text-[10px] text-purple-300 font-mono font-bold text-center focus:outline-none focus:border-purple-500"
-                      title="Escribe cualquier duración en minutos"
+                      onChange={(e) => setNewSvcDuration(e.target.value)}
+                      className="w-full bg-transparent text-xs text-white font-mono font-bold focus:outline-none"
+                      title="Coloca a mano los minutos que dura el servicio"
                     />
-                    <span className="text-[10px] text-purple-300 font-bold">
-                      min ({formatDurationLabel(newSvcDuration, true)})
-                    </span>
+                    <span className="text-[10px] text-slate-500 font-semibold shrink-0">min</span>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1">
+
+                {/* 2. % Comisión a mano */}
+                <div className="bg-dark-900 border border-dark-750 focus-within:border-amber-500/80 rounded-xl p-2.5 transition-all">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                      <span>🏷️ % Comisión</span>
+                    </span>
+                    <span className="text-[10px] text-amber-400 font-semibold">
+                      {newSvcCommission ? `${newSvcCommission}%` : 'Opcional'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="Del equipo"
+                      value={newSvcCommission}
+                      onChange={(e) => setNewSvcCommission(e.target.value)}
+                      className="w-full bg-transparent text-xs text-white font-mono focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-500 font-semibold shrink-0">%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Atajos rápidos en una sola línea horizontal compacta */}
+              <div className="flex items-center gap-1 text-[10px] pt-0.5">
+                <span className="text-[9px] text-slate-500 font-medium shrink-0">Sugeridos:</span>
+                <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-0.5">
                   {[
-                    { m: 15, label: '15m' },
-                    { m: 30, label: '30m' },
-                    { m: 45, label: '45m' },
-                    { m: 60, label: '1h' },
-                    { m: 90, label: '1h 30m' },
-                    { m: 120, label: '2h' },
-                    { m: 150, label: '2h 30m' },
-                    { m: 180, label: '3h' },
-                    { m: 240, label: '4h' },
-                  ].map(({ m, label }) => (
+                    { m: 30, l: '30m' },
+                    { m: 45, l: '45m' },
+                    { m: 60, l: '1h' },
+                    { m: 90, l: '1h 30m' },
+                    { m: 120, l: '2h' },
+                    { m: 180, l: '3h' }
+                  ].map(({ m, l }) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setNewSvcDuration(m)}
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-all shrink-0 ${
                         Number(newSvcDuration) === m
-                          ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                          : 'bg-dark-900 text-slate-400 border-dark-700 hover:text-white'
+                          ? 'bg-purple-600 text-white font-bold shadow-sm'
+                          : 'bg-dark-900 text-slate-400 hover:text-white border border-dark-750'
                       }`}
                     >
-                      {label}
+                      {l}
                     </button>
                   ))}
                 </div>
-              </div>
-
-              {/* Comisión especial para este servicio (Opcional, ej. 40% o 60%) */}
-              <div className="flex items-center gap-2 pt-0.5">
-                <span className="text-[10px] text-amber-400 font-semibold shrink-0">🏷️ % Comisión (Opcional):</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="Ej. 40"
-                  value={newSvcCommission}
-                  onChange={(e) => setNewSvcCommission(e.target.value)}
-                  className="w-20 px-2.5 py-1 rounded-lg bg-dark-900 border border-dark-700 text-[11px] text-white font-mono focus:outline-none focus:border-amber-500"
-                />
-                <span className="text-[10px] text-slate-500">
-                  {newSvcCommission ? `${newSvcCommission}% a quien lo haga` : 'Usa el % del especialista'}
-                </span>
               </div>
 
               <button

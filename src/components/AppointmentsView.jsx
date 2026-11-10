@@ -660,7 +660,9 @@ export default function AppointmentsView({
                   className="w-full px-3.5 py-2.5 rounded-2xl bg-dark-850 border border-dark-750 text-xs text-white focus:outline-none"
                 >
                   {(nicheData?.services || []).map(s => (
-                    <option key={s.id} value={s.name}>{s.name} (${s.price_usd})</option>
+                    <option key={s.id} value={s.name}>
+                      {s.name} (${s.price_usd} • {formatDurationLabel(s.duration_min || inferServiceDuration(s), true)})
+                    </option>
                   ))}
                 </select>
               </div>
