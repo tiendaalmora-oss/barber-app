@@ -25,6 +25,7 @@ import {
   timeToMinutes,
   isTimeSlotInPast,
   inferServiceDuration,
+  formatDurationLabel,
   getScheduleForDate,
   getDayLabelFromDate
 } from '../lib/dateUtils'
@@ -299,7 +300,7 @@ export default function PublicBookingView({
       `🎫 *Pase:* #${bookedTicket.code}\n` +
       `👤 *Cliente:* ${bookedTicket.client_name}\n` +
       `✨ *Servicio:* ${bookedTicket.service} ($${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n` +
-      `⏱️ *Duración:* ~${bookedTicket.durationMin || 30} min\n` +
+      `⏱️ *Duración:* ~${formatDurationLabel(bookedTicket.durationMin || 30)}\n` +
       `💈 *Atiende:* ${bookedTicket.staffName}\n` +
       `📅 *Fecha:* ${bookedTicket.date}\n` +
       `⏰ *Hora:* ${bookedTicket.time}\n\n` +
@@ -622,7 +623,7 @@ export default function PublicBookingView({
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-400">
                         <span className="inline-flex items-center gap-1 font-medium text-slate-300">
                           <Clock className="w-3 h-3 text-gold-400/80" />
-                          <span>{dur} min</span>
+                          <span>{formatDurationLabel(dur)}</span>
                         </span>
                         <span className="text-slate-600">•</span>
                         <span>
@@ -897,7 +898,7 @@ export default function PublicBookingView({
                     <span>Servicio Seleccionado</span>
                   </label>
                   <span className="text-[11px] font-mono text-gold-400 font-bold">
-                    ⏱ {selectedDuration} min
+                    ⏱ {formatDurationLabel(selectedDuration)}
                   </span>
                 </div>
 
@@ -912,7 +913,7 @@ export default function PublicBookingView({
                       const bs = (s.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                       return (
                         <option key={s.id} value={s.name}>
-                          {s.name} ({dur} min) — ${s.price_usd} / Bs. {bs}
+                          {s.name} ({formatDurationLabel(dur)}) — ${s.price_usd} / Bs. {bs}
                         </option>
                       )
                     })}

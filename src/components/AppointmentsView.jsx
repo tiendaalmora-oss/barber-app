@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, Settings, DollarSign, Sparkles, AlertCircle, Clock3 } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, getScheduleForDate, isTimeSlotInPast, timeToMinutes } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes } from '../lib/dateUtils'
 
 export default function AppointmentsView({ 
   appointments = [], 
@@ -409,7 +409,7 @@ export default function AppointmentsView({
                     </div>
 
                     <span className="text-[10px] px-2 py-1 rounded-xl bg-dark-850 text-slate-400 border border-dark-750 font-bold">
-                      ⏱️ {apt.duration_min || inferServiceDuration(apt.service)} min
+                      ⏱️ {formatDurationLabel(apt.duration_min || inferServiceDuration(apt.service))}
                     </span>
                   </div>
 

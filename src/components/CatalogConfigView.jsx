@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram, Pencil, X } from 'lucide-react'
 import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN, DEFAULT_WEEKLY_SCHEDULE } from '../lib/mockData'
-import { inferServiceDuration, DAYS_OF_WEEK } from '../lib/dateUtils'
+import { inferServiceDuration, formatDurationLabel, DAYS_OF_WEEK } from '../lib/dateUtils'
 
 export default function CatalogConfigView({
   businessProfile,
@@ -634,23 +634,52 @@ export default function CatalogConfigView({
                 />
               </div>
 
-              {/* Selector de Duración del Servicio */}
-              <div className="flex items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] text-slate-400 font-semibold shrink-0">⏱️ Tiempo:</span>
-                {[15, 30, 45, 60].map(dur => (
-                  <button
-                    key={dur}
-                    type="button"
-                    onClick={() => setNewSvcDuration(dur)}
-                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
-                      newSvcDuration === dur
-                        ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
-                        : 'bg-dark-900 text-slate-400 border-dark-700 hover:text-white'
-                    }`}
-                  >
-                    {dur === 60 ? '1h' : `${dur}m`}
-                  </button>
-                ))}
+              {/* Selector de Duración del Servicio (Soporta Servicios Largos de Uñas, Pestañas y Salón) */}
+              <div className="space-y-1.5 pt-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 font-semibold">⏱️ Duración del Servicio:</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="5"
+                      max="480"
+                      step="5"
+                      value={newSvcDuration}
+                      onChange={(e) => setNewSvcDuration(Math.max(5, parseInt(e.target.value, 10) || 15))}
+                      className="w-14 px-1.5 py-0.5 rounded bg-dark-900 border border-dark-700 text-[10px] text-purple-300 font-mono font-bold text-center focus:outline-none focus:border-purple-500"
+                      title="Escribe cualquier duración en minutos"
+                    />
+                    <span className="text-[10px] text-purple-300 font-bold">
+                      min ({formatDurationLabel(newSvcDuration, true)})
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1">
+                  {[
+                    { m: 15, label: '15m' },
+                    { m: 30, label: '30m' },
+                    { m: 45, label: '45m' },
+                    { m: 60, label: '1h' },
+                    { m: 90, label: '1h 30m' },
+                    { m: 120, label: '2h' },
+                    { m: 150, label: '2h 30m' },
+                    { m: 180, label: '3h' },
+                    { m: 240, label: '4h' },
+                  ].map(({ m, label }) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setNewSvcDuration(m)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                        Number(newSvcDuration) === m
+                          ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
+                          : 'bg-dark-900 text-slate-400 border-dark-700 hover:text-white'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Comisión especial para este servicio (Opcional, ej. 40% o 60%) */}
@@ -694,7 +723,7 @@ export default function CatalogConfigView({
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-white text-xs truncate">{svc.name}</span>
                         <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-300 border border-purple-500/25 font-bold shrink-0">
-                          ⏱️ {svc.duration_min || inferServiceDuration(svc)}m
+                          ⏱️ {formatDurationLabel(svc.duration_min || inferServiceDuration(svc), true)}
                         </span>
                         {Number(svc.commission_pct) > 0 && (
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold shrink-0">

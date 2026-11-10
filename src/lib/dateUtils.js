@@ -248,7 +248,13 @@ export function inferServiceDuration(service) {
     return Number(service.duration_min)
   }
   const name = (typeof service === 'string' ? service : service.name || '').toLowerCase()
-  if (name.includes('combo') || name.includes('completo') || name.includes('alisado') || name.includes('quimic') || name.includes('spa')) {
+  if (name.includes('acrilic') || name.includes('acrílic') || name.includes('esculpid') || name.includes('polygel') || name.includes('keratina') || name.includes('cirugia capilar') || name.includes('cirugía capilar') || name.includes('balayage') || name.includes('mechas')) {
+    return 120
+  }
+  if (name.includes('pestaña') || name.includes('extension') || name.includes('extensión') || name.includes('ruso') || name.includes('soft gel') || name.includes('kapping') || name.includes('nivelacion') || name.includes('nivelación')) {
+    return 90
+  }
+  if (name.includes('combo') || name.includes('completo') || name.includes('alisado') || name.includes('quimic') || name.includes('spa') || name.includes('semipermanente') || name.includes('pedicure')) {
     return 60
   }
   if (name.includes('degradé') || name.includes('degrade') || name.includes('fade') || name.includes('pigmentaci') || name.includes('tinte')) {
@@ -258,6 +264,22 @@ export function inferServiceDuration(service) {
     return 15
   }
   return 30
+}
+
+/**
+ * Formats a duration in minutes into a compact, readable label:
+ *  45 -> "45 min" (or "45m" when compact=true)
+ *  60 -> "1h"
+ *  90 -> "1h 30m"
+ *  120 -> "2h"
+ *  150 -> "2h 30m"
+ */
+export function formatDurationLabel(mins, compact = false) {
+  const m = Number(mins) || 30
+  if (m < 60) return compact ? `${m}m` : `${m} min`
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`
 }
 
 /**

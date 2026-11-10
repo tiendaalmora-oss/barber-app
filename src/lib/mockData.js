@@ -47,11 +47,11 @@ export const NICHES = {
     rolePlural: 'Especialistas',
     serviceUnit: 'Atención',
     services: [
-      { id: 'es1', name: 'Manicure Ruso con Semipermanente', price_usd: 12, category: 'Uñas' },
-      { id: 'es2', name: 'Pedicure Spa Completo', price_usd: 14, category: 'Uñas' },
-      { id: 'es3', name: 'Diseño de Cejas + Henna', price_usd: 8, category: 'Cejas' },
-      { id: 'es4', name: 'Pestañas Punto a Punto', price_usd: 15, category: 'Pestañas' },
-      { id: 'es5', name: 'Lavado, Secado y Planchado', price_usd: 10, category: 'Cabello' },
+      { id: 'es1', name: 'Manicure Ruso con Semipermanente', price_usd: 12, category: 'Uñas', duration_min: 90 },
+      { id: 'es2', name: 'Pedicure Spa Completo', price_usd: 14, category: 'Uñas', duration_min: 60 },
+      { id: 'es3', name: 'Diseño de Cejas + Henna', price_usd: 8, category: 'Cejas', duration_min: 30 },
+      { id: 'es4', name: 'Pestañas Punto a Punto', price_usd: 15, category: 'Pestañas', duration_min: 90 },
+      { id: 'es5', name: 'Lavado, Secado y Planchado', price_usd: 10, category: 'Cabello', duration_min: 60 },
     ],
     products: [
       { id: 'ep1', name: 'Aceite de Cutículas Frutal', price_usd: 4, cost_usd: 1.8, stock: 20, min_stock: 6, category: 'Productos' },
