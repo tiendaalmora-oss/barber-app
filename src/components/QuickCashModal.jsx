@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle, Receipt } from 'lucide-react'
 import PhoneCountryInput from './PhoneCountryInput'
-import { normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
 
 const SPLIT_METHOD_OPTIONS = [
   { id: 'efectivo_usd', label: '💵 Efectivo $ (Gaveta)' },
@@ -362,7 +362,10 @@ export default function QuickCashModal({
       const url = cleanPhone
         ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
         : `https://wa.me/?text=${encodeURIComponent(msg)}`
-      window.open(url, '_blank')
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!win) {
+        window.location.href = url
+      }
     }
 
     return (

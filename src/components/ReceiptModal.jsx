@@ -45,7 +45,10 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
       : `https://wa.me/?text=${encodeURIComponent(msg)}`
-    window.open(url, '_blank')
+    const win = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!win) {
+      window.location.href = url
+    }
   }
 
   return (
