@@ -338,7 +338,8 @@ export default function SuperAdminView({
       activatedAt: todayStr,
       daysRemaining: saasConfig.subscriptionDays || 30,
       amountPaidUsd: saasConfig.monthlyPriceUsd || 10,
-      lastPaymentRef: (tenant.lastPaymentRef === 'Esperando Capture' || tenant.lastPaymentRef === 'Prueba 24 Horas') ? 'Activado Manual' : tenant.lastPaymentRef
+      lastPaymentRef: (tenant.lastPaymentRef === 'Esperando Capture' || tenant.lastPaymentRef === 'Prueba 24 Horas') ? 'Activado Manual' : tenant.lastPaymentRef,
+      isActivation30d: true
     })
   }
 

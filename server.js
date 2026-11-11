@@ -208,6 +208,42 @@ const MIME_TYPES = {
   '.pdf': 'application/pdf'
 }
 
+function notifyCrmSaasEvent(eventType, tenant) {
+  if (!tenant || !tenant.phone) return;
+  try {
+    const coreUrl = process.env.CORE_URL || 'https://core.ai.ingeniodigital.shop';
+    const adminKey = process.env.ADMIN_API_KEY || '995eef64a341c2ca2b1b98584f5c7b89b7534a55502117663096b14b5e7a1549';
+    const payload = {
+      event: eventType,
+      app: tenant.saasProduct || tenant.niche || 'barberos',
+      businessName: tenant.businessName || '',
+      ownerName: tenant.ownerName || '',
+      email: tenant.email || '',
+      phone: tenant.phone || '',
+      amountPaidUsd: tenant.amountPaidUsd || 6,
+      paymentRef: tenant.lastPaymentRef || ''
+    };
+    fetch(`${coreUrl}/crm/saas-sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminKey}`
+      },
+      body: JSON.stringify(payload)
+    }).then(res => {
+      if (res.ok) {
+        console.log(`[CRM SaaS Sync] Evento ${eventType} sincronizado para ${tenant.ownerName || tenant.businessName}`);
+      } else {
+        console.warn(`[CRM SaaS Sync] HTTP ${res.status} al sincronizar ${eventType}`);
+      }
+    }).catch(err => {
+      console.error('[CRM SaaS Sync] Error de red:', err.message);
+    });
+  } catch (e) {
+    console.error('[CRM SaaS Sync] Falló disparo:', e.message);
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     return sendJson(res, 200, { ok: true })
@@ -273,6 +309,13 @@ const server = http.createServer(async (req, res) => {
         db.tenants.unshift(tenant)
       }
       saveDb()
+
+      // Sincronización automática no-invasiva con el CRM
+      if (body.isNewRegistration) {
+        notifyCrmSaasEvent('REGISTRATION', tenant);
+      } else if (body.isActivation30d || tenant.isActivation30d || (tenant.status === 'activo' && tenant.subscriptionType === 'mes_30d')) {
+        notifyCrmSaasEvent('ACTIVATION_30D', tenant);
+      }
     }
     return sendJson(res, 200, {
       ok: true,
