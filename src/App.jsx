@@ -18,6 +18,7 @@ import ExchangeRateModal from './components/ExchangeRateModal'
 import WhatsAppCloseModal from './components/WhatsAppCloseModal'
 import BusinessSettingsModal from './components/BusinessSettingsModal'
 import DailyCloseModal from './components/DailyCloseModal'
+import SmartAdvisorModal from './components/SmartAdvisorModal'
 import {
   NICHES,
   INITIAL_CLIENTS,
@@ -332,6 +333,7 @@ export default function App() {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isDailyCloseModalOpen, setIsDailyCloseModalOpen] = useState(false)
+  const [isSmartAdvisorOpen, setIsSmartAdvisorOpen] = useState(false)
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState('local')
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -1765,6 +1767,7 @@ export default function App() {
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
         onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
+        onOpenSmartAdvisor={() => setIsSmartAdvisorOpen(true)}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
         onLogout={handleLogout}
@@ -1858,6 +1861,15 @@ export default function App() {
           {/* Quick Access to Cuadre and Settings */}
           <div className="pt-3 border-t border-dark-800 space-y-1.5">
             <button
+              onClick={() => setIsSmartAdvisorOpen(true)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-900/40 via-dark-850 to-gold-950/40 hover:from-purple-900/60 hover:to-gold-950/60 text-gold-300 border border-gold-500/35 text-xs font-bold transition-all text-left shadow-sm"
+              title="Copiloto de Negocio, Meta Mensual y Diagnóstico de Rentabilidad"
+            >
+              <Sparkles className="w-4 h-4 shrink-0 text-gold-400 animate-pulse" />
+              <span>Copiloto Asesor Pro</span>
+            </button>
+
+            <button
               onClick={() => setIsDailyCloseModalOpen(true)}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/25 text-xs font-bold transition-all text-left shadow-sm"
               title="Realizar el Cuadre y Arqueo Físico de Caja"
@@ -1909,6 +1921,7 @@ export default function App() {
               onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
               onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
+              onOpenSmartAdvisor={() => setIsSmartAdvisorOpen(true)}
               onDeleteTransaction={handleDeleteTransaction}
               nicheData={nicheData}
             />
@@ -2060,6 +2073,18 @@ export default function App() {
         staffList={currentStaff}
         onSaveDailyClose={handleSaveDailyClose}
         onResetDay={handleSaveDailyClose}
+      />
+
+      <SmartAdvisorModal
+        isOpen={isSmartAdvisorOpen}
+        onClose={() => setIsSmartAdvisorOpen(false)}
+        transactions={transactions}
+        clients={clients}
+        appointments={appointments}
+        businessProfile={businessProfile}
+        onSaveProfile={(updated) => setBusinessProfile(prev => ({ ...prev, ...updated }))}
+        exchangeRate={exchangeRate}
+        nicheData={nicheData}
       />
 
       {/* Payment / Subscription Modal (When in 24h trial and clicking "Activar mes completo") */}
