@@ -6,7 +6,7 @@ import {
   Wallet, Clock, FileText, ArrowRight
 } from 'lucide-react'
 import { 
-  isDateToday, getLocalDateIso, isEfectivoMethod, isPuntoMethod, 
+  isDateToday, isDateInWeek, getLocalDateIso, isEfectivoMethod, isPuntoMethod, 
   isPagoMovilMethod, isDigitalMethod, isFiadoMethod, txMatchesPaymentFilter,
   formatTxPaymentSummary, normalizeWhatsAppPhone 
 } from '../lib/dateUtils'
@@ -54,6 +54,8 @@ export default function MonthlyReportView({
     if (isNaN(d.getTime())) return true
 
     if (periodFilter === 'all') return true
+    if (periodFilter === 'this_week') return isDateInWeek(dateStr, 0)
+    if (periodFilter === 'prev_week') return isDateInWeek(dateStr, -1)
     if (periodFilter === 'this_month') {
       return d.getFullYear() === currentYear && d.getMonth() === currentMonth
     }
@@ -211,6 +213,8 @@ export default function MonthlyReportView({
   }
 
   const periodOptions = [
+    { id: 'this_week', label: 'Esta Semana' },
+    { id: 'prev_week', label: 'Semana Pasada' },
     { id: 'this_month', label: 'Este Mes' },
     { id: 'prev_month', label: 'Mes Anterior' },
     { id: 'last_3_months', label: 'Últimos 3 Meses' },
@@ -748,9 +752,18 @@ export default function MonthlyReportView({
                           <Lock className="w-4 h-4" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-black text-white">{closing.fecha}</h4>
+                          <h4 className="text-sm font-black text-white flex items-center gap-1.5">
+                            <span>{closing.fecha}</span>
+                            {closing.periodType && closing.periodType !== 'today' && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                                Semanal
+                              </span>
+                            )}
+                          </h4>
                           <span className="text-[10px] text-slate-400 font-mono">
-                            {closing.timestamp ? new Date(closing.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Cierre'}
+                            {closing.periodLabel && closing.periodType && closing.periodType !== 'today'
+                              ? closing.periodLabel
+                              : closing.timestamp ? new Date(closing.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Cierre'}
                           </span>
                         </div>
                       </div>

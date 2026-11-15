@@ -1,25 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award, FileText, Calendar, Clock, ArrowDownRight, MessageSquare, AlertCircle, Receipt, Wallet, Check, AlertTriangle } from 'lucide-react'
-import { getLocalDateIso, isDateToday, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone } from '../lib/dateUtils'
 
 const AVATAR_OPTIONS = ['✂️', '💈', '⚡', '👑', '🔥', '💅', '✨', '🧔', '💄', '💇']
 
-// Helper to check if ISO date is in current week (Monday to Sunday)
-const isDateInCurrentWeek = (dateStr) => {
-  if (!dateStr) return false
-  const now = new Date()
-  const d = new Date(dateStr)
-  if (isNaN(d.getTime())) return false
-  const day = now.getDay()
-  const diffToMonday = (day === 0 ? -6 : 1) - day
-  const monday = new Date(now)
-  monday.setDate(now.getDate() + diffToMonday)
-  monday.setHours(0, 0, 0, 0)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  sunday.setHours(23, 59, 59, 999)
-  return d >= monday && d <= sunday
-}
+// Helper to check if ISO date is in current week (Monday to Sunday in local timezone)
+const isDateInCurrentWeek = (dateStr) => isDateInWeek(dateStr, 0)
 
 export default function CommissionsView({
   staffList = [],

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, MessageSquare, Copy, Check, ExternalLink, Send, Smartphone, ShieldCheck, Share2 } from 'lucide-react'
-import { isDateToday, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
+import { isDateToday, isDateInWeek, getWeekBoundsLocal, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
 
 export default function WhatsAppCloseModal({
@@ -12,8 +12,18 @@ export default function WhatsAppCloseModal({
 }) {
   const [phoneNumber, setPhoneNumber] = useState('')
   const [copied, setCopied] = useState(false)
+  const [closePeriod, setClosePeriod] = useState('today') // 'today' | 'this_week' | 'prev_week'
 
   if (!isOpen) return null
+
+  const thisWeekBounds = getWeekBoundsLocal(0)
+  const prevWeekBounds = getWeekBoundsLocal(-1)
+  const isWeekly = closePeriod !== 'today'
+  const periodTitle = closePeriod === 'this_week'
+    ? `Esta Semana (${thisWeekBounds.rangeLabel})`
+    : closePeriod === 'prev_week'
+    ? `Semana Pasada (${prevWeekBounds.rangeLabel})`
+    : 'Hoy'
 
   // Date formatted in Venezuelan style
   const today = new Date()
@@ -25,10 +35,14 @@ export default function WhatsAppCloseModal({
   })
   const timeStr = today.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
 
-  // Calculations for TODAY in local timezone
-  const todayTx = (transactions || []).filter(t => isDateToday(t.fecha))
-  const incomeTx = todayTx.filter(t => t.monto_usd > 0)
-  const expenseTx = todayTx.filter(t => t.monto_usd < 0)
+  // Calculations for selected period in local timezone
+  const periodTx = (transactions || []).filter(t => {
+    if (closePeriod === 'this_week') return isDateInWeek(t.fecha, 0)
+    if (closePeriod === 'prev_week') return isDateInWeek(t.fecha, -1)
+    return isDateToday(t.fecha)
+  })
+  const incomeTx = periodTx.filter(t => t.monto_usd > 0)
+  const expenseTx = periodTx.filter(t => t.monto_usd < 0)
 
   const totalIncomeUSD = incomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
   const totalIncomeBs = totalIncomeUSD * exchangeRate
@@ -64,8 +78,8 @@ export default function WhatsAppCloseModal({
   // Build the formatted WhatsApp message text
   const appTitleStr = (nicheData?.appTitle || 'BARBERÍA').toUpperCase()
   let messageLines = [
-    `💈 *CIERRE DE CAJA - ${appTitleStr}*`,
-    `📅 ${dateStr.toUpperCase()} · 🕒 ${timeStr}`,
+    `💈 *${isWeekly ? 'CIERRE SEMANAL DE CAJA' : 'CIERRE DE CAJA'} - ${appTitleStr}*`,
+    isWeekly ? `📆 ${periodTitle.toUpperCase()} (LUN - DOM)` : `📅 ${dateStr.toUpperCase()} · 🕒 ${timeStr}`,
     `💵 *Tasa del Día:* Bs. ${exchangeRate.toFixed(2)} / USD`,
     `────────────────────────`,
     `💰 *TOTAL FACTURADO:* $${totalIncomeUSD.toFixed(2)} USD (~Bs. ${totalIncomeBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
@@ -145,6 +159,43 @@ export default function WhatsAppCloseModal({
         {/* Content Body */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1">
           
+          {/* Selector de Período: Hoy vs Semanal */}
+          <div className="grid grid-cols-3 gap-1.5 bg-dark-950 p-1 rounded-2xl border border-dark-800">
+            <button
+              type="button"
+              onClick={() => setClosePeriod('today')}
+              className={`py-1.5 px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+                closePeriod === 'today'
+                  ? 'bg-emerald-500 text-black shadow-sm font-black'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              📅 Hoy
+            </button>
+            <button
+              type="button"
+              onClick={() => setClosePeriod('this_week')}
+              className={`py-1.5 px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+                closePeriod === 'this_week'
+                  ? 'bg-purple-500 text-white shadow-sm font-black'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              📆 Esta Semana
+            </button>
+            <button
+              type="button"
+              onClick={() => setClosePeriod('prev_week')}
+              className={`py-1.5 px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+                closePeriod === 'prev_week'
+                  ? 'bg-gold-500 text-black shadow-sm font-black'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              ⏪ Sem. Pasada
+            </button>
+          </div>
+
           {/* Optional phone input */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
@@ -182,7 +233,9 @@ export default function WhatsAppCloseModal({
           {/* Quick Highlight of Totals */}
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="bg-dark-950 p-2.5 rounded-xl border border-dark-800">
-              <span className="text-[10px] text-slate-400 block font-sans">Facturado Hoy:</span>
+              <span className="text-[10px] text-slate-400 block font-sans">
+                {isWeekly ? `Facturado (${periodTitle}):` : 'Facturado Hoy:'}
+              </span>
               <span className="text-sm font-black text-white font-mono">${totalIncomeUSD.toFixed(2)} USD</span>
             </div>
             <div className="bg-dark-950 p-2.5 rounded-xl border border-emerald-500/30">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
-import { isDateToday, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
+import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
 
 export default function DailyCloseModal({
@@ -18,14 +18,29 @@ export default function DailyCloseModal({
   const [copied, setCopied] = useState(false)
   const [closingSaved, setClosingSaved] = useState(false)
   const [tipDeliveryMode, setTipDeliveryMode] = useState('individual') // 'individual' | 'grupal'
+  const [closePeriod, setClosePeriod] = useState('today') // 'today' | 'this_week' | 'prev_week'
 
   const handleResetAction = onResetDay || onResetDailyTransactions
 
   if (!isOpen) return null
 
-  // 1. Filter transactions for TODAY in local time
-  const todayTx = (transactions || []).filter(t => isDateToday(t.fecha))
-  const incomeTx = todayTx.filter(t => t.monto_usd > 0)
+  const thisWeekBounds = getWeekBoundsLocal(0)
+  const prevWeekBounds = getWeekBoundsLocal(-1)
+  const isWeekly = closePeriod !== 'today'
+  const periodTitle = closePeriod === 'this_week'
+    ? `Esta Semana (${thisWeekBounds.rangeLabel})`
+    : closePeriod === 'prev_week'
+    ? `Semana Pasada (${prevWeekBounds.rangeLabel})`
+    : 'Hoy'
+  const periodShortLabel = isWeekly ? 'en la semana' : 'hoy'
+
+  // 1. Filter transactions for selected period in local time
+  const periodTx = (transactions || []).filter(t => {
+    if (closePeriod === 'this_week') return isDateInWeek(t.fecha, 0)
+    if (closePeriod === 'prev_week') return isDateInWeek(t.fecha, -1)
+    return isDateToday(t.fecha)
+  })
+  const incomeTx = periodTx.filter(t => t.monto_usd > 0)
   const totalIncomeUSD = incomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
   const totalIncomeBs = totalIncomeUSD * exchangeRate
 
@@ -59,9 +74,9 @@ export default function DailyCloseModal({
 
   const fiadoUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'fiado'), 0)
 
-  // 2. Expenses & Vales of today
-  const allNegativeTx = todayTx.filter(t => t.monto_usd < 0)
-  const valesTx = todayTx.filter(t => t.type === 'vale' || t.category === 'Vale Empleado')
+  // 2. Expenses & Vales of selected period
+  const allNegativeTx = periodTx.filter(t => t.monto_usd < 0)
+  const valesTx = periodTx.filter(t => t.type === 'vale' || t.category === 'Vale Empleado')
   const totalValesUSD = Math.abs(valesTx.reduce((sum, t) => sum + (t.monto_usd || 0), 0))
   const totalValesBs = totalValesUSD * exchangeRate
 
@@ -121,8 +136,10 @@ export default function DailyCloseModal({
     const dateStr = new Date().toLocaleDateString('es-VE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     const bizName = businessProfile?.businessName || 'Mi Barbería'
 
-    let msg = `💈 *ACTA DE CIERRE DE CAJA • ${bizName.toUpperCase()}*\n`
-    msg += `📅 *Fecha:* ${dateStr}\n`
+    let msg = `💈 *${isWeekly ? 'ACTA DE CIERRE SEMANAL DE CAJA' : 'ACTA DE CIERRE DE CAJA'} • ${bizName.toUpperCase()}*\n`
+    msg += isWeekly
+      ? `📆 *Período:* ${periodTitle} (Lun - Dom)\n`
+      : `📅 *Fecha:* ${dateStr}\n`
     msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
     msg += `------------------------------------\n\n`
 
@@ -132,7 +149,7 @@ export default function DailyCloseModal({
     msg += `  - 📲 Pago Móvil: Bs. ${pagoMovilBs.toFixed(2)} ($${pagoMovilUSD.toFixed(2)})\n`
     if (puntoUSD > 0) msg += `  - 💳 Punto de Venta: $${puntoUSD.toFixed(2)}\n`
     if (zelleUSD > 0) msg += `  - 🟡 Zelle / Binance: $${zelleUSD.toFixed(2)}\n`
-    if (fiadoUSD > 0) msg += `  - 📝 Fiados del Día: $${fiadoUSD.toFixed(2)}\n`
+    if (fiadoUSD > 0) msg += `  - 📝 Fiados ${isWeekly ? 'de la Semana' : 'del Día'}: $${fiadoUSD.toFixed(2)}\n`
 
     msg += `\n➖ *2. GASTOS OPERATIVOS DEL LOCAL:*\n`
     msg += `• Total Gastos: *-$${totalExpensesUSD.toFixed(2)} USD* (Bs. ${totalExpensesBs.toFixed(2)})\n`
@@ -141,11 +158,11 @@ export default function DailyCloseModal({
         msg += `  - ${ex.item_name}: -$${Math.abs(ex.monto_usd).toFixed(2)}\n`
       })
     } else {
-      msg += `  - Cero gastos hoy\n`
+      msg += `  - Cero gastos ${periodShortLabel}\n`
     }
 
     if (totalValesUSD > 0) {
-      msg += `\n🧾 *3. VALES Y ADELANTOS ENTREGADOS HOY:*\n`
+      msg += `\n🧾 *3. VALES Y ADELANTOS ENTREGADOS ${isWeekly ? 'EN LA SEMANA' : 'HOY'}:*\n`
       msg += `• Total Vales: *-$${totalValesUSD.toFixed(2)} USD* (Bs. ${totalValesBs.toFixed(2)})\n`
       valesTx.forEach(v => {
         msg += `  - ${v.staff_name || 'Empleado'} (${v.motivo || 'Vale'}): -$${Math.abs(v.monto_usd).toFixed(2)} (${v.metodo_pago === 'efectivo_usd' ? 'Efectivo' : 'Banco'})\n`
@@ -167,7 +184,7 @@ export default function DailyCloseModal({
     }
 
     if (totalTipsUSD > 0) {
-      msg += `\n🪙 *${totalValesUSD > 0 ? '5' : '4'}. PROPINAS DEL DÍA (APARTE):*\n`
+      msg += `\n🪙 *${totalValesUSD > 0 ? '5' : '4'}. PROPINAS ${isWeekly ? 'DE LA SEMANA' : 'DEL DÍA'} (APARTE):*\n`
       msg += `• Total Propinas Recaudadas: *$${totalTipsUSD.toFixed(2)} USD* (Bs. ${totalTipsBs.toFixed(2)})\n`
       if (tipDeliveryMode === 'grupal') {
         msg += `  - Modalidad: 👥 *Pote Grupal Equitativo*\n`
@@ -228,13 +245,13 @@ export default function DailyCloseModal({
             </div>
             <div>
               <h3 className="font-black text-white text-base sm:text-lg flex items-center gap-2">
-                Cuadre y Cierre Diario de Caja
+                Cuadre y Cierre {isWeekly ? 'Semanal' : 'Diario'} de Caja
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
                   En Vivo
                 </span>
               </h3>
               <p className="text-xs text-slate-400">
-                Arqueo de gaveta en efectivo, pago móvil, gastos y liquidación de barberos
+                Arqueo de gaveta, pago móvil, gastos, vales y liquidación ({periodTitle})
               </p>
             </div>
           </div>
@@ -243,6 +260,45 @@ export default function DailyCloseModal({
             className="p-1.5 rounded-xl bg-dark-800 text-slate-400 hover:text-white"
           >
             <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Selector de Período: Hoy vs Semanal */}
+        <div className="grid grid-cols-3 gap-1.5 bg-dark-950 p-1 rounded-2xl border border-dark-800">
+          <button
+            type="button"
+            onClick={() => setClosePeriod('today')}
+            className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+              closePeriod === 'today'
+                ? 'bg-emerald-500 text-black shadow-md shadow-emerald-500/20 font-black'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            📅 Hoy
+          </button>
+          <button
+            type="button"
+            onClick={() => setClosePeriod('this_week')}
+            className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+              closePeriod === 'this_week'
+                ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20 font-black'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            📆 Esta Semana
+            <span className="block text-[9px] font-mono opacity-80">{thisWeekBounds.rangeLabel}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setClosePeriod('prev_week')}
+            className={`py-2 px-2 rounded-xl text-[11px] font-bold transition-all text-center ${
+              closePeriod === 'prev_week'
+                ? 'bg-gold-500 text-black shadow-md shadow-gold-500/20 font-black'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            ⏪ Semana Pasada
+            <span className="block text-[9px] font-mono opacity-80">{prevWeekBounds.rangeLabel}</span>
           </button>
         </div>
 
@@ -266,7 +322,7 @@ export default function DailyCloseModal({
             <span className="text-[10px] uppercase font-bold text-amber-400 block">Comisiones</span>
             <div className="text-lg font-black text-amber-400 mt-0.5">${totalCommissionsUSD.toFixed(2)}</div>
             <span className="text-[10px] text-slate-500 font-mono">
-              {totalValesUSD > 0 ? `Neto hoy: $${totalNetCommissionsUSD.toFixed(2)}` : 'A los muchachos'}
+              {totalValesUSD > 0 ? `Neto ${periodShortLabel}: $${totalNetCommissionsUSD.toFixed(2)}` : 'Al equipo'}
             </span>
           </div>
 
@@ -321,12 +377,12 @@ export default function DailyCloseModal({
         {/* Staff Payout List */}
         <div className="p-4 rounded-2xl bg-dark-850 border border-dark-750 space-y-2">
           <span className="text-xs font-bold text-slate-300 block">
-            Liquidación de Comisiones de Hoy (A Pagar al Personal):
+            Liquidación de Comisiones {isWeekly ? `(${periodTitle})` : 'de Hoy'} (A Pagar al Personal):
           </span>
 
           {commissionsByStaff.length === 0 ? (
             <p className="text-xs text-slate-500 py-1">
-              No hay comisiones registradas el día de hoy.
+              No hay comisiones registradas {isWeekly ? 'en este período' : 'el día de hoy'}.
             </p>
           ) : (
             <div className="divide-y divide-dark-800 text-xs">
@@ -339,7 +395,7 @@ export default function DailyCloseModal({
                     </span>
                     {st.valesUSD > 0 && (
                       <span className="inline-block mt-0.5 text-[10px] text-amber-400 font-bold">
-                        🧾 Vales hoy: -${st.valesUSD.toFixed(2)} USD
+                        🧾 Vales {isWeekly ? 'semana' : 'hoy'}: -${st.valesUSD.toFixed(2)} USD
                       </span>
                     )}
                   </div>
@@ -357,11 +413,11 @@ export default function DailyCloseModal({
           )}
         </div>
 
-        {/* Propinas del Día (Aparte) */}
+        {/* Propinas del Período (Aparte) */}
         <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <span>🪙 Propinas del Día (Aparte):</span>
+              <span>🪙 Propinas {isWeekly ? 'de la Semana' : 'del Día'} (Aparte):</span>
               <span className="font-mono font-black text-amber-400">${totalTipsUSD.toFixed(2)} USD</span>
             </span>
             <div className="flex items-center gap-1 bg-dark-900 p-0.5 rounded-lg border border-dark-750">
@@ -392,7 +448,7 @@ export default function DailyCloseModal({
 
           {totalTipsUSD === 0 ? (
             <p className="text-xs text-slate-500 py-0.5">
-              No se registraron propinas el día de hoy.
+              No se registraron propinas {periodShortLabel}.
             </p>
           ) : tipDeliveryMode === 'grupal' ? (
             <div className="p-2.5 rounded-xl bg-dark-900/80 border border-dark-800 text-xs flex items-center justify-between">
@@ -508,11 +564,14 @@ export default function DailyCloseModal({
                 const closingRecord = {
                   id: `close_${Date.now()}`,
                   fecha: getLocalDateIso(),
+                  periodType: closePeriod,
+                  periodLabel: periodTitle,
                   timestamp: new Date().toISOString(),
                   totalIncomeUSD,
                   totalIncomeBs,
                   totalExpensesUSD,
                   totalValesUSD,
+                  totalCommissionsUSD,
                   totalTipsUSD,
                   efectivoUSD,
                   pagoMovilUSD,
@@ -524,7 +583,7 @@ export default function DailyCloseModal({
                   cashInDrawerCounted: hasCounted ? countedNum : expectedCashInDrawer,
                   differenceUSD: hasCounted ? differenceUSD : 0,
                   netProfitUSD,
-                  transactionsCount: todayTx.length,
+                  transactionsCount: periodTx.length,
                   commissionsByStaff,
                   tipsByStaff,
                   exchangeRate
@@ -553,7 +612,7 @@ export default function DailyCloseModal({
               ) : (
                 <>
                   <Lock className="w-4 h-4 stroke-[2.5]" />
-                  <span>Guardar Cuadre & Cerrar Jornada</span>
+                  <span>Guardar Cuadre {isWeekly ? 'Semanal' : '& Cerrar Jornada'}</span>
                 </>
               )}
             </button>

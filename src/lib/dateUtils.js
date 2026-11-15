@@ -28,6 +28,38 @@ export function isDateToday(dateString) {
 }
 
 /**
+ * Returns the Monday-to-Sunday bounds in local timezone for a given weekOffset
+ * (0 = current week "Esta Semana", -1 = previous week "Semana Pasada").
+ * Returns { startIso: 'YYYY-MM-DD', endIso: 'YYYY-MM-DD', rangeLabel: 'DD/MM al DD/MM' }
+ */
+export function getWeekBoundsLocal(weekOffset = 0) {
+  const now = new Date()
+  const day = now.getDay() // 0 = Sun, 1 = Mon, ... 6 = Sat
+  const diffToMonday = (day === 0 ? -6 : 1 - day) + (weekOffset * 7)
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday)
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6)
+  const startIso = getLocalDateIso(monday)
+  const endIso = getLocalDateIso(sunday)
+  const fmt = (d) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  return {
+    startIso,
+    endIso,
+    rangeLabel: `${fmt(monday)} al ${fmt(sunday)}`
+  }
+}
+
+/**
+ * Checks if a given date string (ISO or YYYY-MM-DD) falls within the target week (Monday-Sunday in local time).
+ */
+export function isDateInWeek(dateString, weekOffset = 0) {
+  if (!dateString) return false
+  const targetIso = getLocalDateIso(dateString)
+  if (!targetIso) return false
+  const { startIso, endIso } = getWeekBoundsLocal(weekOffset)
+  return targetIso >= startIso && targetIso <= endIso
+}
+
+/**
  * Normalizes phone numbers for wa.me links.
  * Handles standard Venezuelan numbers (0412, 0414, 0424, 0416, 0426)
  * transforming them automatically to 584...
