@@ -221,9 +221,7 @@ export default function CopilotChatWidget({
               <div>
                 <div className="flex items-center gap-1.5">
                   <h4 className="text-xs font-black text-white">{copilotName}</h4>
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-bold">
-                    DeepSeek Flash
-                  </span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="En línea" />
                 </div>
                 <p className="text-[10px] text-slate-400 leading-none mt-0.5">{copilotSubtitle}</p>
               </div>
