@@ -18,6 +18,7 @@ import ExchangeRateModal from './components/ExchangeRateModal'
 import WhatsAppCloseModal from './components/WhatsAppCloseModal'
 import BusinessSettingsModal from './components/BusinessSettingsModal'
 import DailyCloseModal from './components/DailyCloseModal'
+import CopilotChatWidget from './components/CopilotChatWidget'
 import {
   NICHES,
   INITIAL_CLIENTS,
@@ -2082,6 +2083,17 @@ export default function App() {
           <span>{offlineToast}</span>
         </div>
       )}
+
+      {/* Floating Tactical AI Copilot Widget */}
+      <CopilotChatWidget
+        activeTenant={activeTenant}
+        businessProfile={businessProfile}
+        transactions={transactions}
+        clients={clients}
+        appointments={appointments}
+        exchangeRate={exchangeRate}
+        currentNiche={currentNiche}
+      />
 
     </div>
   )

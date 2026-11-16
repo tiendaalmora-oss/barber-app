@@ -6,6 +6,27 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Load local .env if present (without checking into git)
+try {
+  const envCandidates = [path.join(__dirname, '.env'), path.join(__dirname, 'data', '.env')]
+  for (const ef of envCandidates) {
+    if (fs.existsSync(ef)) {
+      const raw = fs.readFileSync(ef, 'utf8')
+      for (const line of raw.split('\n')) {
+        const trimmed = line.trim()
+        if (trimmed && !trimmed.startsWith('#')) {
+          const eqIdx = trimmed.indexOf('=')
+          if (eqIdx > 0) {
+            const k = trimmed.slice(0, eqIdx).trim()
+            const v = trimmed.slice(eqIdx + 1).trim()
+            if (!process.env[k]) process.env[k] = v
+          }
+        }
+      }
+    }
+  }
+} catch (e) {}
+
 const PORT = process.env.PORT || 80
 const DIST_DIR = path.join(__dirname, 'dist')
 const DATA_DIR = path.join(__dirname, 'data')
@@ -692,6 +713,126 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       return sendJson(res, 200, {
         ok: true,
         workspace: db.workspaces[tenantId]
+      })
+    }
+  }
+
+  // --- COPILOT AI CHAT ROUTE (DeepSeek Flash via OpenRouter) ---
+  if (pathname === '/api/copilot/chat' && req.method === 'POST') {
+    const body = await parseBody(req)
+    const { message, history = [], context = {}, tenantId = 'anon' } = body
+    if (!message || typeof message !== 'string') {
+      return sendJson(res, 400, { ok: false, error: 'Mensaje requerido' })
+    }
+
+    // Daily limit check: max 10 requests per tenant per calendar day
+    const todayIso = new Date().toISOString().split('T')[0]
+    if (!db.copilotUsage || typeof db.copilotUsage !== 'object') {
+      db.copilotUsage = {}
+    }
+    const usageKey = `${tenantId}_${todayIso}`
+    const currentCount = db.copilotUsage[usageKey] || 0
+    const MAX_DAILY_QUOTA = 10
+
+    if (currentCount >= MAX_DAILY_QUOTA) {
+      return sendJson(res, 200, {
+        ok: false,
+        quotaExceeded: true,
+        remainingToday: 0,
+        reply: '⚡ Has alcanzado tu cupo de 10 consultas gratuitas de hoy. Mañana a primera hora se renuevan tus consultas.'
+      })
+    }
+
+    const isSalon = Boolean(context.isSalon)
+    const roleCopilot = isSalon ? 'Socia GlamOS' : 'Socio BarberOS'
+
+    const systemPrompt = `Eres "${roleCopilot}", el copiloto de inteligencia artificial táctico para barberías y salones de belleza en Venezuela.
+REGLAS ESTRICTAS DE RESPUESTA:
+1. SÉ CORTO Y DIRECTO: Tu respuesta DEBE ser concisa (máximo 2 a 3 párrafos breves o viñetas). Cero rodeos, cero teoría vacía, cero relleno corporativo.
+2. TONO VENEZOLANO NATURAL: Cercano, empático, profesional pero criollo y callejero (usa "hermano", "pana" en barbería, o "amiga", "bella" en salones).
+3. MENSAJES LISTOS PARA COPIAR: Si te piden cobrar un fiado, rechazar una rebaja o lanzar una promo, entrega el mensaje exacto de WhatsApp entre comillas listo para copiar y pagar.
+4. CONTEXTO DEL NEGOCIO:
+- Negocio: ${context.businessName || 'Mi Negocio'} (${isSalon ? 'Salón de Belleza / Uñas' : 'Barbería'})
+- Tasa BCV oficial: Bs. ${context.exchangeRate || 'N/A'}
+- Ventas de hoy: ${context.todayServicesCount || 0} servicios (${context.todayRevenueUSD || 0} USD)
+- Total fiados en la calle: ${context.totalDebtUSD || 0} USD (${context.debtorsCount || 0} clientes)
+- Citas agendadas hoy: ${context.todayAppointmentsCount || 0}`
+
+    const apiKey = (process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || '').trim()
+    const model = process.env.AI_MODEL || 'deepseek/deepseek-v4.1-flash'
+
+    if (!apiKey) {
+      console.warn('[Copilot AI] No OPENROUTER_API_KEY configured. Returning tactical fallback.')
+      let fallback = '¡Entendido hermano! Recuerda proteger tu rentabilidad. En vez de bajar precios cuando te pidan rebaja, ofrece un servicio express adicional (cejas o peinado).'
+      if (message.toLowerCase().includes('fiado') || message.toLowerCase().includes('deuda')) {
+        fallback = 'Para cobrar sin pena, usa este mensaje amable:\n\n"¡Epa hermano! 👋 Espero estés bien. Te escribo para cuadrar caja esta semana; cuando puedas me pasas el Pago Móvil del saldo pendiente de tu visita pasada para cerrarte la cuenta en el sistema. ¡Un abrazo!"'
+      }
+      db.copilotUsage[usageKey] = currentCount + 1
+      saveDb()
+      return sendJson(res, 200, {
+        ok: true,
+        reply: fallback,
+        remainingToday: MAX_DAILY_QUOTA - (currentCount + 1)
+      })
+    }
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(Array.isArray(history) ? history.slice(-5) : []).map(h => ({
+        role: h.role === 'user' ? 'user' : 'assistant',
+        content: String(h.content || '').slice(0, 400)
+      })),
+      { role: 'user', content: message.slice(0, 400) }
+    ]
+
+    try {
+      const aiResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://barber.ingenioos.online',
+          'X-Title': 'BarberOS Copilot'
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 350
+        })
+      })
+
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json()
+        const replyText = aiData?.choices?.[0]?.message?.content?.trim() || '¡Entendido hermano! ¿En qué otra cosa te apoyo hoy?'
+        db.copilotUsage[usageKey] = currentCount + 1
+        saveDb()
+        return sendJson(res, 200, {
+          ok: true,
+          reply: replyText,
+          remainingToday: MAX_DAILY_QUOTA - (currentCount + 1)
+        })
+      } else {
+        const errText = await aiResponse.text()
+        console.warn('[Copilot AI] OpenRouter HTTP error:', aiResponse.status, errText)
+        let fallback = '¡Entendido hermano! Recuerda proteger tu rentabilidad. En vez de bajar precios cuando te pidan rebaja, ofrece un servicio express adicional (cejas o peinado).'
+        if (message.toLowerCase().includes('fiado') || message.toLowerCase().includes('deuda')) {
+          fallback = 'Para cobrar sin pena, usa este mensaje amable:\n\n"¡Epa hermano! 👋 Espero estés bien. Te escribo para cuadrar caja esta semana; cuando puedas me pasas el Pago Móvil del saldo pendiente de tu visita pasada para cerrarte la cuenta en el sistema. ¡Un abrazo!"'
+        }
+        db.copilotUsage[usageKey] = currentCount + 1
+        saveDb()
+        return sendJson(res, 200, {
+          ok: true,
+          reply: fallback,
+          remainingToday: MAX_DAILY_QUOTA - (currentCount + 1)
+        })
+      }
+    } catch (err) {
+      console.error('[Copilot AI] Network error:', err.message)
+      return sendJson(res, 200, {
+        ok: true,
+        reply: '¡Epa hermano! Hubo una pequeña intermitencia de red con la IA. Si necesitas cobrar un fiado, envíale: "¡Hola! Te escribo para cuadrar caja esta semana, cuando puedas me pasas el Pago Móvil de tu saldo pendiente. ¡Un abrazo!"',
+        remainingToday: MAX_DAILY_QUOTA - currentCount
       })
     }
   }
