@@ -10,7 +10,6 @@ export default function DashboardView({
   onOpenExpenseModal,
   onOpenWhatsAppModal,
   onOpenDailyCloseModal,
-  onOpenSmartAdvisor,
   onDeleteTransaction,
   nicheData = {},
   businessProfile = {}
@@ -205,18 +204,6 @@ export default function DashboardView({
             </div>
 
             {/* Quick Action Pills */}
-            {onOpenSmartAdvisor && (
-              <button
-                type="button"
-                onClick={onOpenSmartAdvisor}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-900/50 via-dark-800 to-gold-950/50 hover:from-purple-900/80 hover:to-gold-950/80 text-gold-300 border border-gold-500/40 text-xs font-bold transition-all active:scale-95 shadow-sm"
-                title="Copiloto de Negocio, Meta Mensual y Diagnóstico de Rentabilidad"
-              >
-                <span className="w-2 h-2 rounded-full bg-gold-400 animate-ping" />
-                <span className="hidden sm:inline">Asesor Pro</span>
-                <span className="sm:hidden">Asesor</span>
-              </button>
-            )}
             <button
               onClick={onOpenDailyCloseModal || onOpenWhatsAppModal}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all active:scale-95 shadow-sm"

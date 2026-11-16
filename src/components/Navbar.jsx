@@ -16,7 +16,6 @@ export default function Navbar({
   onOpenExpenseModal,
   onOpenWhatsAppModal,
   onOpenDailyCloseModal,
-  onOpenSmartAdvisor,
   onOpenSettingsModal,
   onOpenPaymentModal,
   onLogout,
@@ -171,17 +170,6 @@ export default function Navbar({
 
             {/* Desktop Only CTAs */}
             <div className="hidden md:flex items-center gap-2">
-              {onOpenSmartAdvisor && (
-                <button
-                  onClick={onOpenSmartAdvisor}
-                  className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-purple-900/60 to-gold-950/60 hover:from-purple-900/80 hover:to-gold-950/80 text-gold-300 border border-gold-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
-                  title="Copiloto de Negocio, Meta y Rentabilidad"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-gold-400 animate-pulse" />
-                  <span>Asesor Pro</span>
-                </button>
-              )}
-
               <button
                 onClick={onOpenDailyCloseModal}
                 className="px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all flex items-center gap-1.5"
@@ -347,19 +335,6 @@ export default function Navbar({
 
             {/* Accesos Rápidos de Operación Diaria */}
             <div className="pt-2 border-t border-dark-800 grid grid-cols-2 gap-2">
-              {onOpenSmartAdvisor && (
-                <button
-                  onClick={() => {
-                    setIsMoreSheetOpen(false)
-                    onOpenSmartAdvisor()
-                  }}
-                  className="col-span-2 p-2.5 rounded-xl bg-gradient-to-r from-purple-900/40 via-dark-850 to-gold-950/40 text-gold-300 border border-gold-500/40 text-xs font-bold flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4 text-gold-400 animate-pulse" />
-                  <span>Asesor Pro (Meta y Rentabilidad)</span>
-                </button>
-              )}
-
               <button
                 onClick={() => {
                   setIsMoreSheetOpen(false)
@@ -462,22 +437,6 @@ export default function Navbar({
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
                 </button>
-
-                {onOpenSmartAdvisor && (
-                  <button
-                    onClick={() => {
-                      setIsMobileMenuOpen(false)
-                      onOpenSmartAdvisor()
-                    }}
-                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-purple-900/30 to-gold-950/30 border border-gold-500/40 text-xs text-gold-300 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Sparkles className="w-4 h-4 text-gold-400 animate-pulse" />
-                      <span className="font-bold">Asesor Pro (Meta & Rentabilidad)</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-slate-500" />
-                  </button>
-                )}
 
                 <button
                   onClick={() => {
