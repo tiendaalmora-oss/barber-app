@@ -35,8 +35,8 @@ export default function CopilotChatWidget({
       id: 'welcome',
       role: 'assistant',
       content: isGlamBrand
-        ? `¡Hola bella! ✨ Soy tu Socia GlamOS. Conozco los números de tu salón y la tasa del día. Pregúntame lo que necesites: cómo cobrar un servicio sin pena, cómo responder si te piden rebaja o una promo para llenar la agenda.`
-        : `¡Epa hermano! 💈 Soy tu Socio BarberOS. Conozco cómo va tu caja hoy. Pregúntame lo que necesites: cómo salir de un fiado sin pena, qué decirle al que pide rebaja o cómo mover la tarde hoy.`
+        ? `¡Hola bella! ✨ Soy tu Socia GlamOS. Conozco los números de tu salón y la tasa del día. Pregúntame lo que necesites: redactar un mensaje para cobrar un saldo pendiente, una promo para llenar la tarde o reactivar clientas.`
+        : `¡Epa hermano! 💈 Soy tu Socio BarberOS. Conozco cómo va tu caja hoy. Pregúntame lo que necesites: cómo redactar un cobro de saldo pendiente, una promo para mover la tarde o reactivar clientes que no han vuelto.`
     }
   ]
 
@@ -76,14 +76,14 @@ export default function CopilotChatWidget({
   const todayApts = (appointments || []).filter(a => a.date === todayIso && a.status !== 'cancelada')
 
   const quickPrompts = isGlamBrand ? [
-    '🛡️ ¿Qué responder si me piden rebaja en un servicio?',
-    '✨ Dame una promo para llenar la tarde de hoy',
-    '💸 Mensaje para cobrar un fiado sin sonar pesada',
+    '✨ Promo para llenar la tarde de hoy',
+    '💸 Mensaje para cobrar saldo pendiente',
+    '🌸 Mensaje para reactivar clientas que no vienen',
     '📊 ¿Cómo van mis números de hoy?'
   ] : [
-    '🛡️ ¿Qué responder si me piden fiado o rebaja?',
-    '✂️ Dame una promo para llenar la tarde de hoy',
-    '💸 Mensaje para cobrar un fiado sin sonar pesado',
+    '✂️ Promo para llenar la tarde de hoy',
+    '💸 Mensaje para cobrar saldo pendiente',
+    '💈 Mensaje para reactivar clientes inactivos',
     '📊 ¿Cómo van mis números de hoy?'
   ]
 
@@ -141,13 +141,15 @@ export default function CopilotChatWidget({
       }
     } catch (err) {
       // Offline / fallback response
-      let fallbackText = '¡Entendido hermano! Recuerda que para proteger tu rentabilidad es clave no bajar precios sin añadir valor. Puedes ofrecer un servicio express adicional (cejas o peinado) en vez de rebajar el costo de tu trabajo.'
-      if (userText.toLowerCase().includes('fiado') || userText.toLowerCase().includes('deuda')) {
-        fallbackText = `Para cobrar sin pena, usa esta fórmula amable:\n\n"¡Epa hermano! 👋 Espero estés bien. Te escribo para cuadrar caja esta semana; cuando puedas me pasas el Pago Móvil del saldo pendiente de tu visita pasada para cerrarte la cuenta en el sistema. ¡Un abrazo!"`
+      let fallbackText = '¡Entendido hermano! Cuenta conmigo para redactar mensajes de WhatsApp, promociones de la tarde o revisar tus números.'
+      if (userText.toLowerCase().includes('fiado') || userText.toLowerCase().includes('deuda') || userText.toLowerCase().includes('saldo')) {
+        fallbackText = `Para cobrar con educación y efectividad, usa este mensaje listo:\n\n"¡Epa hermano! 👋 Espero estés bien. Te escribo para cuadrar caja esta semana; cuando puedas me pasas el Pago Móvil del saldo pendiente de tu visita pasada para cerrarte la cuenta en el sistema. ¡Un abrazo!"`
       } else if (userText.toLowerCase().includes('promo') || userText.toLowerCase().includes('tarde')) {
         fallbackText = `Para mover la tarde, lanza este estado de WhatsApp:\n\n"💈 ¡Buenas tardes mi gente! Abrimos 2 espacios especiales para hoy a las 4:00 PM y 5:30 PM en ${bizName}. Quien reserve hoy le obsequiamos perfilado de cejas. Aparta tu turno aquí 👉 [Tu Link]"`
+      } else if (userText.toLowerCase().includes('reactivar') || userText.toLowerCase().includes('inactivo') || userText.toLowerCase().includes('semanas')) {
+        fallbackText = `Para reactivar clientes que tienen tiempo sin visitarte, envíales este mensaje personal:\n\n"¡Hola hermano! 👋 Teníamos días sin verte por la barbería. Espero todo marche excelente. Si te toca recorte esta semana, avísame para apartarte tu espacio preferido. ¡Un abrazo!"`
       } else if (userText.toLowerCase().includes('números') || userText.toLowerCase().includes('cómo voy')) {
-        fallbackText = `Hoy llevas ${todayServicesCount} servicios registrados con un total de $${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Tienes ${debtors.length} clientes fiados en la calle ($${totalDebtUSD.toFixed(2)} USD). ¡A darle con todo a la jornada!`
+        fallbackText = `Hoy llevas ${todayServicesCount} servicios registrados con un total de $${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Tienes ${debtors.length} clientes con saldo pendiente ($${totalDebtUSD.toFixed(2)} USD). ¡A darle con todo a la jornada!`
       }
 
       setMessages(prev => [...prev, {

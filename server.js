@@ -750,7 +750,7 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
 REGLAS ESTRICTAS DE RESPUESTA:
 1. SÉ CORTO Y DIRECTO: Tu respuesta DEBE ser concisa (máximo 2 a 3 párrafos breves o viñetas). Cero rodeos, cero teoría vacía, cero relleno corporativo.
 2. TONO VENEZOLANO NATURAL: Cercano, empático, profesional pero criollo y callejero (usa "hermano", "pana" en barbería, o "amiga", "bella" en salones).
-3. MENSAJES LISTOS PARA COPIAR: Si te piden cobrar un fiado, rechazar una rebaja o lanzar una promo, entrega el mensaje exacto de WhatsApp entre comillas listo para copiar y pagar.
+3. MENSAJES LISTOS PARA COPIAR: Si te piden cobrar un saldo pendiente, lanzar una promo para mover la tarde o reactivar clientes que no vienen, entrega el mensaje exacto de WhatsApp entre comillas listo para copiar y enviar.
 4. CONTEXTO DEL NEGOCIO:
 - Negocio: ${context.businessName || 'Mi Negocio'} (${isSalon ? 'Salón de Belleza / Uñas' : 'Barbería'})
 - Tasa BCV oficial: Bs. ${context.exchangeRate || 'N/A'}
@@ -805,12 +805,53 @@ REGLAS ESTRICTAS DE RESPUESTA:
       if (aiResponse.ok) {
         const aiData = await aiResponse.json()
         const replyText = aiData?.choices?.[0]?.message?.content?.trim() || '¡Entendido hermano! ¿En qué otra cosa te apoyo hoy?'
+        const usage = aiData?.usage || {}
+        const promptTokens = usage.prompt_tokens || 0
+        const completionTokens = usage.completion_tokens || 0
+        const totalTokens = usage.total_tokens || (promptTokens + completionTokens)
+
+        // OpenRouter DeepSeek Flash pricing (~$0.14/1M prompt, ~$0.28/1M completion)
+        const queryCostUsd = ((promptTokens * 0.14) + (completionTokens * 0.28)) / 1000000
+
+        if (!db.copilotMetrics || typeof db.copilotMetrics !== 'object') {
+          db.copilotMetrics = {
+            totalQueries: 0,
+            totalPromptTokens: 0,
+            totalCompletionTokens: 0,
+            totalTokens: 0,
+            estimatedCostUsd: 0,
+            byTenant: {}
+          }
+        }
+        db.copilotMetrics.totalQueries += 1
+        db.copilotMetrics.totalPromptTokens += promptTokens
+        db.copilotMetrics.totalCompletionTokens += completionTokens
+        db.copilotMetrics.totalTokens += totalTokens
+        db.copilotMetrics.estimatedCostUsd = Number((db.copilotMetrics.estimatedCostUsd + queryCostUsd).toFixed(6))
+
+        if (!db.copilotMetrics.byTenant) db.copilotMetrics.byTenant = {}
+        if (!db.copilotMetrics.byTenant[tenantId]) {
+          db.copilotMetrics.byTenant[tenantId] = { queries: 0, totalTokens: 0, estimatedCostUsd: 0, lastQueryAt: null }
+        }
+        db.copilotMetrics.byTenant[tenantId].queries += 1
+        db.copilotMetrics.byTenant[tenantId].totalTokens += totalTokens
+        db.copilotMetrics.byTenant[tenantId].estimatedCostUsd = Number((db.copilotMetrics.byTenant[tenantId].estimatedCostUsd + queryCostUsd).toFixed(6))
+        db.copilotMetrics.byTenant[tenantId].lastQueryAt = new Date().toISOString()
+
+        console.log(`[Copilot AI] Tenant: ${tenantId} | Tokens: ${promptTokens} in + ${completionTokens} out = ${totalTokens} | Costo query: $${queryCostUsd.toFixed(6)} USD | Costo total acumulado: $${db.copilotMetrics.estimatedCostUsd.toFixed(5)} USD (${db.copilotMetrics.totalQueries} consultas)`)
+
         db.copilotUsage[usageKey] = currentCount + 1
         saveDb()
         return sendJson(res, 200, {
           ok: true,
           reply: replyText,
-          remainingToday: MAX_DAILY_QUOTA - (currentCount + 1)
+          remainingToday: MAX_DAILY_QUOTA - (currentCount + 1),
+          usage: {
+            promptTokens,
+            completionTokens,
+            totalTokens,
+            costUsd: Number(queryCostUsd.toFixed(6))
+          }
         })
       } else {
         const errText = await aiResponse.text()
@@ -835,6 +876,38 @@ REGLAS ESTRICTAS DE RESPUESTA:
         remainingToday: MAX_DAILY_QUOTA - currentCount
       })
     }
+  }
+
+
+  // --- COPILOT CONSUMPTION & REAL METRICS ENDPOINT ---
+  if (pathname === '/api/copilot/stats' && req.method === 'GET') {
+    const metrics = db.copilotMetrics || {
+      totalQueries: 0,
+      totalPromptTokens: 0,
+      totalCompletionTokens: 0,
+      totalTokens: 0,
+      estimatedCostUsd: 0,
+      byTenant: {}
+    }
+    return sendJson(res, 200, {
+      ok: true,
+      model: process.env.AI_MODEL || 'deepseek/deepseek-v4.1-flash',
+      metrics: {
+        ...metrics,
+        estimatedCostFormattedUsd: `$${(metrics.estimatedCostUsd || 0).toFixed(4)} USD`,
+        avgTokensPerQuery: metrics.totalQueries > 0 ? Math.round(metrics.totalTokens / metrics.totalQueries) : 0,
+        avgCostPerQueryUsd: metrics.totalQueries > 0 ? `$${((metrics.estimatedCostUsd || 0) / metrics.totalQueries).toFixed(6)} USD` : '$0.000000 USD'
+      },
+      pricingReference: {
+        provider: 'OpenRouter.ai',
+        model: 'deepseek/deepseek-v4.1-flash',
+        promptTokensPerMillionUsd: '$0.14 USD',
+        completionTokensPerMillionUsd: '$0.28 USD',
+        cost1000QueriesEstimatedUsd: '~$0.05 USD (5 centavos de dólar por cada 1,000 preguntas)',
+        openRouterActivityUrl: 'https://openrouter.ai/activity',
+        openRouterKeysUrl: 'https://openrouter.ai/keys'
+      }
+    })
   }
 
   // --- ADMIN BACKUP & RESTORE ROUTES ---
