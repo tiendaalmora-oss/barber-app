@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Crown, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldAlert, KeyRound } from 'lucide-react'
+import { Crown, Bot, ArrowRight, CheckCircle2, MessageSquare, Plus, Settings2, ArrowLeft, Lock, Eye, Pencil, Trash2, Copy, Check, Share2, Sparkles, X, Fingerprint, Download, Zap, Clock, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldAlert, KeyRound } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 
@@ -36,6 +36,14 @@ export default function SuperAdminView({
 
   useEffect(() => {
     isBiometricSupported().then(setBioSupported)
+  }, [])
+  const [copilotStats, setCopilotStats] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/copilot/stats')
+      .then(r => r.json())
+      .then(d => { if (d.ok) setCopilotStats(d) })
+      .catch(() => {})
   }, [])
   const [selectedProduct, setSelectedProduct] = useState('all')
   const [filter, setFilter] = useState('all')
@@ -719,6 +727,51 @@ export default function SuperAdminView({
             })}
           </div>
         </div>
+
+        {/* Monitor & Candado de Consumo IA Copilot */}
+        {copilotStats && (
+          <div className="bg-gradient-to-r from-blue-950/40 via-dark-900 to-cyan-950/40 border border-cyan-500/30 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                <Bot className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-xs font-black text-white tracking-wide">Monitor de Costos IA Copilot (DeepSeek Flash)</h4>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                    Candado Activo: 10 consultas/día por cliente
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 font-bold border border-cyan-500/30">
+                    Tope: 500 tokens/respuesta
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-2 flex-wrap">
+                  <span>Gasto acumulado: <strong className="text-cyan-300 font-mono text-xs">{copilotStats.metrics?.estimatedCostFormattedUsd || '$0.0000 USD'}</strong></span>
+                  <span className="text-slate-600">•</span>
+                  <span>Consultas atendidas: <strong className="text-white font-mono">{copilotStats.metrics?.totalQueries || 0}</strong></span>
+                  <span className="text-slate-600">•</span>
+                  <span>Tokens totales: <strong className="text-slate-300 font-mono">{(copilotStats.metrics?.totalTokens || 0).toLocaleString()}</strong></span>
+                  <span className="text-slate-600">•</span>
+                  <span>Costo promedio/consulta: <strong className="text-emerald-300 font-mono">{copilotStats.metrics?.avgCostPerQueryUsd || '$0.00005 USD'}</strong></span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+              <a
+                href="https://openrouter.ai/activity"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                title="Abrir registros y auditoría de milisegundos en OpenRouter"
+              >
+                <span>Auditar en OpenRouter</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        )}
+
 
         {/* Shareable Registration Link Banner for Real Clients (BarberOS & GlamOS) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
