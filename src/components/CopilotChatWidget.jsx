@@ -24,7 +24,7 @@ export default function CopilotChatWidget({
   const brand = getActiveBrand(activeTenant)
   const isGlamBrand = brand.code === 'glamos' || currentNiche === 'estetica'
   const copilotName = isGlamBrand ? 'Socia GlamOS' : 'Socio BarberOS'
-  const copilotSubtitle = isGlamBrand ? 'Tu copiloto de salón & estética' : 'Tu copiloto de barbería'
+  const copilotSubtitle = isGlamBrand ? 'Asistente de gestión para salón & estética' : 'Asistente de gestión para barbería'
   const bizName = businessProfile?.businessName || (isGlamBrand ? 'Mi Salón' : 'Mi Barbería')
 
   const tenantId = activeTenant?.id || 'anon'
@@ -35,8 +35,8 @@ export default function CopilotChatWidget({
       id: 'welcome',
       role: 'assistant',
       content: isGlamBrand
-        ? `¡Hola bella! ✨ Soy tu Socia GlamOS. Conozco los números de tu salón y la tasa del día. Pregúntame lo que necesites: redactar un mensaje para cobrar un saldo pendiente, una promo para llenar la tarde o reactivar clientas.`
-        : `¡Epa hermano! 💈 Soy tu Socio BarberOS. Conozco cómo va tu caja hoy. Pregúntame lo que necesites: cómo redactar un cobro de saldo pendiente, una promo para mover la tarde o reactivar clientes que no han vuelto.`
+        ? `¡Hola! Le saluda su asistente de GlamOS. Conozco las funciones del sistema y las cifras de su negocio. Puede consultarme cómo usar la plataforma, cómo sacar el link de su agenda web, redactar cobros de saldos pendientes o promociones.`
+        : `¡Hola! Le saluda su asistente de BarberOS. Conozco las funciones del sistema y las cifras de su negocio. Puede consultarme cómo usar la plataforma, cómo sacar el link de su agenda web, redactar cobros de saldos pendientes o promociones.`
     }
   ]
 
@@ -76,15 +76,15 @@ export default function CopilotChatWidget({
   const todayApts = (appointments || []).filter(a => a.date === todayIso && a.status !== 'cancelada')
 
   const quickPrompts = isGlamBrand ? [
+    '🔗 ¿Dónde saco el link de mi agenda web?',
     '✨ Promo para llenar la tarde de hoy',
     '💸 Mensaje para cobrar saldo pendiente',
-    '🌸 Mensaje para reactivar clientas que no vienen',
-    '📊 ¿Cómo van mis números de hoy?'
+    '🌸 Mensaje para reactivar clientas'
   ] : [
+    '🔗 ¿Dónde saco el link de mi agenda web?',
     '✂️ Promo para llenar la tarde de hoy',
     '💸 Mensaje para cobrar saldo pendiente',
-    '💈 Mensaje para reactivar clientes inactivos',
-    '📊 ¿Cómo van mis números de hoy?'
+    '💈 Mensaje para reactivar clientes'
   ]
 
   const handleSendMessage = async (textToSend) => {
@@ -101,10 +101,16 @@ export default function CopilotChatWidget({
     setInput('')
     setLoading(true)
 
+    const tenantSlug = activeTenant?.id || ''
+    const publicBookingUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}`
+      : ''
+
     const contextPayload = {
       businessName: bizName,
       brandName: brand.name,
       isSalon: isGlamBrand,
+      publicBookingUrl,
       exchangeRate,
       todayServicesCount,
       todayRevenueUSD,
@@ -141,15 +147,17 @@ export default function CopilotChatWidget({
       }
     } catch (err) {
       // Offline / fallback response
-      let fallbackText = '¡Entendido hermano! Cuenta conmigo para redactar mensajes de WhatsApp, promociones de la tarde o revisar tus números.'
-      if (userText.toLowerCase().includes('fiado') || userText.toLowerCase().includes('deuda') || userText.toLowerCase().includes('saldo')) {
-        fallbackText = `Para cobrar con educación y efectividad, usa este mensaje listo:\n\n"¡Epa hermano! 👋 Espero estés bien. Te escribo para cuadrar caja esta semana; cuando puedas me pasas el Pago Móvil del saldo pendiente de tu visita pasada para cerrarte la cuenta en el sistema. ¡Un abrazo!"`
+      let fallbackText = 'Con gusto le asisto. Puede consultarme sobre cómo usar las funciones de la plataforma, redactar mensajes para sus clientes o revisar sus cifras de hoy.'
+      if (userText.toLowerCase().includes('link') || userText.toLowerCase().includes('agenda') || userText.toLowerCase().includes('reserva') || userText.toLowerCase().includes('catálogo') || userText.toLowerCase().includes('catalogo')) {
+        fallbackText = `Para obtener el link de su agenda web de reservas:\n\n1. Ingrese a la pestaña "Catálogo" en el menú.\n2. En la parte superior verá la sección "Link Público de Reservas".\n3. Pulse "Copiar Link" para colocarlo en su biografía de Instagram o estados, o pulse "Compartir en WhatsApp" para enviarlo directamente a sus clientes.\n\nSu enlace directo es:\n${publicBookingUrl || 'Disponible en el menú Catálogo'}`
+      } else if (userText.toLowerCase().includes('fiado') || userText.toLowerCase().includes('deuda') || userText.toLowerCase().includes('saldo') || userText.toLowerCase().includes('cobrar')) {
+        fallbackText = `Para gestionar un saldo pendiente con educación y efectividad, puede utilizar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"`
       } else if (userText.toLowerCase().includes('promo') || userText.toLowerCase().includes('tarde')) {
-        fallbackText = `Para mover la tarde, lanza este estado de WhatsApp:\n\n"💈 ¡Buenas tardes mi gente! Abrimos 2 espacios especiales para hoy a las 4:00 PM y 5:30 PM en ${bizName}. Quien reserve hoy le obsequiamos perfilado de cejas. Aparta tu turno aquí 👉 [Tu Link]"`
+        fallbackText = `Para incentivar las citas de la tarde, puede publicar este mensaje en sus estados:\n\n"¡Buenas tardes! Disponemos de 2 turnos especiales para hoy a las 4:00 PM y 5:30 PM en ${bizName}. Reserve su espacio cómodamente en nuestro enlace web: ${publicBookingUrl || '[Su Enlace de Catálogo]'}"`
       } else if (userText.toLowerCase().includes('reactivar') || userText.toLowerCase().includes('inactivo') || userText.toLowerCase().includes('semanas')) {
-        fallbackText = `Para reactivar clientes que tienen tiempo sin visitarte, envíales este mensaje personal:\n\n"¡Hola hermano! 👋 Teníamos días sin verte por la barbería. Espero todo marche excelente. Si te toca recorte esta semana, avísame para apartarte tu espacio preferido. ¡Un abrazo!"`
+        fallbackText = `Para reactivar clientes que tienen tiempo sin visitarle, puede enviarles este mensaje:\n\n"¡Hola! 👋 Teníamos tiempo sin verle por ${bizName}. Esperamos que todo marche excelente. Si desea agendar su cita esta semana, avísenos con gusto para reservarle su espacio preferido. ¡Saludos!"`
       } else if (userText.toLowerCase().includes('números') || userText.toLowerCase().includes('cómo voy')) {
-        fallbackText = `Hoy llevas ${todayServicesCount} servicios registrados con un total de $${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Tienes ${debtors.length} clientes con saldo pendiente ($${totalDebtUSD.toFixed(2)} USD). ¡A darle con todo a la jornada!`
+        fallbackText = `Hoy registra ${todayServicesCount} servicios con un total de ${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Mantiene ${debtors.length} clientes con saldo pendiente (${totalDebtUSD.toFixed(2)} USD).`
       }
 
       setMessages(prev => [...prev, {
@@ -310,7 +318,7 @@ export default function CopilotChatWidget({
           >
             <input
               type="text"
-              placeholder={isGlamBrand ? 'Pregúntale a tu socia...' : 'Pregúntale a tu socio...'}
+              placeholder={isGlamBrand ? 'Pregunte a su asistente...' : 'Pregunte a su asistente...'}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={loading}
