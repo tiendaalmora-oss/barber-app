@@ -3,7 +3,7 @@ import {
   Sparkles, MessageSquare, X, Send, Bot, User, Copy, Check,
   ChevronDown, Flame, ShieldAlert, DollarSign, ArrowRight
 } from 'lucide-react'
-import { isDateToday, getLocalDateIso } from '../lib/dateUtils'
+import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
 
 export default function CopilotChatWidget({
@@ -106,6 +106,16 @@ export default function CopilotChatWidget({
       ? `${window.location.origin}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}`
       : ''
 
+    const thisWeekBounds = getWeekBoundsLocal(0)
+    const thisWeekTxs = (transactions || []).filter(t => isDateInWeek(t.fecha, 0))
+    const thisWeekIncomeTxs = thisWeekTxs.filter(t => (t.monto_usd || 0) > 0)
+    const thisWeekExpenseTxs = thisWeekTxs.filter(t => (t.monto_usd || 0) < 0)
+    const thisWeekRevenueUSD = thisWeekIncomeTxs.reduce((sum, t) => sum + (t.monto_usd || 0), 0)
+    const thisWeekExpensesUSD = Math.abs(thisWeekExpenseTxs.reduce((sum, t) => sum + (t.monto_usd || 0), 0))
+    const thisWeekCommissionsUSD = thisWeekIncomeTxs.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
+    const thisWeekNetProfitUSD = Math.max(0, thisWeekRevenueUSD - thisWeekExpensesUSD - thisWeekCommissionsUSD)
+    const thisWeekServicesCount = thisWeekIncomeTxs.length
+
     const contextPayload = {
       businessName: bizName,
       brandName: brand.name,
@@ -116,7 +126,13 @@ export default function CopilotChatWidget({
       todayRevenueUSD,
       totalDebtUSD,
       debtorsCount: debtors.length,
-      todayAppointmentsCount: todayApts.length
+      todayAppointmentsCount: todayApts.length,
+      thisWeekRange: thisWeekBounds.rangeLabel,
+      thisWeekServicesCount,
+      thisWeekRevenueUSD,
+      thisWeekExpensesUSD,
+      thisWeekCommissionsUSD,
+      thisWeekNetProfitUSD
     }
 
     try {
@@ -156,6 +172,9 @@ export default function CopilotChatWidget({
         fallbackText = `Para incentivar las citas de la tarde, puede publicar este mensaje en sus estados:\n\n"¡Buenas tardes! Disponemos de 2 turnos especiales para hoy a las 4:00 PM y 5:30 PM en ${bizName}. Reserve su espacio cómodamente en nuestro enlace web: ${publicBookingUrl || '[Su Enlace de Catálogo]'}"`
       } else if (userText.toLowerCase().includes('reactivar') || userText.toLowerCase().includes('inactivo') || userText.toLowerCase().includes('semanas')) {
         fallbackText = `Para reactivar clientes que tienen tiempo sin visitarle, puede enviarles este mensaje:\n\n"¡Hola! 👋 Teníamos tiempo sin verle por ${bizName}. Esperamos que todo marche excelente. Si desea agendar su cita esta semana, avísenos con gusto para reservarle su espacio preferido. ¡Saludos!"`
+      } else if (userText.toLowerCase().includes('semanal') || userText.toLowerCase().includes('semana')) {
+        const wb = getWeekBoundsLocal(0)
+        fallbackText = `Para consultar o realizar su Cierre Semanal:\n\n1. En la pantalla principal o menú superior cuenta con el botón morado "Cierre Semanal".\n2. También puede ingresar a la pestaña "Reportes", seleccionar "Esta Semana" y verá el balance día por día (de lunes a domingo) con botones para "Copiar Acta" o "Enviar WhatsApp".\n\nResumen de Esta Semana (${wb.rangeLabel}):\n• Facturación: ${thisWeekRevenueUSD.toFixed(2)} USD\n• Gastos: -${thisWeekExpensesUSD.toFixed(2)} USD\n• Comisiones: -${thisWeekCommissionsUSD.toFixed(2)} USD\n• Ganancia Limpia: ${thisWeekNetProfitUSD.toFixed(2)} USD (${thisWeekServicesCount} atenciones).`
       } else if (userText.toLowerCase().includes('números') || userText.toLowerCase().includes('cómo voy')) {
         fallbackText = `Hoy registra ${todayServicesCount} servicios con un total de ${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Mantiene ${debtors.length} clientes con saldo pendiente (${totalDebtUSD.toFixed(2)} USD).`
       }

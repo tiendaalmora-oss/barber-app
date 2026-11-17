@@ -205,12 +205,20 @@ export default function DashboardView({
 
             {/* Quick Action Pills */}
             <button
-              onClick={onOpenDailyCloseModal || onOpenWhatsAppModal}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all active:scale-95 shadow-sm"
-              title="Arqueo de gaveta en efectivo, comisiones y cierre diario"
+              onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('today')}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800/90 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all active:scale-95 shadow-sm"
+              title="Arqueo de gaveta en efectivo y cierre de hoy"
             >
               <Lock className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Cuadre</span>
+              <span className="hidden sm:inline">Diario</span>
+            </button>
+            <button
+              onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all active:scale-95 shadow-sm"
+              title="Cuadre y cierre semanal de caja (Lunes a Domingo)"
+            >
+              <CalendarIcon className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Semanal</span>
             </button>
             <button
               onClick={onOpenExpenseModal}
@@ -505,31 +513,42 @@ export default function DashboardView({
 
       </div>
 
-      {/* Daily Cash Closing & Audit Banner */}
-      <div className="bg-gradient-to-r from-emerald-950/40 via-dark-900 to-dark-950 border border-emerald-500/30 p-5 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+      {/* Daily & Weekly Cash Closing & Audit Banner */}
+      <div className="bg-gradient-to-r from-emerald-950/40 via-dark-900 to-purple-950/40 border border-emerald-500/30 p-5 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-inner">
             <Lock className="w-5 h-5" />
           </div>
           <div>
             <h4 className="font-bold text-white text-sm flex items-center gap-2">
-              ¿Vas a cerrar la jornada de hoy?
+              ¿Vas a cuadrar la caja?
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/25">
-                Cuadre & Cierre Diario
+                Diario & Semanal
               </span>
             </h4>
             <p className="text-xs text-slate-400 mt-0.5">
-              Haz el arqueo de efectivo en gaveta, calcula lo que toca pagar al equipo y genera el acta de cierre.
+              Haz el arqueo de gaveta en efectivo, liquida las comisiones del equipo y genera el acta para WhatsApp.
             </p>
           </div>
         </div>
-        <button
-          onClick={onOpenDailyCloseModal || onOpenWhatsAppModal}
-          className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black text-xs font-black shadow-lg shadow-emerald-500/20 transition-all shrink-0 active:scale-95"
-        >
-          <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
-          <span>Hacer Cuadre y Cierre de Caja</span>
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <button
+            onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('today')}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black text-xs font-black shadow-lg shadow-emerald-500/20 transition-all shrink-0 active:scale-95"
+            title="Cuadre y arqueo de la jornada de hoy"
+          >
+            <Lock className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Cierre Diario</span>
+          </button>
+          <button
+            onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black shadow-lg shadow-purple-600/25 transition-all shrink-0 active:scale-95"
+            title="Cuadre y cierre consolidado de esta semana (Lunes a Domingo)"
+          >
+            <CalendarIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Cierre Semanal</span>
+          </button>
+        </div>
       </div>
 
       {/* Recent Movements Feed (Ingresos en Verde, Gastos en Rojo) */}

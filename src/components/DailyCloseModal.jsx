@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
@@ -12,13 +12,20 @@ export default function DailyCloseModal({
   staffList,
   onResetDay,
   onResetDailyTransactions,
-  onSaveDailyClose
+  onSaveDailyClose,
+  initialPeriod = 'today'
 }) {
   const [cashInDrawerCounted, setCashInDrawerCounted] = useState('')
   const [copied, setCopied] = useState(false)
   const [closingSaved, setClosingSaved] = useState(false)
   const [tipDeliveryMode, setTipDeliveryMode] = useState('individual') // 'individual' | 'grupal'
-  const [closePeriod, setClosePeriod] = useState('today') // 'today' | 'this_week' | 'prev_week'
+  const [closePeriod, setClosePeriod] = useState(initialPeriod || 'today')
+
+  useEffect(() => {
+    if (isOpen && initialPeriod) {
+      setClosePeriod(initialPeriod)
+    }
+  }, [isOpen, initialPeriod]) // 'today' | 'this_week' | 'prev_week'
 
   const handleResetAction = onResetDay || onResetDailyTransactions
 

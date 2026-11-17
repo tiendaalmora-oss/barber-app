@@ -6,11 +6,12 @@ import {
   Wallet, Clock, FileText, ArrowRight
 } from 'lucide-react'
 import { 
-  isDateToday, isDateInWeek, getLocalDateIso, isEfectivoMethod, isPuntoMethod, 
+  isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, isEfectivoMethod, isPuntoMethod, 
   isPagoMovilMethod, isDigitalMethod, isFiadoMethod, txMatchesPaymentFilter,
   formatTxPaymentSummary, normalizeWhatsAppPhone 
 } from '../lib/dateUtils'
 import ReceiptModal from './ReceiptModal'
+import { getActiveBrand } from '../lib/brandConfig'
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -393,41 +394,126 @@ export default function MonthlyReportView({
           {/* Two Column Layout: Monthly Table + Category Donut */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             
-            {/* Monthly History Table (Col 1 & 2) */}
+            {/* Adaptive Table: Weekly Day-by-Day OR Monthly History */}
             <div className="lg:col-span-2 bg-dark-900 border border-dark-800 rounded-3xl p-5 shadow-xl space-y-4">
-              <div>
-                <h3 className="font-bold text-white text-base">Cuentas Mes a Mes (Historial Consolidado)</h3>
-                <p className="text-xs text-slate-400">Facturación real, gastos del local, comisiones y ganancia neta</p>
-              </div>
+              {isWeeklyPeriod ? (
+                <>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-dark-800 pb-3">
+                    <div>
+                      <h3 className="font-bold text-white text-base flex items-center gap-2">
+                        <span>Balance Día a Día • {periodFilter === 'prev_week' ? 'Semana Pasada' : 'Esta Semana'}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold font-mono">
+                          {activeWeekBounds.rangeLabel}
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Desglose diario de lunes a domingo para cuadre y cierre semanal
+                      </p>
+                    </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-dark-800 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
-                      <th className="pb-3">Mes</th>
-                      <th className="pb-3 text-center">Tickets</th>
-                      <th className="pb-3 text-right">Facturado</th>
-                      <th className="pb-3 text-right">Gastos</th>
-                      <th className="pb-3 text-right">Comisiones</th>
-                      <th className="pb-3 text-right text-emerald-400">Ganancia Limpia</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-dark-800 font-mono">
-                    {monthlyHistory.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-dark-850/50 transition-colors">
-                        <td className="py-3 font-sans font-bold text-slate-200">{row.mesLabel}</td>
-                        <td className="py-3 text-center text-slate-400">{row.count}</td>
-                        <td className="py-3 text-right text-white font-semibold">${row.facturacion.toFixed(2)}</td>
-                        <td className="py-3 text-right text-red-400">-${row.gastos.toFixed(2)}</td>
-                        <td className="py-3 text-right text-amber-400">${row.comisiones.toFixed(2)}</td>
-                        <td className="py-3 text-right text-emerald-400 font-bold font-sans">
-                          ${row.lucro.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={handleCopyWeeklyActa}
+                        className="px-3 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-gold-400 border border-dark-700 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                        title="Copiar texto completo del acta semanal para WhatsApp"
+                      >
+                        {weeklyActaCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{weeklyActaCopied ? '¡Acta Copiada!' : 'Copiar Acta'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleShareWeeklyWhatsApp}
+                        className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-black flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20"
+                        title="Abrir WhatsApp con el acta de cierre semanal"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 stroke-[2.5]" />
+                        <span>Enviar WhatsApp</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-dark-800 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                          <th className="pb-3">Día</th>
+                          <th className="pb-3 text-center">Tickets</th>
+                          <th className="pb-3 text-right">Facturado</th>
+                          <th className="pb-3 text-right">Gastos</th>
+                          <th className="pb-3 text-right">Comisiones</th>
+                          <th className="pb-3 text-right text-emerald-400">Ganancia Limpia</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-dark-800 font-mono">
+                        {weekDaysData.map((d, idx) => (
+                          <tr key={idx} className="hover:bg-dark-850/50 transition-colors">
+                            <td className="py-3 font-sans font-bold text-slate-200">
+                              {d.dayName} <span className="text-[10px] text-slate-500 font-normal">({d.dayDateFmt})</span>
+                            </td>
+                            <td className="py-3 text-center text-slate-400">{d.count}</td>
+                            <td className="py-3 text-right text-white font-semibold">${d.facturacion.toFixed(2)}</td>
+                            <td className="py-3 text-right text-red-400">-${d.gastos.toFixed(2)}</td>
+                            <td className="py-3 text-right text-amber-400">${d.comisiones.toFixed(2)}</td>
+                            <td className="py-3 text-right text-emerald-400 font-bold font-sans">
+                              ${d.lucro.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="bg-dark-850/80 font-bold border-t-2 border-dark-700">
+                          <td className="py-3 px-1 font-sans text-white uppercase text-[11px] font-black">
+                            Total {periodFilter === 'prev_week' ? 'Semana Pasada' : 'Esta Semana'}
+                          </td>
+                          <td className="py-3 text-center text-white">{periodIncomeTx.length}</td>
+                          <td className="py-3 text-right text-white font-black">${periodTotalRevenueUSD.toFixed(2)}</td>
+                          <td className="py-3 text-right text-red-400 font-black">-${periodTotalExpensesUSD.toFixed(2)}</td>
+                          <td className="py-3 text-right text-amber-400 font-black">${periodTotalCommissionsUSD.toFixed(2)}</td>
+                          <td className="py-3 text-right text-emerald-400 font-black text-sm">
+                            ${periodNetProfitUSD.toFixed(2)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <h3 className="font-bold text-white text-base">Cuentas Mes a Mes (Historial Consolidado)</h3>
+                    <p className="text-xs text-slate-400">Facturación real, gastos del local, comisiones y ganancia neta</p>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-dark-800 text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                          <th className="pb-3">Mes</th>
+                          <th className="pb-3 text-center">Tickets</th>
+                          <th className="pb-3 text-right">Facturado</th>
+                          <th className="pb-3 text-right">Gastos</th>
+                          <th className="pb-3 text-right">Comisiones</th>
+                          <th className="pb-3 text-right text-emerald-400">Ganancia Limpia</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-dark-800 font-mono">
+                        {monthlyHistory.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-dark-850/50 transition-colors">
+                            <td className="py-3 font-sans font-bold text-slate-200">{row.mesLabel}</td>
+                            <td className="py-3 text-center text-slate-400">{row.count}</td>
+                            <td className="py-3 text-right text-white font-semibold">${row.facturacion.toFixed(2)}</td>
+                            <td className="py-3 text-right text-red-400">-${row.gastos.toFixed(2)}</td>
+                            <td className="py-3 text-right text-amber-400">${row.comisiones.toFixed(2)}</td>
+                            <td className="py-3 text-right text-emerald-400 font-bold font-sans">
+                              ${row.lucro.toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Category Breakdown (Col 3) */}

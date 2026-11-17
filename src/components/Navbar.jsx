@@ -171,12 +171,21 @@ export default function Navbar({
             {/* Desktop Only CTAs */}
             <div className="hidden md:flex items-center gap-2">
               <button
-                onClick={onOpenDailyCloseModal}
+                onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('today')}
                 className="px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all flex items-center gap-1.5"
                 title="Cuadre y Arqueo Diario de Caja"
               >
                 <Calculator className="w-3.5 h-3.5 text-purple-400" />
                 <span>Cuadre</span>
+              </button>
+
+              <button
+                onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
+                className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                title="Cuadre y Cierre Semanal de Caja (Lunes a Domingo)"
+              >
+                <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                <span>Semanal</span>
               </button>
 
               <button
@@ -441,13 +450,27 @@ export default function Navbar({
                 <button
                   onClick={() => {
                     setIsMobileMenuOpen(false)
-                    onOpenDailyCloseModal()
+                    onOpenDailyCloseModal && onOpenDailyCloseModal('today')
                   }}
                   className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
                 >
                   <div className="flex items-center gap-2.5">
                     <Calculator className="w-4 h-4 text-purple-400" />
-                    <span>Cuadre Diario (Arqueo)</span>
+                    <span>Cuadre Diario (Arqueo de Gaveta)</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    setIsMobileMenuOpen(false)
+                    onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-purple-300 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Calendar className="w-4 h-4 text-purple-400" />
+                    <span>Cuadre Semanal (Lunes a Domingo)</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
                 </button>

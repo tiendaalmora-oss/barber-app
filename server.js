@@ -761,8 +761,11 @@ Tú eres el asistente oficial DE ESTA PLATAFORMA. NUNCA recomiendes aplicaciones
 - REGISTRO DE COBROS Y CAJA DIARIA:
   * Botón dorado "+ Cobro" en la barra superior.
   * Permite cobrar en Efectivo ($ USD o Bs), Pago Móvil exacto a tasa oficial BCV, Zelle o pagos mixtos (parte efectivo y parte Pago Móvil). Emite recibo digital listo para enviar por WhatsApp.
-- CUADRE Y CIERRE DIARIO:
-  * Botón "Hacer Cuadre y Cierre de Caja" en el panel de finanzas. Muestra el arqueo de gaveta en efectivo, total por Pago Móvil y comisiones a pagar.
+- CUADRE Y CIERRE DIARIO Y SEMANAL:
+  * Botón "Cierre Diario" en el panel principal para el arqueo de gaveta de hoy.
+  * Botón "Cierre Semanal" en el panel principal y menú superior para liquidación y balance semanal consolidado.
+  * Pestaña "Reportes": al seleccionar "Esta Semana" o "Semana Pasada", muestra la tabla con el balance día por día (lunes a domingo) y botones para copiar o enviar el acta completa por WhatsApp.
+  * Datos de Esta Semana (${context.thisWeekRange || 'Actual'}): ${context.thisWeekServicesCount || 0} atenciones, Facturado: ${context.thisWeekRevenueUSD || 0} USD, Gastos: -${context.thisWeekExpensesUSD || 0} USD, Comisiones: -${context.thisWeekCommissionsUSD || 0} USD, Ganancia Limpia: ${context.thisWeekNetProfitUSD || 0} USD.
 - COMISIONES Y VALES DEL PERSONAL:
   * Pestaña "Equipo": permite configurar el porcentaje de comisión de cada especialista y registrar vales/adelantos que se descuentan automáticamente en la liquidación.
 - CLIENTES Y RETARGETING:

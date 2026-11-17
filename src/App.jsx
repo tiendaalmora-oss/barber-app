@@ -333,6 +333,11 @@ export default function App() {
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isDailyCloseModalOpen, setIsDailyCloseModalOpen] = useState(false)
+  const [dailyClosePeriod, setDailyClosePeriod] = useState('today')
+  const handleOpenDailyCloseModal = (period = 'today') => {
+    setDailyClosePeriod(typeof period === 'string' ? period : 'today')
+    setIsDailyCloseModalOpen(true)
+  }
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState('local')
   const [isOnline, setIsOnline] = useState(() => typeof navigator !== 'undefined' ? navigator.onLine : true)
@@ -1765,7 +1770,7 @@ export default function App() {
         onOpenCashModal={() => setIsCashModalOpen(true)}
         onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
-        onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
+        onOpenDailyCloseModal={handleOpenDailyCloseModal}
         onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
         onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
         onLogout={handleLogout}
@@ -1859,12 +1864,21 @@ export default function App() {
           {/* Quick Access to Cuadre and Settings */}
           <div className="pt-3 border-t border-dark-800 space-y-1.5">
             <button
-              onClick={() => setIsDailyCloseModalOpen(true)}
+              onClick={() => handleOpenDailyCloseModal('today')}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/25 text-xs font-bold transition-all text-left shadow-sm"
               title="Realizar el Cuadre y Arqueo Físico de Caja"
             >
               <Calculator className="w-4 h-4 shrink-0 text-purple-400" />
               <span>Cuadre Diario (Arqueo)</span>
+            </button>
+
+            <button
+              onClick={() => handleOpenDailyCloseModal('this_week')}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25 text-xs font-bold transition-all text-left shadow-sm"
+              title="Realizar el Cuadre y Cierre Semanal de Caja"
+            >
+              <Calendar className="w-4 h-4 shrink-0 text-indigo-400" />
+              <span>Cuadre Semanal</span>
             </button>
 
             <button
@@ -1909,7 +1923,7 @@ export default function App() {
               onOpenCashModal={() => setIsCashModalOpen(true)}
               onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
-              onOpenDailyCloseModal={() => setIsDailyCloseModalOpen(true)}
+              onOpenDailyCloseModal={handleOpenDailyCloseModal}
               onDeleteTransaction={handleDeleteTransaction}
               nicheData={nicheData}
             />
@@ -2061,6 +2075,7 @@ export default function App() {
         staffList={currentStaff}
         onSaveDailyClose={handleSaveDailyClose}
         onResetDay={handleSaveDailyClose}
+        initialPeriod={dailyClosePeriod}
       />
 
       {/* Payment / Subscription Modal (When in 24h trial and clicking "Activar mes completo") */}
