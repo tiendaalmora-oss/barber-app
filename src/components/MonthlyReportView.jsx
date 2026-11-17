@@ -39,6 +39,7 @@ export default function MonthlyReportView({
   const [staffFilter, setStaffFilter] = useState('all')
   const [viewingReceiptTx, setViewingReceiptTx] = useState(null)
   const [copiedCloseId, setCopiedCloseId] = useState(null)
+  const [weeklyActaCopied, setWeeklyActaCopied] = useState(false)
 
   const now = new Date()
   const currentYear = now.getFullYear()
@@ -92,6 +93,98 @@ export default function MonthlyReportView({
   const periodTotalExpensesUSD = Math.abs(periodExpenseTx.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0))
   const periodTotalCommissionsUSD = periodIncomeTx.reduce((sum, t) => sum + Number(t.comision_usd || 0), 0)
   const periodNetProfitUSD = Math.max(0, periodTotalRevenueUSD - periodTotalExpensesUSD - periodTotalCommissionsUSD)
+
+  // Weekly breakdown calculation when periodFilter is 'this_week' or 'prev_week'
+  const isWeeklyPeriod = periodFilter === 'this_week' || periodFilter === 'prev_week'
+  const weekOffset = periodFilter === 'prev_week' ? -1 : 0
+  const activeWeekBounds = typeof getWeekBoundsLocal === 'function' ? getWeekBoundsLocal(weekOffset) : { startIso: '', endIso: '', rangeLabel: '' }
+
+  // 7 days breakdown for chosen week (Monday to Sunday)
+  const weekDaysData = (() => {
+    if (!isWeeklyPeriod || !activeWeekBounds.startIso) return []
+    const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+    const parts = (activeWeekBounds.startIso || '').split('-')
+    if (parts.length < 3) return []
+    const startYear = parseInt(parts[0], 10)
+    const startMonth = parseInt(parts[1], 10) - 1
+    const startDay = parseInt(parts[2], 10)
+
+    const list = []
+    for (let i = 0; i < 7; i++) {
+      const cur = new Date(startYear, startMonth, startDay + i)
+      const iso = getLocalDateIso(cur)
+      const dayTxs = safeTransactions.filter(t => t && getLocalDateIso(t.fecha) === iso)
+      const incomeTxs = dayTxs.filter(t => (t.monto_usd || 0) > 0)
+      const expenseTxs = dayTxs.filter(t => (t.monto_usd || 0) < 0)
+      const facturacion = incomeTxs.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0)
+      const gastos = Math.abs(expenseTxs.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0))
+      const comisiones = incomeTxs.reduce((sum, t) => sum + Number(t.comision_usd || 0), 0)
+      const lucro = Math.max(0, facturacion - gastos - comisiones)
+      const count = incomeTxs.length
+      const dayDateFmt = `${String(cur.getDate()).padStart(2, '0')}/${String(cur.getMonth() + 1).padStart(2, '0')}`
+
+      list.push({
+        dayName: dayNames[i],
+        dayDateFmt,
+        iso,
+        facturacion,
+        gastos,
+        comisiones,
+        lucro,
+        count
+      })
+    }
+    return list
+  })()
+
+  const generateWeeklyClosingText = () => {
+    const bizName = businessProfile?.businessName || 'Mi Negocio'
+    const weekLabel = periodFilter === 'prev_week'
+      ? `Semana Pasada (${activeWeekBounds.rangeLabel})`
+      : `Esta Semana (${activeWeekBounds.rangeLabel})`
+
+    let msg = `💈 *ACTA DE CIERRE SEMANAL DE CAJA • ${bizName.toUpperCase()}*\n`
+    msg += `📆 *Período:* ${weekLabel} (Lun - Dom)\n`
+    msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    msg += `------------------------------------\n\n`
+    msg += `💰 *TOTAL FACTURADO:* *${periodTotalRevenueUSD.toFixed(2)} USD* (Bs. ${(periodTotalRevenueUSD * exchangeRate).toFixed(2)})\n`
+    msg += `📉 *GASTOS DEL LOCAL:* *-${periodTotalExpensesUSD.toFixed(2)} USD* (Bs. ${(periodTotalExpensesUSD * exchangeRate).toFixed(2)})\n`
+    msg += `✂️ *COMISIONES EQUIPO:* *-${periodTotalCommissionsUSD.toFixed(2)} USD*\n`
+    msg += `------------------------------------\n`
+    msg += `🏆 *GANANCIA LIMPIA EN BOLSILLO:* 👉 *${periodNetProfitUSD.toFixed(2)} USD* (Bs. ${(periodNetProfitUSD * exchangeRate).toFixed(2)})\n\n`
+
+    msg += `📅 *DESGLOSE DÍA A DÍA:*\n`
+    weekDaysData.forEach(d => {
+      if (d.count > 0 || d.facturacion > 0 || d.gastos > 0) {
+        msg += `• *${d.dayName} (${d.dayDateFmt}):* ${d.count} tickets → Entró $${d.facturacion.toFixed(2)} | Gastos -$${d.gastos.toFixed(2)} | Ganancia: *$${d.lucro.toFixed(2)} USD*\n`
+      } else {
+        msg += `• *${d.dayName} (${d.dayDateFmt}):* Sin movimientos\n`
+      }
+    })
+
+    msg += `\n⚡ *Total Atenciones en la Semana:* ${periodIncomeTx.length} clientes\n`
+    const brandName = typeof getActiveBrand === 'function' ? getActiveBrand().name : 'BarberOS'
+    msg += `📲 *Generado automáticamente con ${brandName}*`
+    return msg
+  }
+
+  const handleShareWeeklyWhatsApp = () => {
+    const text = generateWeeklyClosingText()
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
+    const url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, '_blank')
+  }
+
+  const handleCopyWeeklyActa = () => {
+    const text = generateWeeklyClosingText()
+    navigator.clipboard.writeText(text).then(() => {
+      setWeeklyActaCopied(true)
+      setTimeout(() => setWeeklyActaCopied(false), 2500)
+    })
+  }
+
 
   // Monthly History Breakdown (for Summary Tab)
   const monthlyMap = {}
