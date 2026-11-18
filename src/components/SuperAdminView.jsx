@@ -69,6 +69,7 @@ export default function SuperAdminView({
 
   // Manual tenant creation / edit form
   const [newProduct, setNewProduct] = useState('barberia_saas')
+  const [newCountry, setNewCountry] = useState('VE')
   const [newBiz, setNewBiz] = useState('')
   const [newOwner, setNewOwner] = useState('')
   const [newEmail, setNewEmail] = useState('')
@@ -83,8 +84,12 @@ export default function SuperAdminView({
   const glamosBaseUrl = 'https://glamos.ingenioos.online'
   const barberRegUrl = `${barberBaseUrl}/?registro=1`
   const glamosRegUrl = `${glamosBaseUrl}/?registro=1`
+  const barberArRegUrl = `${barberBaseUrl}/?pais=ar&registro=1`
+  const glamosArRegUrl = `${glamosBaseUrl}/?pais=ar&registro=1`
   const [copiedBarberLink, setCopiedBarberLink] = useState(false)
   const [copiedGlamLink, setCopiedGlamLink] = useState(false)
+  const [copiedBarberArLink, setCopiedBarberArLink] = useState(false)
+  const [copiedGlamArLink, setCopiedGlamArLink] = useState(false)
 
   const handleCopyBarberLink = () => {
     navigator.clipboard.writeText(barberRegUrl)
@@ -96,6 +101,18 @@ export default function SuperAdminView({
     navigator.clipboard.writeText(glamosRegUrl)
     setCopiedGlamLink(true)
     setTimeout(() => setCopiedGlamLink(false), 2500)
+  }
+
+  const handleCopyBarberArLink = () => {
+    navigator.clipboard.writeText(barberArRegUrl)
+    setCopiedBarberArLink(true)
+    setTimeout(() => setCopiedBarberArLink(false), 2500)
+  }
+
+  const handleCopyGlamArLink = () => {
+    navigator.clipboard.writeText(glamosArRegUrl)
+    setCopiedGlamArLink(true)
+    setTimeout(() => setCopiedGlamArLink(false), 2500)
   }
 
   const handleShareBarberWhatsApp = () => {
@@ -115,6 +132,7 @@ export default function SuperAdminView({
   const openCreateModal = () => {
     setEditingTenant(null)
     setNewProduct(selectedProduct === 'all' ? 'barberia_saas' : selectedProduct)
+    setNewCountry('VE')
     setNewBiz('')
     setNewOwner('')
     setNewEmail('')
@@ -129,7 +147,9 @@ export default function SuperAdminView({
 
   const openEditModal = (t) => {
     setEditingTenant(t)
+    const detectedCountry = t.country || (String(t.phone || '').replace(/\D/g, '').startsWith('54') ? 'AR' : 'VE')
     setNewProduct(t.saasProduct || 'barberia_saas')
+    setNewCountry(detectedCountry)
     setNewBiz(t.businessName)
     setNewOwner(t.ownerName)
     setNewEmail(t.email)
@@ -363,11 +383,16 @@ export default function SuperAdminView({
 
   const handleWhatsAppOwner = (tenant) => {
     const cleanPhone = normalizeWhatsAppPhone(tenant.phone || '')
+    const isArTenant = tenant.country === 'AR' || String(tenant.phone || '').replace(/\D/g, '').startsWith('54')
     const price = saasConfig.monthlyPriceUsd || 6
     const priceBs = saasConfig.monthlyPriceBsFixed || '6.024'
+    const priceArs = saasConfig.monthlyPriceArsFixed || '9.800'
+    const priceInline = isArTenant ? `$${priceArs} ARS` : `$${price} USDT / ${priceBs} Bs`
     const isGlamTenant = tenant.saasProduct === 'glamos_saas' || tenant.niche === 'estetica'
     const brandName = isGlamTenant ? 'GlamOS' : 'BarberOS'
-    const brandUrl = isGlamTenant ? `${glamosBaseUrl}/?login=1` : `${barberBaseUrl}/?login=1`
+    const brandUrl = isGlamTenant
+      ? `${glamosBaseUrl}/${isArTenant ? '?pais=ar&login=1' : '?login=1'}`
+      : `${barberBaseUrl}/${isArTenant ? '?pais=ar&login=1' : '?login=1'}`
     let msg = ''
 
     if (tenant.status === 'activo' && tenant.isTrial24h) {
@@ -377,16 +402,26 @@ export default function SuperAdminView({
         `🔑 *Clave:* ${tenant.password || '123'}\n\n` +
         `Tienes acceso completo durante las próximas 24 horas para registrar cobros, probar la caja, turnos y tu catálogo online. ¡Pruébalo con calma y cualquier duda me escribes por aquí!`
     } else if (tenant.status === 'pendiente_pago') {
-      msg = `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* en *${brandName}* con el correo *${tenant.email}*.\n\n` +
-        `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${price} USDT* (${priceBs} Bs).\n\n` +
-        `🏦 *Banco:* ${saasConfig.pagoMovilBank || 'Banco de Venezuela (0102)'}\n` +
-        `👤 *Titular:* ${saasConfig.pagoMovilHolder || 'Carlos Rojas'}\n` +
-        `🪪 *Cédula:* ${saasConfig.pagoMovilId || '17.907.078'}\n` +
-        `📱 *Teléfono:* ${saasConfig.pagoMovilPhone || '04242061590'}\n` +
-        `💳 *Cuenta:* ${saasConfig.pagoMovilAccount || '01020213260000172378'}\n\n` +
-        `🟡 *Binance ID:* ${saasConfig.binanceIdOnly || '92423494'} (IngenioOS)\n` +
-        `⛓️ *BNB Smart Chain (BEP20):* ${saasConfig.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa'}\n\n` +
-        `Apenas me pases el capture por aquí te activo el acceso de inmediato.`
+      msg = isArTenant
+        ? `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* en *${brandName}* con el correo *${tenant.email}*.\n\n` +
+          `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${priceArs} ARS*.\n\n` +
+          `🇦🇷 *Mercado Pago / Transferencia:*\n` +
+          `🏦 *Banco / Billetera:* ${saasConfig.argBank || 'Mercado Pago / Transferencia CBU-CVU'}\n` +
+          `👤 *Titular:* ${saasConfig.argHolder || 'Roberto / Ingenio OS'}\n` +
+          `🏷️ *Alias:* ${saasConfig.argAlias || 'ingenio.os.mp'}\n` +
+          `💳 *CVU / CBU:* ${saasConfig.argCvu || '0000003100000000000000'}\n\n` +
+          `🟡 *Binance ID:* ${saasConfig.binanceIdOnly || '92423494'} (IngenioOS)\n\n` +
+          `Apenas me pases el comprobante por aquí te activo el acceso de inmediato.`
+        : `👋 ¡Hola *${tenant.ownerName}*! Vi que registraste tu cuenta de *${tenant.businessName}* en *${brandName}* con el correo *${tenant.email}*.\n\n` +
+          `Para activarte tus *30 días completos* (con los *${saasConfig.guaranteeDays} días de Garantía de Reembolso*), el monto es de *$${price} USDT* (${priceBs} Bs).\n\n` +
+          `🏦 *Banco:* ${saasConfig.pagoMovilBank || 'Banco de Venezuela (0102)'}\n` +
+          `👤 *Titular:* ${saasConfig.pagoMovilHolder || 'Carlos Rojas'}\n` +
+          `🪪 *Cédula:* ${saasConfig.pagoMovilId || '17.907.078'}\n` +
+          `📱 *Teléfono:* ${saasConfig.pagoMovilPhone || '04242061590'}\n` +
+          `💳 *Cuenta:* ${saasConfig.pagoMovilAccount || '01020213260000172378'}\n\n` +
+          `🟡 *Binance ID:* ${saasConfig.binanceIdOnly || '92423494'} (IngenioOS)\n` +
+          `⛓️ *BNB Smart Chain (BEP20):* ${saasConfig.bep20Address || '0xf34fe548272f23d363462ba2685f92932ddbd7aa'}\n\n` +
+          `Apenas me pases el capture por aquí te activo el acceso de inmediato.`
     } else if (tenant.status === 'activo') {
       msg = `✅ ¡Listo *${tenant.ownerName}*! Ya verificamos tu pago y activamos los *30 días* de *${tenant.businessName}* en *${brandName}*.\n\n` +
         `👉 *Entra aquí:* ${brandUrl}\n` +
@@ -396,10 +431,10 @@ export default function SuperAdminView({
     } else {
       if (tenant.isTrial24h || tenant.lastPaymentRef === 'Prueba 24 Horas') {
         msg = `👋 ¡Hola *${tenant.ownerName}*! Se cumplieron las 24 horas de prueba de tu sistema para *${tenant.businessName}*.\n\n` +
-          `Todos tus datos y clientes quedaron guardados intactos. ¿Qué tal te pareció? Si deseas activar el mes completo (*$${price} USDT / ${priceBs} Bs* con tus ${saasConfig.guaranteeDays} días de garantía de reembolso), avísame por aquí y te reactivo en 1 minuto.`
+          `Todos tus datos y clientes quedaron guardados intactos. ¿Qué tal te pareció? Si deseas activar el mes completo (*${priceInline}* con tus ${saasConfig.guaranteeDays} días de garantía de reembolso), avísame por aquí y te reactivo en 1 minuto.`
       } else {
-        msg = `👋 ¡Épale *${tenant.ownerName}*! Te escribo para avisarte que se cumplieron los 30 días de suscripción del sistema de *${tenant.businessName}*.\n\n` +
-          `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*$${price} USDT / ${priceBs} Bs*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
+        msg = `👋 ¡Hola *${tenant.ownerName}*! Te escribo para avisarte que se cumplieron los 30 días de suscripción del sistema de *${tenant.businessName}*.\n\n` +
+          `Todos tus clientes, turnos y cuentas están guardados. Para renovar tu mes (*${priceInline}*), puedes enviarme el comprobante por aquí y te reactivo en 1 minuto.`
       }
     }
 
@@ -436,6 +471,7 @@ export default function SuperAdminView({
       onUpdateTenant({
         ...editingTenant,
         saasProduct: newProduct,
+        country: newCountry,
         businessName: newBiz.trim(),
         ownerName: newOwner.trim() || 'Dueño',
         email: newEmail.trim().toLowerCase(),
@@ -453,6 +489,7 @@ export default function SuperAdminView({
       const created = {
         id: 'ten_' + Date.now(),
         saasProduct: newProduct,
+        country: newCountry,
         businessName: newBiz.trim(),
         ownerName: newOwner.trim() || 'Dueño',
         email: newEmail.trim().toLowerCase(),
@@ -810,6 +847,18 @@ export default function SuperAdminView({
                 <span>WhatsApp</span>
               </button>
             </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dark-800/70">
+              <span className="text-[10px] text-sky-400 font-bold">
+                🇦🇷 Argentina ($9.800 ARS): <code className="text-slate-300 font-mono">ar.barber.ingenioos.online</code>
+              </span>
+              <button
+                onClick={handleCopyBarberArLink}
+                className="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1"
+              >
+                {copiedBarberArLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedBarberArLink ? '¡Link AR Copiado!' : '🇦🇷 Copiar Link Argentina'}</span>
+              </button>
+            </div>
           </div>
 
           {/* GlamOS Registration Card */}
@@ -845,6 +894,18 @@ export default function SuperAdminView({
               >
                 <Share2 className="w-3.5 h-3.5" />
                 <span>WhatsApp</span>
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-dark-800/70">
+              <span className="text-[10px] text-sky-400 font-bold">
+                🇦🇷 Argentina ($9.800 ARS): <code className="text-slate-300 font-mono">ar.glamos.ingenioos.online</code>
+              </span>
+              <button
+                onClick={handleCopyGlamArLink}
+                className="px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1"
+              >
+                {copiedGlamArLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedGlamArLink ? '¡Link AR Copiado!' : '🇦🇷 Copiar Link Argentina'}</span>
               </button>
             </div>
           </div>
@@ -1022,6 +1083,70 @@ export default function SuperAdminView({
                   onChange={(e) => setConfigForm({ ...configForm, bep20Address: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
                 />
+              </div>
+            </div>
+
+            {/* Datos de Cobro Argentina ($ ARS) */}
+            <div className="pt-3 border-t border-dark-800 space-y-2.5">
+              <div className="text-xs font-black text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🇦🇷 Datos de Cobro Argentina ($ ARS — Mercado Pago / CBU)</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Precio Mensual ($ ARS)
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.monthlyPriceArsFixed || '9.800'}
+                    onChange={(e) => setConfigForm({ ...configForm, monthlyPriceArsFixed: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-sky-500/40 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Banco / Billetera AR
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.argBank || 'Mercado Pago / Transferencia CBU-CVU'}
+                    onChange={(e) => setConfigForm({ ...configForm, argBank: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Titular Cuenta AR
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.argHolder || 'Roberto / Ingenio OS'}
+                    onChange={(e) => setConfigForm({ ...configForm, argHolder: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-emerald-400 mb-1">
+                    Alias Mercado Pago / CBU
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.argAlias || 'ingenio.os.mp'}
+                    onChange={(e) => setConfigForm({ ...configForm, argAlias: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    CVU / CBU (22 díg)
+                  </label>
+                  <input
+                    type="text"
+                    value={configForm.argCvu || '0000003100000000000000'}
+                    onChange={(e) => setConfigForm({ ...configForm, argCvu: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono"
+                  />
+                </div>
               </div>
             </div>
 
@@ -1482,19 +1607,39 @@ export default function SuperAdminView({
             </div>
 
             <form onSubmit={handleSaveTenantForm} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-purple-400 mb-1">Producto SaaS (Sistema)</label>
-                <select
-                  value={newProduct}
-                  onChange={(e) => setNewProduct(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-purple-500/40 text-xs text-white font-bold"
-                >
-                  {SAAS_PRODUCTS.filter(p => p.id !== 'all').map(prod => (
-                    <option key={prod.id} value={prod.id}>
-                      {prod.label} ({prod.domain})
-                    </option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-xs font-bold text-purple-400 mb-1">Producto SaaS (Sistema)</label>
+                  <select
+                    value={newProduct}
+                    onChange={(e) => setNewProduct(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-purple-500/40 text-xs text-white font-bold"
+                  >
+                    {SAAS_PRODUCTS.filter(p => p.id !== 'all').map(prod => (
+                      <option key={prod.id} value={prod.id}>
+                        {prod.label} ({prod.domain})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-sky-400 mb-1">País / Moneda</label>
+                  <select
+                    value={newCountry}
+                    onChange={(e) => {
+                      const nextCountry = e.target.value
+                      setNewCountry(nextCountry)
+                      if (!editingTenant) {
+                        if (nextCountry === 'AR' && (newPhone === '+58412' || !newPhone.trim())) setNewPhone('+54911')
+                        if (nextCountry === 'VE' && (newPhone === '+54911' || !newPhone.trim())) setNewPhone('+58412')
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-sky-500/40 text-xs text-white font-bold"
+                  >
+                    <option value="VE">🇻🇪 Venezuela ($ / Bs)</option>
+                    <option value="AR">🇦🇷 Argentina ($ ARS)</option>
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">Nombre del Local</label>

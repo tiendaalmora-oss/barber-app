@@ -4,7 +4,7 @@ import {
   ChevronDown, Flame, ShieldAlert, DollarSign, ArrowRight
 } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso } from '../lib/dateUtils'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function CopilotChatWidget({
   activeTenant,
@@ -28,6 +28,9 @@ export default function CopilotChatWidget({
   const bizName = businessProfile?.businessName || (isGlamBrand ? 'Mi Salón' : 'Mi Barbería')
 
   const tenantId = activeTenant?.id || 'anon'
+  const isAr = isArgentina(activeTenant, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
 
   // Initial welcome message
   const initialMessages = [
@@ -120,6 +123,7 @@ export default function CopilotChatWidget({
       businessName: bizName,
       brandName: brand.name,
       isSalon: isGlamBrand,
+      country: isAr ? 'AR' : 'VE',
       publicBookingUrl,
       exchangeRate,
       todayServicesCount,
@@ -167,16 +171,20 @@ export default function CopilotChatWidget({
       if (userText.toLowerCase().includes('link') || userText.toLowerCase().includes('agenda') || userText.toLowerCase().includes('reserva') || userText.toLowerCase().includes('catálogo') || userText.toLowerCase().includes('catalogo')) {
         fallbackText = `Para obtener el link de su agenda web de reservas:\n\n1. Ingrese a la pestaña "Catálogo" en el menú.\n2. En la parte superior verá la sección "Link Público de Reservas".\n3. Pulse "Copiar Link" para colocarlo en su biografía de Instagram o estados, o pulse "Compartir en WhatsApp" para enviarlo directamente a sus clientes.\n\nSu enlace directo es:\n${publicBookingUrl || 'Disponible en el menú Catálogo'}`
       } else if (userText.toLowerCase().includes('fiado') || userText.toLowerCase().includes('deuda') || userText.toLowerCase().includes('saldo') || userText.toLowerCase().includes('cobrar')) {
-        fallbackText = `Para gestionar un saldo pendiente con educación y efectividad, puede utilizar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"`
+        fallbackText = isAr
+          ? `Para gestionar un saldo pendiente con educación y efectividad, puede utilizar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el comprobante por Mercado Pago o transferencia del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Buen día!"`
+          : `Para gestionar un saldo pendiente con educación y efectividad, puede utilizar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"`
       } else if (userText.toLowerCase().includes('promo') || userText.toLowerCase().includes('tarde')) {
         fallbackText = `Para incentivar las citas de la tarde, puede publicar este mensaje en sus estados:\n\n"¡Buenas tardes! Disponemos de 2 turnos especiales para hoy a las 4:00 PM y 5:30 PM en ${bizName}. Reserve su espacio cómodamente en nuestro enlace web: ${publicBookingUrl || '[Su Enlace de Catálogo]'}"`
       } else if (userText.toLowerCase().includes('reactivar') || userText.toLowerCase().includes('inactivo') || userText.toLowerCase().includes('semanas')) {
         fallbackText = `Para reactivar clientes que tienen tiempo sin visitarle, puede enviarles este mensaje:\n\n"¡Hola! 👋 Teníamos tiempo sin verle por ${bizName}. Esperamos que todo marche excelente. Si desea agendar su cita esta semana, avísenos con gusto para reservarle su espacio preferido. ¡Saludos!"`
       } else if (userText.toLowerCase().includes('semanal') || userText.toLowerCase().includes('semana')) {
         const wb = getWeekBoundsLocal(0)
-        fallbackText = `Para consultar o realizar su Cierre Semanal:\n\n1. En la pantalla principal o menú superior cuenta con el botón morado "Cierre Semanal".\n2. También puede ingresar a la pestaña "Reportes", seleccionar "Esta Semana" y verá el balance día por día (de lunes a domingo) con botones para "Copiar Acta" o "Enviar WhatsApp".\n\nResumen de Esta Semana (${wb.rangeLabel}):\n• Facturación: ${thisWeekRevenueUSD.toFixed(2)} USD\n• Gastos: -${thisWeekExpensesUSD.toFixed(2)} USD\n• Comisiones: -${thisWeekCommissionsUSD.toFixed(2)} USD\n• Ganancia Limpia: ${thisWeekNetProfitUSD.toFixed(2)} USD (${thisWeekServicesCount} atenciones).`
+        fallbackText = `Para consultar o realizar su Cierre Semanal:\n\n1. En la pantalla principal o menú superior cuenta con el botón morado "Cierre Semanal".\n2. También puede ingresar a la pestaña "Reportes", seleccionar "Esta Semana" y verá el balance día por día (de lunes a domingo) con botones para "Copiar Acta" o "Enviar WhatsApp".\n\nResumen de Esta Semana (${wb.rangeLabel}):\n• Facturación: $${fmt(thisWeekRevenueUSD)} ${currTag}\n• Gastos: -$${fmt(thisWeekExpensesUSD)} ${currTag}\n• Comisiones: -$${fmt(thisWeekCommissionsUSD)} ${currTag}\n• Ganancia Limpia: $${fmt(thisWeekNetProfitUSD)} ${currTag} (${thisWeekServicesCount} atenciones).`
       } else if (userText.toLowerCase().includes('números') || userText.toLowerCase().includes('cómo voy')) {
-        fallbackText = `Hoy registra ${todayServicesCount} servicios con un total de ${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Mantiene ${debtors.length} clientes con saldo pendiente (${totalDebtUSD.toFixed(2)} USD).`
+        fallbackText = isAr
+          ? `Hoy registra ${todayServicesCount} servicios con un total de $${fmt(todayRevenueUSD)} ARS. Mantiene ${debtors.length} clientes con saldo pendiente ($${fmt(totalDebtUSD)} ARS).`
+          : `Hoy registra ${todayServicesCount} servicios con un total de ${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Mantiene ${debtors.length} clientes con saldo pendiente (${totalDebtUSD.toFixed(2)} USD).`
       }
 
       setMessages(prev => [...prev, {

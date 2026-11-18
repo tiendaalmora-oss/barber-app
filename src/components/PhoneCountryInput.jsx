@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { isArgentina } from '../lib/brandConfig'
 
 const COUNTRIES = [
   { id: '58', prefix: '+58', flag: '🇻🇪', label: 'Venezuela (+58)', placeholder: '0414 123 4567' },
@@ -9,8 +10,8 @@ const COUNTRIES = [
 /**
  * Parses any incoming phone string into { countryId, localDigits }
  */
-function parseIncomingPhone(raw) {
-  if (!raw) return { countryId: '58', localNumber: '' }
+function parseIncomingPhone(raw, defaultCountry = isArgentina() ? '54' : '58') {
+  if (!raw) return { countryId: defaultCountry, localNumber: '' }
   const str = String(raw).trim()
   const clean = str.replace(/[^0-9]/g, '')
 
@@ -44,7 +45,7 @@ function parseIncomingPhone(raw) {
     return { countryId: '54', localNumber: clean }
   }
 
-  return { countryId: '58', localNumber: clean }
+  return { countryId: defaultCountry, localNumber: clean }
 }
 
 /**
@@ -81,7 +82,7 @@ export default function PhoneCountryInput({
   isGlam = false,
   autoFocus = false
 }) {
-  const [selectedCountry, setSelectedCountry] = useState('58')
+  const [selectedCountry, setSelectedCountry] = useState(() => isArgentina() ? '54' : '58')
   const [localNumber, setLocalNumber] = useState('')
 
   // Sync internal state when external value changes

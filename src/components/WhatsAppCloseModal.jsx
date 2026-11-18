@@ -1,15 +1,19 @@
 import React, { useState } from 'react'
 import { X, MessageSquare, Copy, Check, ExternalLink, Send, Smartphone, ShieldCheck, Share2 } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function WhatsAppCloseModal({
   isOpen,
   onClose,
   transactions,
   exchangeRate,
-  nicheData
+  nicheData,
+  businessProfile = {}
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   const [phoneNumber, setPhoneNumber] = useState('')
   const [copied, setCopied] = useState(false)
   const [closePeriod, setClosePeriod] = useState('today') // 'today' | 'this_week' | 'prev_week'
@@ -80,27 +84,31 @@ export default function WhatsAppCloseModal({
   let messageLines = [
     `💈 *${isWeekly ? 'CIERRE SEMANAL DE CAJA' : 'CIERRE DE CAJA'} - ${appTitleStr}*`,
     isWeekly ? `📆 ${periodTitle.toUpperCase()} (LUN - DOM)` : `📅 ${dateStr.toUpperCase()} · 🕒 ${timeStr}`,
-    `💵 *Tasa del Día:* Bs. ${exchangeRate.toFixed(2)} / USD`,
+    !isAr ? `💵 *Tasa del Día:* Bs. ${exchangeRate.toFixed(2)} / USD` : null,
     `────────────────────────`,
-    `💰 *TOTAL FACTURADO:* $${totalIncomeUSD.toFixed(2)} USD (~Bs. ${totalIncomeBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
-    `✂️ *COMISIONES EQUIPO:* -$${totalCommissionsUSD.toFixed(2)} USD`,
-    `📉 *GASTOS DEL LOCAL:* -$${totalExpensesUSD.toFixed(2)} USD`,
+    isAr
+      ? `💰 *TOTAL FACTURADO:* ${fmt(totalIncomeUSD)} ARS`
+      : `💰 *TOTAL FACTURADO:* ${totalIncomeUSD.toFixed(2)} USD (~Bs. ${totalIncomeBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`,
+    `✂️ *COMISIONES EQUIPO:* -${fmt(totalCommissionsUSD)} ${currTag}`,
+    `📉 *GASTOS DEL LOCAL:* -${fmt(totalExpensesUSD)} ${currTag}`,
     `────────────────────────`,
-    `🚀 *GANANCIA LIMPIA DUEÑO:* $${netProfitUSD.toFixed(2)} USD`,
-    `👉 *(En Bolívares: Bs. ${netProfitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})*`,
+    `🚀 *GANANCIA LIMPIA DUEÑO:* ${fmt(netProfitUSD)} ${currTag}`,
+    !isAr ? `👉 *(En Bolívares: Bs. ${netProfitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})*` : null,
     `────────────────────────`,
     `📊 *MÉTODOS DE PAGO:*`,
-    `• Pago Móvil: $${pagoMovilUSD.toFixed(2)} USD (~Bs. ${(pagoMovilUSD * exchangeRate).toFixed(2)})`,
-    `• Efectivo $ (Gaveta): $${efectivoUSD.toFixed(2)} USD`,
-    puntoUSD > 0 ? `• Punto de Venta: $${puntoUSD.toFixed(2)} USD (~Bs. ${(puntoUSD * exchangeRate).toFixed(2)})` : null,
-    digitalUSD > 0 ? `• Zelle / Binance: $${digitalUSD.toFixed(2)} USD` : null,
-    fiadoUSD > 0 ? `• Fiados Registrados: $${fiadoUSD.toFixed(2)} USD` : null,
+    isAr
+      ? `• Mercado Pago / Transf.: ${fmt(pagoMovilUSD)} ARS`
+      : `• Pago Móvil: ${pagoMovilUSD.toFixed(2)} USD (~Bs. ${(pagoMovilUSD * exchangeRate).toFixed(2)})`,
+    `• ${isAr ? 'Efectivo (Caja)' : 'Efectivo $ (Gaveta)'}: ${fmt(efectivoUSD)} ${currTag}`,
+    puntoUSD > 0 ? (isAr ? `• Tarjeta / Point: ${fmt(puntoUSD)} ARS` : `• Punto de Venta: ${puntoUSD.toFixed(2)} USD (~Bs. ${(puntoUSD * exchangeRate).toFixed(2)})`) : null,
+    digitalUSD > 0 ? `• ${isAr ? 'Digital / USDT' : 'Zelle / Binance'}: ${fmt(digitalUSD)} ${currTag}` : null,
+    fiadoUSD > 0 ? `• Fiados Registrados: ${fmt(fiadoUSD)} ${currTag}` : null,
     `────────────────────────`,
     `👥 *LIQUIDACIÓN POR ${nicheData.rolePlural.toUpperCase()}:*`
   ].filter(Boolean)
 
   Object.entries(staffSummary).forEach(([name, data]) => {
-    messageLines.push(`• *${name}*: ${data.count} servicios → Comisión: $${data.commission.toFixed(2)} USD`)
+    messageLines.push(`• *${name}*: ${data.count} servicios → Comisión: ${fmt(data.commission)} ${currTag}`)
   })
 
   messageLines.push(`────────────────────────`)
@@ -236,11 +244,11 @@ export default function WhatsAppCloseModal({
               <span className="text-[10px] text-slate-400 block font-sans">
                 {isWeekly ? `Facturado (${periodTitle}):` : 'Facturado Hoy:'}
               </span>
-              <span className="text-sm font-black text-white font-mono">${totalIncomeUSD.toFixed(2)} USD</span>
+              <span className="text-sm font-black text-white font-mono">${fmt(totalIncomeUSD)} {currTag}</span>
             </div>
             <div className="bg-dark-950 p-2.5 rounded-xl border border-emerald-500/30">
               <span className="text-[10px] text-emerald-400 block font-sans">Ganancia Limpia:</span>
-              <span className="text-sm font-black text-emerald-400 font-mono">${netProfitUSD.toFixed(2)} USD</span>
+              <span className="text-sm font-black text-emerald-400 font-mono">${fmt(netProfitUSD)} {currTag}</span>
             </div>
           </div>
 

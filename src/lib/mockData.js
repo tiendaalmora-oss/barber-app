@@ -90,6 +90,81 @@ export const NICHES = {
   }
 }
 
+export const NICHES_AR = {
+  barberia: {
+    id: 'barberia',
+    name: 'Barbería',
+    appTitle: 'Mi Barbería',
+    icon: 'Scissors',
+    roleName: 'Barbero',
+    rolePlural: 'Barberos',
+    serviceUnit: 'Corte',
+    services: [
+      { id: 's1', name: 'Corte Clásico / Fade', price_usd: 12000, category: 'Cortes', duration_min: 30 },
+      { id: 's2', name: 'Corte + Barba', price_usd: 16000, category: 'Combos', duration_min: 45 },
+      { id: 's3', name: 'Arreglo de Barba', price_usd: 7000, category: 'Barba', duration_min: 30 },
+      { id: 's4', name: 'Perfilado de Cejas', price_usd: 3500, category: 'Cejas', duration_min: 15 },
+      { id: 's5', name: 'Corte Infantil (Niños)', price_usd: 10000, category: 'Cortes', duration_min: 30 },
+    ],
+    products: [
+      { id: 'p1', name: 'Pomada Mate Fijadora', price_usd: 10000, cost_usd: 5000, stock: 12, min_stock: 4, category: 'Productos', showInCatalog: true, imageUrl: 'https://images.unsplash.com/photo-1597854710119-a5a8fac0915f?w=200&h=200&fit=crop&q=80' },
+      { id: 'p2', name: 'Aceite para Barba', price_usd: 9500, cost_usd: 4500, stock: 6, min_stock: 3, category: 'Productos', showInCatalog: true, imageUrl: 'https://images.unsplash.com/photo-1626285861696-9f0bf5a49c6d?w=200&h=200&fit=crop&q=80' },
+    ],
+    staff: [
+      { id: 'e1', name: 'Mateo (Barbero)', commission_pct: 50, avatar: '✂️' },
+      { id: 'e2', name: 'Lucas Cortes', commission_pct: 50, avatar: '💈' },
+    ]
+  },
+  estetica: {
+    id: 'estetica',
+    name: 'Peluquería & Uñas',
+    appTitle: 'Mi Salón & Estética',
+    icon: 'Sparkles',
+    roleName: 'Especialista',
+    rolePlural: 'Especialistas',
+    serviceUnit: 'Atención',
+    services: [
+      { id: 'es1', name: 'Semipermanente Manos', price_usd: 14000, category: 'Uñas', duration_min: 60 },
+      { id: 'es2', name: 'Kapping Gel / Nivelación', price_usd: 18000, category: 'Uñas', duration_min: 75 },
+      { id: 'es3', name: 'Esculpidas Polygel / Acrílico', price_usd: 24000, category: 'Uñas', duration_min: 120 },
+      { id: 'es4', name: 'Belleza de Pies', price_usd: 15000, category: 'Uñas', duration_min: 60 },
+      { id: 'es5', name: 'Lifting de Pestañas', price_usd: 16000, category: 'Pestañas', duration_min: 60 },
+    ],
+    products: [
+      { id: 'ep1', name: 'Aceite de Cutículas', price_usd: 6500, cost_usd: 3000, stock: 15, min_stock: 5, category: 'Productos' },
+      { id: 'ep2', name: 'Crema Hidratante Manos', price_usd: 8500, cost_usd: 4000, stock: 8, min_stock: 4, category: 'Productos' },
+    ],
+    staff: [
+      { id: 'ee1', name: 'Valentina Uñas', commission_pct: 50, avatar: '💅' },
+      { id: 'ee2', name: 'Camila Estilista', commission_pct: 55, avatar: '✨' },
+    ]
+  },
+  mixto: {
+    id: 'mixto',
+    name: 'Barbería & Salón (Mixto)',
+    appTitle: 'Mi Negocio (Barbería & Salón)',
+    icon: 'Store',
+    roleName: 'Profesional',
+    rolePlural: 'Equipo (Barberos & Estilistas)',
+    serviceUnit: 'Atención',
+    services: [
+      { id: 's1', name: 'Corte Clásico / Fade', price_usd: 12000, category: 'Barbería', duration_min: 30 },
+      { id: 's2', name: 'Corte + Barba', price_usd: 16000, category: 'Barbería', duration_min: 45 },
+      { id: 'es1', name: 'Semipermanente Manos', price_usd: 14000, category: 'Salón', duration_min: 60 },
+      { id: 'es2', name: 'Kapping Gel / Nivelación', price_usd: 18000, category: 'Salón', duration_min: 75 },
+      { id: 'es5', name: 'Lifting de Pestañas', price_usd: 16000, category: 'Salón', duration_min: 60 },
+    ],
+    products: [
+      { id: 'p1', name: 'Pomada Mate Fijadora', price_usd: 10000, cost_usd: 5000, stock: 12, min_stock: 4, category: 'Barbería' },
+      { id: 'ep1', name: 'Aceite de Cutículas', price_usd: 6500, cost_usd: 3000, stock: 15, min_stock: 5, category: 'Salón' },
+    ],
+    staff: [
+      { id: 'e1', name: 'Mateo (Barbero)', commission_pct: 50, avatar: '✂️' },
+      { id: 'ee1', name: 'Valentina (Uñas & Estética)', commission_pct: 50, avatar: '💅' },
+    ]
+  }
+}
+
 const getDateDaysAgo = (days) => {
   const d = new Date()
   d.setDate(d.getDate() - days)
@@ -923,7 +998,12 @@ export const INITIAL_SAAS_CONFIG = {
   binanceEmail: 'ID: 92423494 (IngenioOS)',
   binanceIdOnly: '92423494',
   zelleInfo: 'BNB Smart Chain (BEP20): 0xf34fe548272f23d363462ba2685f92932ddbd7aa',
-  bep20Address: '0xf34fe548272f23d363462ba2685f92932ddbd7aa'
+  bep20Address: '0xf34fe548272f23d363462ba2685f92932ddbd7aa',
+  monthlyPriceArsFixed: '9.800',
+  argBank: 'Mercado Pago / Transferencia (CBU / CVU)',
+  argHolder: 'Roberto (Ingenio OS)',
+  argAlias: 'ingenio.os.mp',
+  argCvu: '0000003100000000000000'
 }
 
 export const INITIAL_SAAS_TENANTS = [

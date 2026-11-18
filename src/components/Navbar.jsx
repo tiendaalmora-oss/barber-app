@@ -6,6 +6,7 @@ import {
   ChevronRight, ShieldCheck, DollarSign
 } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
+import { isArgentina } from '../lib/brandConfig'
 
 export default function Navbar({ 
   currentNiche, 
@@ -30,6 +31,7 @@ export default function Navbar({
   showReconnectedBanner = false
 }) {
   const [bioSupported, setBioSupported] = useState(false)
+  const isAr = isArgentina(activeTenant, businessProfile)
   const [bioLinked, setBioLinked] = useState(Boolean(activeTenant?.biometricEnabled))
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
@@ -155,18 +157,28 @@ export default function Navbar({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Tasa BCV Pill (Compacta y Minimalista) */}
-            <button 
-              onClick={onOpenRateModal}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 border border-dark-700/80 text-xs text-slate-300 transition-all group"
-              title="Click para ajustar la Tasa BCV oficial"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] text-slate-400 hidden sm:inline">BCV:</span>
-              <span className="text-white font-mono font-bold group-hover:text-gold-400 text-xs">
-                Bs. {exchangeRate.toFixed(2)}
-              </span>
-            </button>
+            {/* Currency / Tasa BCV Pill */}
+            {isAr ? (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300 font-bold"
+                title="Modo Argentina: Precios y caja en Pesos Argentinos ($ ARS)"
+              >
+                <span>🇦🇷</span>
+                <span className="font-mono text-xs">ARS ($)</span>
+              </div>
+            ) : (
+              <button 
+                onClick={onOpenRateModal}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 border border-dark-700/80 text-xs text-slate-300 transition-all group"
+                title="Click para ajustar la Tasa BCV oficial"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[11px] text-slate-400 hidden sm:inline">BCV:</span>
+                <span className="text-white font-mono font-bold group-hover:text-gold-400 text-xs">
+                  Bs. {exchangeRate.toFixed(2)}
+                </span>
+              </button>
+            )}
 
             {/* Desktop Only CTAs */}
             <div className="hidden md:flex items-center gap-2">

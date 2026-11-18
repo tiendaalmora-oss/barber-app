@@ -1,4 +1,5 @@
-// Utility functions for Venezuelan timezones, local dates and WhatsApp formatting
+// Utility functions for Venezuelan & Argentine timezones, local dates and WhatsApp formatting
+import { isArgentina, formatCurrency } from './brandConfig'
 
 /**
  * Returns YYYY-MM-DD formatted strictly in the user's local timezone.
@@ -182,26 +183,26 @@ export function txMatchesPaymentFilter(tx, filterGroup) {
   return matchesMethodGroup(tx.metodo_pago, filterGroup)
 }
 
-export function formatMethodName(method) {
-  if (!method) return 'Pago Móvil'
-  if (isEfectivoMethod(method)) return 'Efectivo $'
-  if (isPagoMovilMethod(method)) return 'Pago Móvil'
-  if (isPuntoMethod(method)) return 'Punto de Venta'
-  if (isDigitalMethod(method)) return 'Zelle / Binance'
+export function formatMethodName(method, isAr = isArgentina()) {
+  if (!method) return isAr ? 'Mercado Pago / Transf.' : 'Pago Móvil'
+  if (isEfectivoMethod(method)) return isAr ? 'Efectivo' : 'Efectivo $'
+  if (isPagoMovilMethod(method)) return isAr ? 'Mercado Pago / Transf.' : 'Pago Móvil'
+  if (isPuntoMethod(method)) return isAr ? 'Tarjeta / Point' : 'Punto de Venta'
+  if (isDigitalMethod(method)) return isAr ? 'Digital / USDT' : 'Zelle / Binance'
   if (isFiadoMethod(method)) return 'Fiado'
   if (isMixtoMethod(method)) return 'Pago Mixto'
   return String(method).replace(/_/g, ' ')
 }
 
-export function formatTxPaymentSummary(tx) {
+export function formatTxPaymentSummary(tx, isAr = isArgentina()) {
   if (!tx) return ''
   if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
     const parts = tx.payment_splits
       .filter(s => s && Number(s.amount_usd) > 0)
-      .map(s => `${formatMethodName(s.method)} $${Number(s.amount_usd).toFixed(2)}`)
+      .map(s => `${formatMethodName(s.method, isAr)} ${formatCurrency(s.amount_usd, isAr)}`)
     if (parts.length > 0) return `Mixto (${parts.join(' + ')})`
   }
-  return formatMethodName(tx.metodo_pago)
+  return formatMethodName(tx.metodo_pago, isAr)
 }
 
 /**

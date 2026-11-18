@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function DailyCloseModal({
   isOpen,
@@ -31,6 +31,9 @@ export default function DailyCloseModal({
 
   if (!isOpen) return null
 
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   const thisWeekBounds = getWeekBoundsLocal(0)
   const prevWeekBounds = getWeekBoundsLocal(-1)
   const isWeekly = closePeriod !== 'today'
@@ -147,22 +150,30 @@ export default function DailyCloseModal({
     msg += isWeekly
       ? `📆 *Período:* ${periodTitle} (Lun - Dom)\n`
       : `📅 *Fecha:* ${dateStr}\n`
-    msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    if (!isAr) {
+      msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    }
     msg += `------------------------------------\n\n`
 
     msg += `💰 *1. PLATA QUE ENTRÓ (FACTURACIÓN):*\n`
-    msg += `• Total Facturado: *$${totalIncomeUSD.toFixed(2)} USD* (Bs. ${totalIncomeBs.toFixed(2)})\n`
-    msg += `  - 💵 Efectivo Gaveta: $${efectivoUSD.toFixed(2)}\n`
-    msg += `  - 📲 Pago Móvil: Bs. ${pagoMovilBs.toFixed(2)} ($${pagoMovilUSD.toFixed(2)})\n`
-    if (puntoUSD > 0) msg += `  - 💳 Punto de Venta: $${puntoUSD.toFixed(2)}\n`
-    if (zelleUSD > 0) msg += `  - 🟡 Zelle / Binance: $${zelleUSD.toFixed(2)}\n`
-    if (fiadoUSD > 0) msg += `  - 📝 Fiados ${isWeekly ? 'de la Semana' : 'del Día'}: $${fiadoUSD.toFixed(2)}\n`
+    msg += isAr
+      ? `• Total Facturado: *${fmt(totalIncomeUSD)} ARS*\n`
+      : `• Total Facturado: *${totalIncomeUSD.toFixed(2)} USD* (Bs. ${totalIncomeBs.toFixed(2)})\n`
+    msg += `  - 💵 ${isAr ? 'Efectivo Caja' : 'Efectivo Gaveta'}: ${fmt(efectivoUSD)}\n`
+    msg += isAr
+      ? `  - 📲 Mercado Pago / Transf.: ${fmt(pagoMovilUSD)} ARS\n`
+      : `  - 📲 Pago Móvil: Bs. ${pagoMovilBs.toFixed(2)} (${pagoMovilUSD.toFixed(2)})\n`
+    if (puntoUSD > 0) msg += `  - 💳 ${isAr ? 'Tarjeta / Point' : 'Punto de Venta'}: ${fmt(puntoUSD)}\n`
+    if (zelleUSD > 0) msg += `  - 🟡 ${isAr ? 'Digital / USDT' : 'Zelle / Binance'}: ${fmt(zelleUSD)}\n`
+    if (fiadoUSD > 0) msg += `  - 📝 Fiados ${isWeekly ? 'de la Semana' : 'del Día'}: ${fmt(fiadoUSD)}\n`
 
     msg += `\n➖ *2. GASTOS OPERATIVOS DEL LOCAL:*\n`
-    msg += `• Total Gastos: *-$${totalExpensesUSD.toFixed(2)} USD* (Bs. ${totalExpensesBs.toFixed(2)})\n`
+    msg += isAr
+      ? `• Total Gastos: *-${fmt(totalExpensesUSD)} ARS*\n`
+      : `• Total Gastos: *-${totalExpensesUSD.toFixed(2)} USD* (Bs. ${totalExpensesBs.toFixed(2)})\n`
     if (operatingExpenseTx.length > 0) {
       operatingExpenseTx.forEach(ex => {
-        msg += `  - ${ex.item_name}: -$${Math.abs(ex.monto_usd).toFixed(2)}\n`
+        msg += `  - ${ex.item_name}: -${fmt(Math.abs(ex.monto_usd))}\n`
       })
     } else {
       msg += `  - Cero gastos ${periodShortLabel}\n`
@@ -170,54 +181,68 @@ export default function DailyCloseModal({
 
     if (totalValesUSD > 0) {
       msg += `\n🧾 *3. VALES Y ADELANTOS ENTREGADOS ${isWeekly ? 'EN LA SEMANA' : 'HOY'}:*\n`
-      msg += `• Total Vales: *-$${totalValesUSD.toFixed(2)} USD* (Bs. ${totalValesBs.toFixed(2)})\n`
+      msg += isAr
+        ? `• Total Vales: *-${fmt(totalValesUSD)} ARS*\n`
+        : `• Total Vales: *-${totalValesUSD.toFixed(2)} USD* (Bs. ${totalValesBs.toFixed(2)})\n`
       valesTx.forEach(v => {
-        msg += `  - ${v.staff_name || 'Empleado'} (${v.motivo || 'Vale'}): -$${Math.abs(v.monto_usd).toFixed(2)} (${v.metodo_pago === 'efectivo_usd' ? 'Efectivo' : 'Banco'})\n`
+        msg += `  - ${v.staff_name || 'Empleado'} (${v.motivo || 'Vale'}): -${fmt(Math.abs(v.monto_usd))} (${v.metodo_pago === 'efectivo_usd' ? 'Efectivo' : (isAr ? 'Mercado Pago' : 'Banco')})\n`
       })
     }
 
-    msg += `\n✂️ *${totalValesUSD > 0 ? '4' : '3'}. A PAGAR A LOS MUCHACHOS (LIQUIDACIÓN):*\n`
+    msg += `\n✂️ *${totalValesUSD > 0 ? '4' : '3'}. A PAGAR AL EQUIPO (LIQUIDACIÓN):*\n`
     if (commissionsByStaff.length > 0) {
       commissionsByStaff.forEach(st => {
         if (st.valesUSD > 0) {
-          msg += `  - ${st.name} (${st.count} cortes): Comisiones $${st.commissionUSD.toFixed(2)} - Vales $${st.valesUSD.toFixed(2)} = *Neto $${st.netCommissionUSD.toFixed(2)} USD* (Bs. ${st.netCommissionBs.toFixed(2)})\n`
+          msg += isAr
+            ? `  - ${st.name} (${st.count} serv.): Comisiones ${fmt(st.commissionUSD)} - Vales ${fmt(st.valesUSD)} = *Neto ${fmt(st.netCommissionUSD)} ARS*\n`
+            : `  - ${st.name} (${st.count} cortes): Comisiones ${st.commissionUSD.toFixed(2)} - Vales ${st.valesUSD.toFixed(2)} = *Neto ${st.netCommissionUSD.toFixed(2)} USD* (Bs. ${st.netCommissionBs.toFixed(2)})\n`
         } else {
-          msg += `  - ${st.name} (${st.count} cortes): *$${st.commissionUSD.toFixed(2)} USD* (Bs. ${st.commissionBs.toFixed(2)})\n`
+          msg += isAr
+            ? `  - ${st.name} (${st.count} serv.): *${fmt(st.commissionUSD)} ARS*\n`
+            : `  - ${st.name} (${st.count} cortes): *${st.commissionUSD.toFixed(2)} USD* (Bs. ${st.commissionBs.toFixed(2)})\n`
         }
       })
-      msg += `• Total Comisiones Netas: *$${totalNetCommissionsUSD.toFixed(2)} USD*\n`
+      msg += `• Total Comisiones Netas: *${fmt(totalNetCommissionsUSD)} ${currTag}*\n`
     } else {
       msg += `  - Sin comisiones registradas\n`
     }
 
     if (totalTipsUSD > 0) {
       msg += `\n🪙 *${totalValesUSD > 0 ? '5' : '4'}. PROPINAS ${isWeekly ? 'DE LA SEMANA' : 'DEL DÍA'} (APARTE):*\n`
-      msg += `• Total Propinas Recaudadas: *$${totalTipsUSD.toFixed(2)} USD* (Bs. ${totalTipsBs.toFixed(2)})\n`
+      msg += isAr
+        ? `• Total Propinas Recaudadas: *${fmt(totalTipsUSD)} ARS*\n`
+        : `• Total Propinas Recaudadas: *${totalTipsUSD.toFixed(2)} USD* (Bs. ${totalTipsBs.toFixed(2)})\n`
       if (tipDeliveryMode === 'grupal') {
         msg += `  - Modalidad: 👥 *Pote Grupal Equitativo*\n`
-        msg += `  - Corresponde a cada profesional (${activeStaffCount}): *$${tipPoolPerStaffUSD.toFixed(2)} USD* (Bs. ${tipPoolPerStaffBs.toFixed(2)})\n`
+        msg += isAr
+          ? `  - Corresponde a cada profesional (${activeStaffCount}): *${fmt(tipPoolPerStaffUSD)} ARS*\n`
+          : `  - Corresponde a cada profesional (${activeStaffCount}): *${tipPoolPerStaffUSD.toFixed(2)} USD* (Bs. ${tipPoolPerStaffBs.toFixed(2)})\n`
       } else {
         msg += `  - Modalidad: 👤 *Entrega Individual Separada*\n`
         tipsByStaff.forEach(st => {
-          msg += `  - ${st.name}: *$${st.tipsUSD.toFixed(2)} USD* (Bs. ${st.tipsBs.toFixed(2)})\n`
+          msg += isAr
+            ? `  - ${st.name}: *${fmt(st.tipsUSD)} ARS*\n`
+            : `  - ${st.name}: *${st.tipsUSD.toFixed(2)} USD* (Bs. ${st.tipsBs.toFixed(2)})\n`
         })
       }
     }
 
     msg += `\n------------------------------------\n`
     msg += `🏆 *${totalValesUSD > 0 ? '6' : '5'}. TU GANANCIA LIMPIA (EN EL BOLSILLO):*\n`
-    msg += `👉 *$${netProfitUSD.toFixed(2)} USD* (Bs. ${netProfitBs.toFixed(2)})\n\n`
+    msg += isAr
+      ? `👉 *${fmt(netProfitUSD)} ARS*\n\n`
+      : `👉 *${netProfitUSD.toFixed(2)} USD* (Bs. ${netProfitBs.toFixed(2)})\n\n`
 
     if (hasCounted) {
-      msg += `🔎 *ARQUEO DE GAVETA EN FÍSICO:*\n`
-      msg += `• Esperado en Efectivo: $${expectedCashInDrawer.toFixed(2)}\n`
-      msg += `• Contado en Gaveta: $${countedNum.toFixed(2)}\n`
+      msg += `🔎 *ARQUEO DE CAJA EN FÍSICO:*\n`
+      msg += `• Esperado en Efectivo: ${fmt(expectedCashInDrawer)}\n`
+      msg += `• Contado en Caja: ${fmt(countedNum)}\n`
       if (Math.abs(differenceUSD) < 0.01) {
-        msg += `• Estado: ✅ *¡CUADRE PERFECTO! ($0.00 diferencia)*\n`
+        msg += `• Estado: ✅ *¡CUADRE PERFECTO! (${isAr ? '0' : '0.00'} diferencia)*\n`
       } else if (differenceUSD > 0) {
-        msg += `• Estado: 🟢 Sobrante de +$${differenceUSD.toFixed(2)}\n`
+        msg += `• Estado: 🟢 Sobrante de +${fmt(differenceUSD)}\n`
       } else {
-        msg += `• Estado: 🔴 Faltante de -$${Math.abs(differenceUSD).toFixed(2)}\n`
+        msg += `• Estado: 🔴 Faltante de -${fmt(Math.abs(differenceUSD))}\n`
       }
     }
 
@@ -313,30 +338,30 @@ export default function DailyCloseModal({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Entró</span>
-            <div className="text-lg font-black text-white mt-0.5">${totalIncomeUSD.toFixed(2)}</div>
-            <span className="text-[10px] text-blue-400 font-mono">Bs. {totalIncomeBs.toFixed(2)}</span>
+            <div className="text-lg font-black text-white mt-0.5">${fmt(totalIncomeUSD)}</div>
+            {!isAr && <span className="text-[10px] text-blue-400 font-mono">Bs. {totalIncomeBs.toFixed(2)}</span>}
           </div>
 
           <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
             <span className="text-[10px] uppercase font-bold text-red-400 block">Gastos Local</span>
-            <div className="text-lg font-black text-red-400 mt-0.5">-${totalExpensesUSD.toFixed(2)}</div>
+            <div className="text-lg font-black text-red-400 mt-0.5">-${fmt(totalExpensesUSD)}</div>
             <span className="text-[10px] text-slate-500 font-mono">
-              {totalValesUSD > 0 ? `+ $${totalValesUSD.toFixed(2)} en vales` : `Bs. ${totalExpensesBs.toFixed(2)}`}
+              {totalValesUSD > 0 ? `+ ${fmt(totalValesUSD)} en vales` : (!isAr ? `Bs. ${totalExpensesBs.toFixed(2)}` : 'Operativos')}
             </span>
           </div>
 
           <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
             <span className="text-[10px] uppercase font-bold text-amber-400 block">Comisiones</span>
-            <div className="text-lg font-black text-amber-400 mt-0.5">${totalCommissionsUSD.toFixed(2)}</div>
+            <div className="text-lg font-black text-amber-400 mt-0.5">${fmt(totalCommissionsUSD)}</div>
             <span className="text-[10px] text-slate-500 font-mono">
-              {totalValesUSD > 0 ? `Neto ${periodShortLabel}: $${totalNetCommissionsUSD.toFixed(2)}` : 'Al equipo'}
+              {totalValesUSD > 0 ? `Neto ${periodShortLabel}: ${fmt(totalNetCommissionsUSD)}` : 'Al equipo'}
             </span>
           </div>
 
           <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
             <span className="text-[10px] uppercase font-black text-emerald-400 block">Ganancia Limpia</span>
-            <div className="text-lg font-black text-emerald-400 mt-0.5">${netProfitUSD.toFixed(2)}</div>
-            <span className="text-[10px] text-slate-300 font-mono">En tu bolsillo</span>
+            <div className="text-lg font-black text-emerald-400 mt-0.5">${fmt(netProfitUSD)}</div>
+            <span className="text-[10px] text-slate-300 font-mono">{isAr ? 'Pesos ARS' : 'En tu bolsillo'}</span>
           </div>
         </div>
 
@@ -344,34 +369,40 @@ export default function DailyCloseModal({
         <div className="p-4 rounded-2xl bg-dark-850 border border-dark-750 space-y-2.5">
           <div className="flex items-center justify-between text-xs font-bold text-slate-300">
             <span>Desglose de Facturación por Método:</span>
-            <span className="text-gold-400 font-mono">Tasa BCV: Bs. {exchangeRate.toFixed(2)}</span>
+            {!isAr && <span className="text-gold-400 font-mono">Tasa BCV: Bs. {exchangeRate.toFixed(2)}</span>}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
-              <span className="text-[10px] text-slate-400 block">💵 Efectivo Gaveta ($)</span>
-              <strong className="text-white text-sm font-mono">${efectivoUSD.toFixed(2)}</strong>
+              <span className="text-[10px] text-slate-400 block">{isAr ? '💵 Efectivo (Caja)' : '💵 Efectivo Gaveta ($)'}</span>
+              <strong className="text-white text-sm font-mono">${fmt(efectivoUSD)}</strong>
             </div>
 
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
-              <span className="text-[10px] text-slate-400 block">📲 Pago Móvil (Bs)</span>
-              <strong className="text-emerald-400 text-sm font-mono">Bs. {pagoMovilBs.toFixed(2)}</strong>
-              <span className="text-[10px] text-slate-400 block font-mono">(${pagoMovilUSD.toFixed(2)})</span>
+              <span className="text-[10px] text-slate-400 block">{isAr ? '📲 Mercado Pago / Transf.' : '📲 Pago Móvil (Bs)'}</span>
+              {isAr ? (
+                <strong className="text-emerald-400 text-sm font-mono">${fmt(pagoMovilUSD)}</strong>
+              ) : (
+                <>
+                  <strong className="text-emerald-400 text-sm font-mono">Bs. {pagoMovilBs.toFixed(2)}</strong>
+                  <span className="text-[10px] text-slate-400 block font-mono">(${pagoMovilUSD.toFixed(2)})</span>
+                </>
+              )}
             </div>
 
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
-              <span className="text-[10px] text-slate-400 block">💳 Punto de Venta</span>
-              <strong className="text-white text-sm font-mono">${puntoUSD.toFixed(2)}</strong>
+              <span className="text-[10px] text-slate-400 block">{isAr ? '💳 Tarjeta / Point' : '💳 Punto de Venta'}</span>
+              <strong className="text-white text-sm font-mono">${fmt(puntoUSD)}</strong>
             </div>
 
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
-              <span className="text-[10px] text-slate-400 block">🟡 Zelle / Binance</span>
-              <strong className="text-white text-sm font-mono">${zelleUSD.toFixed(2)}</strong>
+              <span className="text-[10px] text-slate-400 block">{isAr ? '🟡 Digital / USDT' : '🟡 Zelle / Binance'}</span>
+              <strong className="text-white text-sm font-mono">${fmt(zelleUSD)}</strong>
             </div>
 
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
               <span className="text-[10px] text-amber-400 block">📝 Fiados (Por Cobrar)</span>
-              <strong className="text-amber-400 text-sm font-mono">${fiadoUSD.toFixed(2)}</strong>
+              <strong className="text-amber-400 text-sm font-mono">${fmt(fiadoUSD)}</strong>
             </div>
 
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
@@ -398,21 +429,23 @@ export default function DailyCloseModal({
                   <div>
                     <span className="font-bold text-white block">{st.name}</span>
                     <span className="text-[10px] text-slate-400">
-                      {st.count} {st.count === 1 ? 'servicio' : 'servicios'} • Facturó ${st.generatedUSD.toFixed(2)} ({st.percentage}%)
+                      {st.count} {st.count === 1 ? 'servicio' : 'servicios'} • Facturó ${fmt(st.generatedUSD)} ({st.percentage}%)
                     </span>
                     {st.valesUSD > 0 && (
                       <span className="inline-block mt-0.5 text-[10px] text-amber-400 font-bold">
-                        🧾 Vales {isWeekly ? 'semana' : 'hoy'}: -${st.valesUSD.toFixed(2)} USD
+                        🧾 Vales {isWeekly ? 'semana' : 'hoy'}: -${fmt(st.valesUSD)} {currTag}
                       </span>
                     )}
                   </div>
                   <div className="text-right">
                     <span className="font-mono font-black text-amber-400 text-sm block">
-                      ${st.netCommissionUSD.toFixed(2)} {st.valesUSD > 0 ? 'Neto' : 'USD'}
+                      ${fmt(st.netCommissionUSD)} {st.valesUSD > 0 ? 'Neto' : currTag}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {st.valesUSD > 0 ? `(Comisión: $${st.commissionUSD.toFixed(2)})` : `Bs. ${st.commissionBs.toFixed(2)}`}
-                    </span>
+                    {(st.valesUSD > 0 || !isAr) && (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {st.valesUSD > 0 ? `(Comisión: ${fmt(st.commissionUSD)})` : `Bs. ${st.commissionBs.toFixed(2)}`}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -425,7 +458,7 @@ export default function DailyCloseModal({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
               <span>🪙 Propinas {isWeekly ? 'de la Semana' : 'del Día'} (Aparte):</span>
-              <span className="font-mono font-black text-amber-400">${totalTipsUSD.toFixed(2)} USD</span>
+              <span className="font-mono font-black text-amber-400">${fmt(totalTipsUSD)} {currTag}</span>
             </span>
             <div className="flex items-center gap-1 bg-dark-900 p-0.5 rounded-lg border border-dark-750">
               <button
@@ -467,11 +500,13 @@ export default function DailyCloseModal({
               </div>
               <div className="text-right">
                 <span className="font-mono font-black text-amber-400 text-sm block">
-                  ${tipPoolPerStaffUSD.toFixed(2)} c/u
+                  ${fmt(tipPoolPerStaffUSD)} c/u
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Bs. {tipPoolPerStaffBs.toFixed(2)}
-                </span>
+                {!isAr && (
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Bs. {tipPoolPerStaffBs.toFixed(2)}
+                  </span>
+                )}
               </div>
             </div>
           ) : (
@@ -481,11 +516,13 @@ export default function DailyCloseModal({
                   <span className="font-bold text-white">{st.name}</span>
                   <div className="text-right">
                     <span className="font-mono font-black text-amber-400 text-xs block">
-                      +${st.tipsUSD.toFixed(2)} USD
+                      +${fmt(st.tipsUSD)} {currTag}
                     </span>
-                    <span className="text-[9px] text-slate-400 font-mono">
-                      Bs. {st.tipsBs.toFixed(2)}
-                    </span>
+                    {!isAr && (
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        Bs. {st.tipsBs.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -501,7 +538,7 @@ export default function DailyCloseModal({
               <span>Arqueo Físico de Gaveta (¿Cuánto Efectivo $ tienes en mano?)</span>
             </span>
             <span className="text-[10px] text-slate-400">
-              Esperado: <strong className="text-white font-mono">${expectedCashInDrawer.toFixed(2)}</strong>
+              Esperado: <strong className="text-white font-mono">${fmt(expectedCashInDrawer)}</strong>
             </span>
           </div>
 
@@ -528,12 +565,12 @@ export default function DailyCloseModal({
                 ) : differenceUSD > 0 ? (
                   <span className="text-emerald-400 flex items-center gap-1">
                     <Check className="w-4 h-4 shrink-0" />
-                    <span>Tienes un sobrante de +${differenceUSD.toFixed(2)} en gaveta.</span>
+                    <span>Tienes un sobrante de +${fmt(differenceUSD)} en caja.</span>
                   </span>
                 ) : (
                   <span className="text-red-400 flex items-center gap-1">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>Hay un faltante de -${Math.abs(differenceUSD).toFixed(2)} en gaveta.</span>
+                    <span>Hay un faltante de -${fmt(Math.abs(differenceUSD))} en caja.</span>
                   </span>
                 )}
               </div>

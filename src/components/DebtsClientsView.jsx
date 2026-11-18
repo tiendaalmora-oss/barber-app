@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { AlertCircle, CheckCircle2, MessageCircle, Crown, Phone, Plus, Pencil, Trash2, X, Search, DollarSign, Sparkles, Filter, Check, ArrowRight, UserCheck } from 'lucide-react'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 import PhoneCountryInput from './PhoneCountryInput'
 
 export default function DebtsClientsView({
@@ -23,6 +24,9 @@ export default function DebtsClientsView({
   const [plan, setPlan] = useState('Cliente Regular')
   const [planRenueva, setPlanRenueva] = useState('15 de cada mes')
 
+  const isAr = isArgentina()
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   const totalDebtUSD = clients.reduce((sum, c) => sum + (c.debt_usd || 0), 0)
   const totalDebtBs = totalDebtUSD * exchangeRate
 
@@ -134,7 +138,9 @@ export default function DebtsClientsView({
     }
     const debtBs = ((client.debt_usd || 0) * exchangeRate).toFixed(2)
     const text = encodeURIComponent(
-      `¡Épale ${client.name.split(' ')[0]}! 👋 ¿Cómo estás pana? Te escribo de la barbería para recordarte con cariño el saldo pendiente de $${(client.debt_usd || 0).toFixed(2)} USD (Bs. ${debtBs} a la tasa de hoy). Puedes pasarlo por Pago Móvil cuando puedas o te llegas al local. ¡Un abrazo!`
+      isAr
+        ? `¡Hola ${client.name.split(' ')[0]}! 👋 ¿Cómo estás? Te escribimos del local para recordarte con respeto el saldo pendiente de ${fmt(client.debt_usd || 0)} ARS. Podés transferirlo por Mercado Pago cuando puedas o pasarlo por el local. ¡Saludos!`
+        : `¡Hola ${client.name.split(' ')[0]}! 👋 ¿Cómo está? Te escribo del local para recordarte cordialmente el saldo pendiente de ${(client.debt_usd || 0).toFixed(2)} USD (Bs. ${debtBs} a la tasa de hoy). Puedes pasarlo por Pago Móvil cuando puedas o te llegas al local. ¡Un abrazo!`
     )
     window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank')
   }
@@ -191,17 +197,21 @@ export default function DebtsClientsView({
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl sm:text-5xl font-black text-amber-400 tracking-tight">
-                  ${totalDebtUSD.toFixed(2)}
+                  ${fmt(totalDebtUSD)}
                 </span>
                 <span className="text-base sm:text-lg font-bold text-white">
-                  USD
+                  {currTag}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-1.5 text-xs sm:text-sm">
-                <span className="font-mono font-bold text-slate-300">
-                  ≈ Bs. {totalDebtBs.toFixed(2)}
-                </span>
-                <span className="text-slate-600">•</span>
+                {!isAr && (
+                  <>
+                    <span className="font-mono font-bold text-slate-300">
+                      ≈ Bs. {totalDebtBs.toFixed(2)}
+                    </span>
+                    <span className="text-slate-600">•</span>
+                  </>
+                )}
                 <span className="text-amber-400/90 text-xs font-medium">
                   {debtorsCount} {debtorsCount === 1 ? 'cliente con saldo pendiente' : 'clientes con saldo pendiente'}
                 </span>
@@ -370,8 +380,8 @@ export default function DebtsClientsView({
                     {hasDebt ? (
                       <div className="px-3 py-1.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-right">
                         <span className="text-[10px] uppercase font-bold text-amber-400 block">Debe</span>
-                        <span className="text-sm font-black font-mono text-amber-400 block">${(c.debt_usd || 0).toFixed(2)}</span>
-                        <span className="text-[10px] text-slate-400 font-mono block">Bs. {debtInBs}</span>
+                        <span className="text-sm font-black font-mono text-amber-400 block">${fmt(c.debt_usd || 0)}</span>
+                        {!isAr && <span className="text-[10px] text-slate-400 font-mono block">Bs. {debtInBs}</span>}
                       </div>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold">
@@ -514,7 +524,7 @@ export default function DebtsClientsView({
 
               <div>
                 <label className="block text-xs font-bold text-amber-400 mb-1 flex items-center justify-between">
-                  <span>Saldo Pendiente / Fiado ($ USD)</span>
+                  <span>Saldo Pendiente / Fiado ($ {currTag})</span>
                   <span className="text-[10px] text-slate-400 font-normal">Pon 0 si no debe nada</span>
                 </label>
                 <div className="relative">
@@ -528,7 +538,7 @@ export default function DebtsClientsView({
                     className="w-full pl-8 pr-3.5 py-2.5 rounded-2xl bg-dark-850 border border-amber-500/40 text-xs text-white font-mono focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
-                {parseFloat(debtUsd) > 0 && (
+                {!isAr && parseFloat(debtUsd) > 0 && (
                   <span className="text-[11px] text-amber-400 font-mono mt-1 block">
                     ≈ Bs. {(parseFloat(debtUsd) * exchangeRate).toFixed(2)} a la tasa BCV oficial
                   </span>

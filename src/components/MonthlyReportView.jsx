@@ -11,7 +11,7 @@ import {
   formatTxPaymentSummary, normalizeWhatsAppPhone 
 } from '../lib/dateUtils'
 import ReceiptModal from './ReceiptModal'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
 
 const MONTH_NAMES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -26,6 +26,9 @@ export default function MonthlyReportView({
   staffList = [],
   onDeleteTransaction
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   const safeTransactions = Array.isArray(transactions) ? transactions : []
   const safeClosings = Array.isArray(dailyClosings) ? dailyClosings : []
 
@@ -145,18 +148,26 @@ export default function MonthlyReportView({
 
     let msg = `💈 *ACTA DE CIERRE SEMANAL DE CAJA • ${bizName.toUpperCase()}*\n`
     msg += `📆 *Período:* ${weekLabel} (Lun - Dom)\n`
-    msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    if (!isAr) {
+      msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    }
     msg += `------------------------------------\n\n`
-    msg += `💰 *TOTAL FACTURADO:* *${periodTotalRevenueUSD.toFixed(2)} USD* (Bs. ${(periodTotalRevenueUSD * exchangeRate).toFixed(2)})\n`
-    msg += `📉 *GASTOS DEL LOCAL:* *-${periodTotalExpensesUSD.toFixed(2)} USD* (Bs. ${(periodTotalExpensesUSD * exchangeRate).toFixed(2)})\n`
-    msg += `✂️ *COMISIONES EQUIPO:* *-${periodTotalCommissionsUSD.toFixed(2)} USD*\n`
+    msg += isAr
+      ? `💰 *TOTAL FACTURADO:* *${fmt(periodTotalRevenueUSD)} ARS*\n`
+      : `💰 *TOTAL FACTURADO:* *${periodTotalRevenueUSD.toFixed(2)} USD* (Bs. ${(periodTotalRevenueUSD * exchangeRate).toFixed(2)})\n`
+    msg += isAr
+      ? `📉 *GASTOS DEL LOCAL:* *-${fmt(periodTotalExpensesUSD)} ARS*\n`
+      : `📉 *GASTOS DEL LOCAL:* *-${periodTotalExpensesUSD.toFixed(2)} USD* (Bs. ${(periodTotalExpensesUSD * exchangeRate).toFixed(2)})\n`
+    msg += `✂️ *COMISIONES EQUIPO:* *-${fmt(periodTotalCommissionsUSD)} ${currTag}*\n`
     msg += `------------------------------------\n`
-    msg += `🏆 *GANANCIA LIMPIA EN BOLSILLO:* 👉 *${periodNetProfitUSD.toFixed(2)} USD* (Bs. ${(periodNetProfitUSD * exchangeRate).toFixed(2)})\n\n`
+    msg += isAr
+      ? `🏆 *GANANCIA LIMPIA EN BOLSILLO:* 👉 *${fmt(periodNetProfitUSD)} ARS*\n\n`
+      : `🏆 *GANANCIA LIMPIA EN BOLSILLO:* 👉 *${periodNetProfitUSD.toFixed(2)} USD* (Bs. ${(periodNetProfitUSD * exchangeRate).toFixed(2)})\n\n`
 
     msg += `📅 *DESGLOSE DÍA A DÍA:*\n`
     weekDaysData.forEach(d => {
       if (d.count > 0 || d.facturacion > 0 || d.gastos > 0) {
-        msg += `• *${d.dayName} (${d.dayDateFmt}):* ${d.count} tickets → Entró $${d.facturacion.toFixed(2)} | Gastos -$${d.gastos.toFixed(2)} | Ganancia: *$${d.lucro.toFixed(2)} USD*\n`
+        msg += `• *${d.dayName} (${d.dayDateFmt}):* ${d.count} tickets → Entró ${fmt(d.facturacion)} | Gastos -${fmt(d.gastos)} | Ganancia: *${fmt(d.lucro)} ${currTag}*\n`
       } else {
         msg += `• *${d.dayName} (${d.dayDateFmt}):* Sin movimientos\n`
       }
@@ -427,11 +438,13 @@ export default function MonthlyReportView({
                 </span>
               </div>
               <div className="text-xl sm:text-2xl font-black font-mono text-white">
-                ${periodTotalRevenueUSD.toFixed(2)}
+                ${fmt(periodTotalRevenueUSD)}
               </div>
-              <div className="text-[11px] text-gold-400 font-mono mt-0.5">
-                Bs. {(periodTotalRevenueUSD * exchangeRate).toFixed(2)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] text-gold-400 font-mono mt-0.5">
+                  Bs. {(periodTotalRevenueUSD * exchangeRate).toFixed(2)}
+                </div>
+              )}
             </div>
 
             {/* Gastos Operativos */}
@@ -443,11 +456,13 @@ export default function MonthlyReportView({
                 </span>
               </div>
               <div className="text-xl sm:text-2xl font-black font-mono text-red-400">
-                -${periodTotalExpensesUSD.toFixed(2)}
+                -${fmt(periodTotalExpensesUSD)}
               </div>
-              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                Bs. {(periodTotalExpensesUSD * exchangeRate).toFixed(2)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  Bs. {(periodTotalExpensesUSD * exchangeRate).toFixed(2)}
+                </div>
+              )}
             </div>
 
             {/* Comisiones Equipo */}
@@ -459,11 +474,13 @@ export default function MonthlyReportView({
                 </span>
               </div>
               <div className="text-xl sm:text-2xl font-black font-mono text-amber-400">
-                ${periodTotalCommissionsUSD.toFixed(2)}
+                ${fmt(periodTotalCommissionsUSD)}
               </div>
-              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                Bs. {(periodTotalCommissionsUSD * exchangeRate).toFixed(2)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  Bs. {(periodTotalCommissionsUSD * exchangeRate).toFixed(2)}
+                </div>
+              )}
             </div>
 
             {/* Ganancia Limpia Dueño */}
@@ -475,11 +492,13 @@ export default function MonthlyReportView({
                 </span>
               </div>
               <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400">
-                ${periodNetProfitUSD.toFixed(2)}
+                ${fmt(periodNetProfitUSD)}
               </div>
-              <div className="text-[11px] text-emerald-300 font-mono mt-0.5">
-                Bs. {(periodNetProfitUSD * exchangeRate).toFixed(2)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] text-emerald-300 font-mono mt-0.5">
+                  Bs. {(periodNetProfitUSD * exchangeRate).toFixed(2)}
+                </div>
+              )}
             </div>
 
           </div>
@@ -674,7 +693,7 @@ export default function MonthlyReportView({
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Facturado Filtrado</span>
                 <span className="text-lg font-black font-mono text-emerald-400">${filteredTotalUSD.toFixed(2)}</span>
               </div>
-              <span className="text-xs text-slate-400 font-mono">Bs. {(filteredTotalUSD * exchangeRate).toFixed(1)}</span>
+              {!isAr && <span className="text-xs text-slate-400 font-mono">Bs. {(filteredTotalUSD * exchangeRate).toFixed(1)}</span>}
             </div>
 
             <div className="p-3.5 rounded-2xl bg-dark-900 border border-dark-800 flex items-center justify-between">
@@ -688,9 +707,9 @@ export default function MonthlyReportView({
             <div className="p-3.5 rounded-2xl bg-dark-900 border border-dark-800 flex items-center justify-between">
               <div>
                 <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Ticket Promedio</span>
-                <span className="text-lg font-black font-mono text-gold-400">${averageTicket.toFixed(2)}</span>
+                <span className="text-lg font-black font-mono text-gold-400">${fmt(averageTicket)}</span>
               </div>
-              <span className="text-xs text-slate-400 font-mono">USD / cliente</span>
+              <span className="text-xs text-slate-400 font-mono">{currTag} / cliente</span>
             </div>
           </div>
 
@@ -730,9 +749,9 @@ export default function MonthlyReportView({
               >
                 <option value="all">Todos los Métodos</option>
                 <option value="efectivo">💵 Efectivo $</option>
-                <option value="pago_movil">📱 Pago Móvil</option>
-                <option value="punto">💳 Punto de Venta</option>
-                <option value="digital">⚡ Zelle / Binance</option>
+                <option value="pago_movil">{isAr ? '📱 Mercado Pago / Transf.' : '📱 Pago Móvil'}</option>
+                <option value="punto">{isAr ? '💳 Tarjeta / Point' : '💳 Punto de Venta'}</option>
+                <option value="digital">{isAr ? '⚡ Digital / USDT' : '⚡ Zelle / Binance'}</option>
                 <option value="fiado">🤝 Fiado (Por Cobrar)</option>
                 <option value="mixto">🔀 Pago Mixto</option>
               </select>
@@ -840,11 +859,13 @@ export default function MonthlyReportView({
                     <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t border-dark-800/80 sm:border-0">
                       <div className="text-left sm:text-right">
                         <div className={`text-base font-black font-mono ${isExpense ? 'text-red-400' : 'text-white'}`}>
-                          {isExpense ? `-$${Math.abs(tx.monto_usd).toFixed(2)}` : `+$${tx.monto_usd.toFixed(2)}`}
+                          {isExpense ? `-${fmt(Math.abs(tx.monto_usd))}` : `+${fmt(tx.monto_usd)}`}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          Bs. {Math.abs(tx.monto_bs || (tx.monto_usd * exchangeRate)).toFixed(1)}
-                        </div>
+                        {!isAr && (
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            Bs. {Math.abs(tx.monto_bs || (tx.monto_usd * exchangeRate)).toFixed(1)}
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5">
@@ -1000,10 +1021,10 @@ export default function MonthlyReportView({
                         💵 Ef: ${(closing.efectivoUSD || 0).toFixed(2)}
                       </span>
                       <span className="px-2 py-0.5 rounded-md bg-dark-800 text-slate-300 border border-dark-750">
-                        📱 PM: ${(closing.pagoMovilUSD || 0).toFixed(2)}
+                        {isAr ? '📱 MP: ' : '📱 PM: '}${fmt(closing.pagoMovilUSD || 0)}
                       </span>
                       <span className="px-2 py-0.5 rounded-md bg-dark-800 text-slate-300 border border-dark-750">
-                        💳 Punto: ${(closing.puntoUSD || 0).toFixed(2)}
+                        {isAr ? '💳 Tarjeta: ' : '💳 Punto: '}${fmt(closing.puntoUSD || 0)}
                       </span>
                       {(closing.zelleUSD || 0) > 0 && (
                         <span className="px-2 py-0.5 rounded-md bg-dark-800 text-slate-300 border border-dark-750">

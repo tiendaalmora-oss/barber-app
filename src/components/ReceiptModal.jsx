@@ -1,12 +1,16 @@
 import React from 'react'
 import { X, Receipt, Smartphone } from 'lucide-react'
 import { normalizeWhatsAppPhone, formatMethodName, getLocalDateIso } from '../lib/dateUtils'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRate = 889.26, businessProfile }) {
   if (!isOpen || !transaction) return null
 
   const tx = transaction
   const cleanPhone = normalizeWhatsAppPhone(tx.client_phone || '')
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   const bizName = businessProfile?.businessName || 'Mi Negocio'
   const totalUSD = tx.total_cobrado_usd || (tx.monto_usd + (tx.propina_usd || 0))
   const totalBs = tx.total_cobrado_bs || (totalUSD * exchangeRate)
@@ -20,25 +24,31 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
     msg += `✂️ *DETALLE DE SU CUENTA:*\n`
     if (tx.items && tx.items.length > 0) {
       tx.items.forEach(it => {
-        msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: $${(it.price_usd * (it.qty || 1)).toFixed(2)}\n`
+        msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: ${fmt(it.price_usd * (it.qty || 1))}\n`
       })
     } else {
-      msg += `• ${tx.item_name}: $${tx.monto_usd.toFixed(2)}\n`
+      msg += `• ${tx.item_name}: ${fmt(tx.monto_usd)}\n`
     }
     if (tx.propina_usd > 0) {
-      msg += `🪙 *Propina:* $${tx.propina_usd.toFixed(2)} USD (Bs. ${(tx.propina_bs || (tx.propina_usd * exchangeRate)).toFixed(2)})\n`
+      msg += isAr
+        ? `🪙 *Propina:* ${fmt(tx.propina_usd)} ARS\n`
+        : `🪙 *Propina:* ${tx.propina_usd.toFixed(2)} USD (Bs. ${(tx.propina_bs || (tx.propina_usd * exchangeRate)).toFixed(2)})\n`
     }
     msg += `------------------------------------\n`
-    msg += `💰 *TOTAL PAGADO: $${totalUSD.toFixed(2)} USD*\n`
-    msg += `👉 *Al cambio BCV: Bs. ${totalBs.toFixed(2)}*\n`
+    msg += `💰 *TOTAL PAGADO: ${fmt(totalUSD)} ${currTag}*\n`
+    if (!isAr) {
+      msg += `👉 *Al cambio BCV: Bs. ${totalBs.toFixed(2)}*\n`
+    }
     if (Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0) {
       msg += `💳 *Método de pago:* PAGO MIXTO\n`
       tx.payment_splits.forEach(sp => {
-        msg += `  • ${formatMethodName(sp.method)}: $${Number(sp.amount_usd).toFixed(2)} USD (Bs. ${Number(sp.amount_bs || (sp.amount_usd * exchangeRate)).toFixed(2)})\n`
+        msg += isAr
+          ? `  • ${formatMethodName(sp.method, isAr)}: ${fmt(sp.amount_usd)} ARS\n`
+          : `  • ${formatMethodName(sp.method, isAr)}: ${Number(sp.amount_usd).toFixed(2)} USD (Bs. ${Number(sp.amount_bs || (sp.amount_usd * exchangeRate)).toFixed(2)})\n`
       })
       msg += `\n`
     } else {
-      msg += `💳 *Método de pago:* ${formatMethodName(tx.metodo_pago).toUpperCase()}\n\n`
+      msg += `💳 *Método de pago:* ${formatMethodName(tx.metodo_pago, isAr).toUpperCase()}\n\n`
     }
     msg += `¡Gracias por visitarnos, te esperamos pronto! ✨`
 
@@ -98,29 +108,31 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
               tx.items.map((it, idx) => (
                 <div key={idx} className="flex justify-between text-slate-300">
                   <span className="truncate pr-2">{it.qty > 1 ? `${it.qty}x ` : ''}{it.name}</span>
-                  <span className="font-bold">${(it.price_usd * (it.qty || 1)).toFixed(2)}</span>
+                  <span className="font-bold">${fmt(it.price_usd * (it.qty || 1))}</span>
                 </div>
               ))
             ) : (
               <div className="flex justify-between text-slate-300">
                 <span className="truncate pr-2">{tx.item_name}</span>
-                <span className="font-bold">${tx.monto_usd.toFixed(2)}</span>
+                <span className="font-bold">${fmt(tx.monto_usd)}</span>
               </div>
             )}
 
             {tx.propina_usd > 0 && (
               <div className="flex justify-between text-amber-400">
                 <span>🪙 Propina:</span>
-                <span className="font-bold">+${tx.propina_usd.toFixed(2)}</span>
+                <span className="font-bold">+${fmt(tx.propina_usd)}</span>
               </div>
             )}
           </div>
           <div className="pt-2 border-t border-dark-800 flex justify-between font-sans text-sm font-black">
             <span className="text-white">TOTAL PAGADO:</span>
-            <span className="text-emerald-400 font-mono text-base">${totalUSD.toFixed(2)}</span>
+            <span className="text-emerald-400 font-mono text-base">${fmt(totalUSD)} {isAr ? 'ARS' : ''}</span>
           </div>
           <div className="text-right text-[11px] text-slate-400">
-            Bs. {totalBs.toFixed(2)} (Método: {formatMethodName(tx.metodo_pago).toUpperCase()})
+            {isAr
+              ? `Método: ${formatMethodName(tx.metodo_pago, isAr).toUpperCase()}`
+              : `Bs. ${totalBs.toFixed(2)} (Método: ${formatMethodName(tx.metodo_pago, isAr).toUpperCase()})`}
           </div>
           {Array.isArray(tx.payment_splits) && tx.payment_splits.length > 0 && (
             <div className="pt-2 border-t border-dark-800/80 space-y-1 text-[11px]">
@@ -129,9 +141,9 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
               </div>
               {tx.payment_splits.map((sp, i) => (
                 <div key={i} className="flex justify-between text-slate-300">
-                  <span>• {formatMethodName(sp.method)}:</span>
+                  <span>• {formatMethodName(sp.method, isAr)}:</span>
                   <span className="font-bold text-white">
-                    ${Number(sp.amount_usd).toFixed(2)} <span className="text-slate-500">(Bs. {Number(sp.amount_bs || (sp.amount_usd * exchangeRate)).toFixed(0)})</span>
+                    ${fmt(sp.amount_usd)} {!isAr && <span className="text-slate-500">(Bs. {Number(sp.amount_bs || (sp.amount_usd * exchangeRate)).toFixed(0)})</span>}
                   </span>
                 </div>
               ))}

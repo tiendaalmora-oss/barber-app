@@ -3,7 +3,7 @@ import { X, Mail, Lock, Scissors, ShieldCheck, LogIn, UserPlus, AlertCircle, Fin
 import { isBiometricSupported, registerBiometricCredential, verifyBiometricCredential } from '../lib/biometrics'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, getActiveCountry } from '../lib/brandConfig'
 
 export default function AuthPortalModal({
   isOpen,
@@ -48,6 +48,7 @@ export default function AuthPortalModal({
   const isGlam = activeBrand.code === 'glamos'
 
   // Register form
+  const [regCountry, setRegCountry] = useState(() => getActiveCountry())
   const [regBusiness, setRegBusiness] = useState('')
   const [regOwner, setRegOwner] = useState('')
   const [regEmail, setRegEmail] = useState('')
@@ -66,6 +67,7 @@ export default function AuthPortalModal({
 
   const priceUsd = saasConfig?.monthlyPriceUsd || 6
   const priceBs = saasConfig?.monthlyPriceBsFixed || '6.024'
+  const priceArs = saasConfig?.monthlyPriceArsFixed || '9.800'
 
   // 1. Login with Fingerprint / FaceID (WebAuthn)
   const handleBiometricLogin = async () => {
@@ -204,6 +206,7 @@ export default function AuthPortalModal({
     const newTenant = {
       id: tenantId,
       saasProduct: isGlam ? 'glamos_saas' : 'barberia_saas',
+      country: regCountry,
       businessName: regBusiness.trim(),
       ownerName: regOwner.trim(),
       email: cleanEmail,
@@ -498,6 +501,40 @@ export default function AuthPortalModal({
         {/* TAB 2: REGISTRO NUEVO CLIENTE (+ PIN DE SEGURIDAD + HUELLA) */}
         {tab === 'register' && (
           <form onSubmit={handleRegister} className="mt-4 space-y-3">
+            {/* Selector de País: Venezuela vs Argentina */}
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-dark-950 border border-dark-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setRegCountry('VE')
+                  try { localStorage.setItem('barber_preferred_country', 'VE') } catch (e) {}
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  regCountry === 'VE'
+                    ? isGlam ? 'bg-pink-500 text-white shadow-sm' : 'bg-gold-500 text-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🇻🇪</span>
+                <span>Venezuela ($ / Bs)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRegCountry('AR')
+                  try { localStorage.setItem('barber_preferred_country', 'AR') } catch (e) {}
+                }}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  regCountry === 'AR'
+                    ? 'bg-sky-500 text-black font-black shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🇦🇷</span>
+                <span>Argentina ($ ARS)</span>
+              </button>
+            </div>
+
             <div className={`p-3 rounded-xl border text-[11px] flex items-start gap-2 ${
               isGlam
                 ? 'bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-dark-850 border-pink-500/30 text-pink-200'
@@ -505,7 +542,7 @@ export default function AuthPortalModal({
             }`}>
               <Zap className={`w-4 h-4 shrink-0 mt-0.5 ${isGlam ? 'text-pink-400 fill-pink-400' : 'text-amber-400 fill-amber-400'}`} />
               <span>
-                <strong>⚡ Acceso Inmediato por 24 Horas a {activeBrand.name}:</strong> Registra tu negocio y entra de inmediato a probar todo el sistema sin esperas. Tienes 24 horas de prueba completa y luego activas tu mes por solo <strong>${priceUsd} USD ({priceBs} Bs)</strong> con {saasConfig.guaranteeDays} días de garantía total.
+                <strong>⚡ Acceso Inmediato por 24 Horas a {activeBrand.name}:</strong> Registra tu negocio y entra de inmediato a probar todo el sistema sin esperas. Tienes 24 horas de prueba completa y luego activas tu mes por solo <strong>{regCountry === 'AR' ? `${priceArs} ARS` : `${priceUsd} USD (${priceBs} Bs)`}</strong> con {saasConfig.guaranteeDays} días de garantía total.
               </span>
             </div>
 
@@ -579,7 +616,7 @@ export default function AuthPortalModal({
                 <input
                   type="tel"
                   required
-                  placeholder="+584121234567"
+                  placeholder={regCountry === 'AR' ? '+5491112345678' : '+584121234567'}
                   value={regPhone}
                   onChange={(e) => setRegPhone(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"

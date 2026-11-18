@@ -92,3 +92,91 @@ export function getActiveBrand(activeTenant = null) {
 
   return BRAND_CONFIGS.barber
 }
+
+// Multi-Country Engine: Venezuela (VE) & Argentina (AR)
+export const COUNTRY_CONFIGS = {
+  VE: {
+    code: 'VE',
+    name: 'Venezuela',
+    flag: '🇻🇪',
+    currencyCode: 'USD',
+    currencySymbol: '$',
+    secondaryCurrency: 'Bs',
+    hasExchangeRate: true,
+    phonePrefix: '58',
+    locale: 'es-VE'
+  },
+  AR: {
+    code: 'AR',
+    name: 'Argentina',
+    flag: '🇦🇷',
+    currencyCode: 'ARS',
+    currencySymbol: '$',
+    secondaryCurrency: null,
+    hasExchangeRate: false,
+    phonePrefix: '54',
+    locale: 'es-AR'
+  }
+}
+
+/**
+ * Detects active country ('VE' | 'AR').
+ * Priority:
+ * 1. Explicit URL query param (?pais=ar | ?country=ar | ?pais=ve | ?country=ve) -> persisted to localStorage
+ * 2. Subdomain / hostname (ar.barber..., barber-ar..., ar.glamos..., glamos-ar..., .ar., argentina)
+ * 3. Active Tenant or Business Profile country property
+ * 4. Persisted localStorage preference ('barber_preferred_country')
+ * 5. Fallback: 'VE' (zero disruption to existing Venezuelan tenants)
+ */
+export function getActiveCountry(activeTenant = null, businessProfile = null) {
+  if (typeof window !== 'undefined') {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const paramCountry = (params.get('pais') || params.get('country') || '').trim().toLowerCase()
+      if (paramCountry === 'ar' || paramCountry === 'argentina') {
+        localStorage.setItem('barber_preferred_country', 'AR')
+        return 'AR'
+      }
+      if (paramCountry === 've' || paramCountry === 'venezuela') {
+        localStorage.setItem('barber_preferred_country', 'VE')
+        return 'VE'
+      }
+
+      const host = window.location.hostname.toLowerCase()
+      if (
+        host.startsWith('ar.') ||
+        host.includes('-ar.') ||
+        host.includes('.ar.') ||
+        host.includes('argentina')
+      ) {
+        return 'AR'
+      }
+    } catch (e) {}
+  }
+
+  const tenantCountry = (activeTenant?.country || businessProfile?.country || '').toUpperCase()
+  if (tenantCountry === 'AR') return 'AR'
+  if (tenantCountry === 'VE') return 'VE'
+
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('barber_preferred_country')
+      if (saved === 'AR') return 'AR'
+    } catch (e) {}
+  }
+
+  return 'VE'
+}
+
+export function isArgentina(activeTenant = null, businessProfile = null) {
+  return getActiveCountry(activeTenant, businessProfile) === 'AR'
+}
+
+export function formatCurrency(amount, isAr = false) {
+  const num = Number(amount || 0)
+  if (isNaN(num)) return isAr ? '0' : '0.00'
+  if (isAr) {
+    return num.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  }
+  return num.toFixed(2)
+}

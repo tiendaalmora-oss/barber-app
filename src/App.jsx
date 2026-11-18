@@ -21,6 +21,7 @@ import DailyCloseModal from './components/DailyCloseModal'
 import CopilotChatWidget from './components/CopilotChatWidget'
 import {
   NICHES,
+  NICHES_AR,
   INITIAL_CLIENTS,
   INITIAL_APPOINTMENTS,
   INITIAL_TRANSACTIONS,
@@ -32,7 +33,7 @@ import {
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck } from 'lucide-react'
 import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
-import { getActiveBrand } from './lib/brandConfig'
+import { getActiveBrand, isArgentina } from './lib/brandConfig'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -1071,6 +1072,15 @@ export default function App() {
     setIsAuthModalOpen(false)
     cleanUrlAuthParams()
 
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const hasParam = params.has('pais') || params.has('country')
+      const host = window.location.hostname.toLowerCase()
+      const isArHost = host.startsWith('ar.') || host.includes('-ar.') || host.includes('.ar.') || host.includes('argentina')
+      if (!hasParam && !isArHost) {
+        localStorage.setItem('barber_preferred_country', tenant.country === 'AR' ? 'AR' : 'VE')
+      }
+    } catch (e) {}
     if (tenant.niche && NICHES[tenant.niche]) {
       setCurrentNiche(tenant.niche)
     }
@@ -1166,6 +1176,10 @@ export default function App() {
     localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
     localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
 
+    const isArTenant = newTenant.country === 'AR' || isArgentina(newTenant)
+    const sourceNiches = isArTenant ? NICHES_AR : NICHES
+    const normalizedTenant = { ...newTenant, country: isArTenant ? 'AR' : 'VE' }
+
     // Brand new account starts clean for this tenantId
     const freshWorkspace = {
       transactions: [],
@@ -1173,23 +1187,26 @@ export default function App() {
       appointments: [],
       businessProfile: {
         ...INITIAL_BUSINESS_PROFILE,
+        country: isArTenant ? 'AR' : 'VE',
         businessName: newTenant.businessName,
-        whatsapp: newTenant.phone || ''
+        whatsapp: newTenant.phone || '',
+        paymentMethods: isArTenant ? ['Efectivo', 'Mercado Pago', 'Transferencia', 'Tarjeta / Point'] : INITIAL_BUSINESS_PROFILE.paymentMethods,
+        promoBanner: isArTenant ? '🔥 Promo de la Semana: Corte + Barba a precio especial' : INITIAL_BUSINESS_PROFILE.promoBanner
       },
       staffByNiche: {
-        barberia: NICHES.barberia.staff,
-        estetica: NICHES.estetica.staff,
-        mixto: NICHES.mixto.staff
+        barberia: sourceNiches.barberia.staff,
+        estetica: sourceNiches.estetica.staff,
+        mixto: sourceNiches.mixto.staff
       },
       servicesByNiche: {
-        barberia: NICHES.barberia.services,
-        estetica: NICHES.estetica.services,
-        mixto: NICHES.mixto.services
+        barberia: sourceNiches.barberia.services,
+        estetica: sourceNiches.estetica.services,
+        mixto: sourceNiches.mixto.services
       },
       productsByNiche: {
-        barberia: NICHES.barberia.products,
-        estetica: NICHES.estetica.products,
-        mixto: NICHES.mixto.products
+        barberia: sourceNiches.barberia.products,
+        estetica: sourceNiches.estetica.products,
+        mixto: sourceNiches.mixto.products
       }
     }
 
@@ -1211,15 +1228,16 @@ export default function App() {
 
     syncedTenantIdRef.current = newTenant.id
     serverSyncReadyRef.current = true
-    setTenants(prev => [newTenant, ...prev.filter(t => t.id !== newTenant.id && (t.email || '').toLowerCase().trim() !== cleanEmail)])
+    setTenants(prev => [normalizedTenant, ...prev.filter(t => t.id !== normalizedTenant.id && (t.email || '').toLowerCase().trim() !== cleanEmail)])
     setActiveTenantId(newTenant.id)
-    setCachedActiveTenant(newTenant)
+    setCachedActiveTenant(normalizedTenant)
     localStorage.setItem('barber_logged_tenant_id', newTenant.id)
-    localStorage.setItem('barber_logged_tenant', JSON.stringify(newTenant))
+    localStorage.setItem('barber_logged_tenant', JSON.stringify(normalizedTenant))
+    try { localStorage.setItem('barber_preferred_country', normalizedTenant.country) } catch (e) {}
     setIsAuthModalOpen(false)
     cleanUrlAuthParams()
 
-    await pushTenantUpsertToServer(newTenant, true)
+    await pushTenantUpsertToServer(normalizedTenant, true)
     try {
       await fetch(`/api/workspace/${encodeURIComponent(newTenant.id)}`, {
         method: 'POST',
@@ -2038,6 +2056,7 @@ export default function App() {
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
         exchangeRate={exchangeRate}
+        businessProfile={businessProfile}
         staffList={currentStaff}
         onRegisterExpense={handleRegisterExpense}
       />
@@ -2055,6 +2074,7 @@ export default function App() {
         transactions={transactions}
         exchangeRate={exchangeRate}
         nicheData={nicheData}
+        businessProfile={businessProfile}
       />
 
       <BusinessSettingsModal

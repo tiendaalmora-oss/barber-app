@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Package, AlertTriangle, Plus, Minus, Pencil, Trash2, X, Globe, EyeOff, Image, Upload } from 'lucide-react'
 import { PRODUCT_IMAGE_PRESETS } from '../lib/mockData'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function InventoryView({
   products,
@@ -25,8 +26,8 @@ export default function InventoryView({
   const openCreateModal = () => {
     setEditingProd(null)
     setName('')
-    setCostUsd('3')
-    setPriceUsd('7')
+    setCostUsd(isArgentina() ? '3500' : '3')
+    setPriceUsd(isArgentina() ? '8000' : '7')
     setStock('10')
     setMinStock('4')
     setCategory('Productos')
@@ -122,6 +123,10 @@ export default function InventoryView({
     onUpdateProduct({ ...prod, stock: newStock })
   }
 
+  const isAr = isArgentina()
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
+
   const totalInventoryCostUSD = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.cost_usd || 0)), 0)
   const totalPotentialSaleUSD = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.price_usd || 0)), 0)
   const totalPotentialProfitUSD = totalPotentialSaleUSD - totalInventoryCostUSD
@@ -147,11 +152,11 @@ export default function InventoryView({
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <div className="p-2.5 bg-dark-850 border border-dark-750 rounded-xl">
             <span className="text-[10px] text-slate-400 block uppercase">Invertido:</span>
-            <span className="text-sm font-bold text-white">${totalInventoryCostUSD.toFixed(2)} USD</span>
+            <span className="text-sm font-bold text-white">${fmt(totalInventoryCostUSD)} {currTag}</span>
           </div>
           <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
             <span className="text-[10px] text-emerald-400 block uppercase">Ganancia Estimada:</span>
-            <span className="text-sm font-bold text-emerald-400">+${totalPotentialProfitUSD.toFixed(2)} USD</span>
+            <span className="text-sm font-bold text-emerald-400">+${fmt(totalPotentialProfitUSD)} {currTag}</span>
           </div>
           <button
             onClick={openCreateModal}
@@ -248,9 +253,9 @@ export default function InventoryView({
                         </div>
 
                         <div className="flex items-center gap-2 mt-1 text-xs">
-                          <span className="text-slate-400">Costo: ${prod.cost_usd}</span>
+                          <span className="text-slate-400">Costo: ${fmt(prod.cost_usd)}</span>
                           <span>•</span>
-                          <span className="text-emerald-400 font-semibold">Ganas: +${unitProfitUSD.toFixed(2)}/u</span>
+                          <span className="text-emerald-400 font-semibold">Ganas: +${fmt(unitProfitUSD)}/u</span>
                         </div>
                       </div>
                     </div>
@@ -286,10 +291,12 @@ export default function InventoryView({
                   {/* Price Display */}
                   <div className="flex items-baseline gap-2 mt-3 p-2.5 rounded-xl bg-dark-850 border border-dark-750">
                     <span className="text-xs text-slate-400 font-medium">Precio Venta:</span>
-                    <span className="text-base font-black text-white">${(prod.price_usd || 0).toFixed(2)} USD</span>
-                    <span className="text-xs text-gold-400 font-mono ml-auto font-bold">
-                      Bs. {priceBs}
-                    </span>
+                    <span className="text-base font-black text-white">${fmt(prod.price_usd || 0)} {currTag}</span>
+                    {!isAr && (
+                      <span className="text-xs text-gold-400 font-mono ml-auto font-bold">
+                        Bs. {priceBs}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -366,7 +373,7 @@ export default function InventoryView({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Costo de Compra ($ USD)
+                    Costo de Compra ($ {currTag})
                   </label>
                   <input
                     type="number"
@@ -379,7 +386,7 @@ export default function InventoryView({
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-emerald-400 mb-1">
-                    Precio de Venta ($ USD)
+                    Precio de Venta ($ {currTag})
                   </label>
                   <input
                     type="number"

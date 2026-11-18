@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react'
 import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle, Receipt } from 'lucide-react'
 import PhoneCountryInput from './PhoneCountryInput'
 import { getLocalDateIso, normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 
-const SPLIT_METHOD_OPTIONS = [
+const getSplitMethodOptions = (isAr) => isAr ? [
+  { id: 'efectivo_usd', label: '💵 Efectivo (En Caja)' },
+  { id: 'pago_movil', label: '📲 Mercado Pago / Transf.' },
+  { id: 'punto_de_venta', label: '💳 Tarjeta / Point' },
+  { id: 'zelle', label: '🟡 Digital / USDT' },
+  { id: 'fiado', label: '📝 Fiado / Cta. Cte.' },
+] : [
   { id: 'efectivo_usd', label: '💵 Efectivo $ (Gaveta)' },
   { id: 'pago_movil', label: '📲 Pago Móvil (Bs)' },
   { id: 'punto_de_venta', label: '💳 Punto de Venta' },
@@ -21,6 +28,10 @@ export default function QuickCashModal({
   clients = [],
   prefillData = null
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const SPLIT_METHOD_OPTIONS = getSplitMethodOptions(isAr)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || '')
   const [activeItemTab, setActiveItemTab] = useState('servicios') // 'servicios' | 'productos'
   const [paymentMethod, setPaymentMethod] = useState('pago_movil')
@@ -253,11 +264,11 @@ export default function QuickCashModal({
 
     if (paymentMethod === 'mixto') {
       if (splitMethod1 === splitMethod2) {
-        alert('En Pago Mixto debes elegir dos métodos de pago diferentes (ej: Efectivo $ y Pago Móvil).')
+        alert(isAr ? 'En Pago Mixto debes elegir dos métodos de pago diferentes (ej: Efectivo y Mercado Pago).' : 'En Pago Mixto debes elegir dos métodos de pago diferentes (ej: Efectivo $ y Pago Móvil).')
         return
       }
       if (split1USD <= 0 || split1USD >= grandTotalUSD) {
-        alert(`En Pago Mixto, ingresa en la 1ra parte un monto mayor a $0 y menor al total a cobrar ($${grandTotalUSD.toFixed(2)} USD).`)
+        alert(`En Pago Mixto, ingresa en la 1ra parte un monto mayor a $0 y menor al total a cobrar (${fmt(grandTotalUSD)} ${currTag}).`)
         return
       }
     }
@@ -340,22 +351,28 @@ export default function QuickCashModal({
       msg += `------------------------------------\n`
       msg += `✂️ *DETALLE DE SU CUENTA:*\n`
       ;(completedTx.items || []).forEach(it => {
-        msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: $${(it.price_usd * (it.qty || 1)).toFixed(2)}\n`
+        msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: ${fmt(it.price_usd * (it.qty || 1))}\n`
       })
       if (completedTx.propina_usd > 0) {
-        msg += `🪙 *Propina:* $${completedTx.propina_usd.toFixed(2)} USD (Bs. ${completedTx.propina_bs.toFixed(2)})\n`
+        msg += isAr
+          ? `🪙 *Propina:* ${fmt(completedTx.propina_usd)} ARS\n`
+          : `🪙 *Propina:* ${completedTx.propina_usd.toFixed(2)} USD (Bs. ${completedTx.propina_bs.toFixed(2)})\n`
       }
       msg += `------------------------------------\n`
-      msg += `💰 *TOTAL PAGADO: $${completedTx.total_cobrado_usd.toFixed(2)} USD*\n`
-      msg += `👉 *Al cambio BCV: Bs. ${completedTx.total_cobrado_bs.toFixed(2)}*\n`
+      msg += `💰 *TOTAL PAGADO: ${fmt(completedTx.total_cobrado_usd)} ${currTag}*\n`
+      if (!isAr) {
+        msg += `👉 *Al cambio BCV: Bs. ${completedTx.total_cobrado_bs.toFixed(2)}*\n`
+      }
       if (Array.isArray(completedTx.payment_splits) && completedTx.payment_splits.length > 0) {
         msg += `💳 *Método de pago:* PAGO MIXTO\n`
         completedTx.payment_splits.forEach(sp => {
-          msg += `  • ${formatMethodName(sp.method)}: $${Number(sp.amount_usd).toFixed(2)} USD (Bs. ${Number(sp.amount_bs).toFixed(2)})\n`
+          msg += isAr
+            ? `  • ${formatMethodName(sp.method, isAr)}: ${fmt(sp.amount_usd)} ARS\n`
+            : `  • ${formatMethodName(sp.method, isAr)}: ${Number(sp.amount_usd).toFixed(2)} USD (Bs. ${Number(sp.amount_bs).toFixed(2)})\n`
         })
         msg += `\n`
       } else {
-        msg += `💳 *Método de pago:* ${formatMethodName(completedTx.metodo_pago).toUpperCase()}\n\n`
+        msg += `💳 *Método de pago:* ${formatMethodName(completedTx.metodo_pago, isAr).toUpperCase()}\n\n`
       }
       msg += `¡Gracias por visitarnos, te esperamos pronto! ✨`
 
@@ -401,23 +418,25 @@ export default function QuickCashModal({
               {(completedTx.items || []).map((it, idx) => (
                 <div key={idx} className="flex justify-between text-slate-300">
                   <span className="truncate pr-2">{it.qty > 1 ? `${it.qty}x ` : ''}{it.name}</span>
-                  <span className="font-bold">${(it.price_usd * (it.qty || 1)).toFixed(2)}</span>
+                  <span className="font-bold">${fmt(it.price_usd * (it.qty || 1))}</span>
                 </div>
               ))}
               {completedTx.propina_usd > 0 && (
                 <div className="flex justify-between text-amber-400">
                   <span>🪙 Propina:</span>
-                  <span className="font-bold">+${completedTx.propina_usd.toFixed(2)}</span>
+                  <span className="font-bold">+${fmt(completedTx.propina_usd)}</span>
                 </div>
               )}
             </div>
             <div className="pt-2 border-t border-dark-800 flex justify-between font-sans text-sm font-black">
               <span className="text-white">TOTAL COBRADO:</span>
-              <span className="text-emerald-400 font-mono text-base">${completedTx.total_cobrado_usd.toFixed(2)}</span>
+              <span className="text-emerald-400 font-mono text-base">${fmt(completedTx.total_cobrado_usd)} {isAr ? 'ARS' : ''}</span>
             </div>
-            <div className="text-right text-[11px] text-slate-400">
-              Bs. {completedTx.total_cobrado_bs.toFixed(2)} (Tasa: {exchangeRate.toFixed(2)})
-            </div>
+            {!isAr && (
+              <div className="text-right text-[11px] text-slate-400">
+                Bs. {completedTx.total_cobrado_bs.toFixed(2)} (Tasa: {exchangeRate.toFixed(2)})
+              </div>
+            )}
             {Array.isArray(completedTx.payment_splits) && completedTx.payment_splits.length > 0 && (
               <div className="pt-2 border-t border-dark-800/80 space-y-1 text-[11px]">
                 <div className="text-purple-400 font-sans font-bold uppercase tracking-wider text-[10px]">
@@ -425,9 +444,9 @@ export default function QuickCashModal({
                 </div>
                 {completedTx.payment_splits.map((sp, i) => (
                   <div key={i} className="flex justify-between text-slate-300">
-                    <span>• {formatMethodName(sp.method)}:</span>
+                    <span>• {formatMethodName(sp.method, isAr)}:</span>
                     <span className="font-bold text-white">
-                      ${Number(sp.amount_usd).toFixed(2)} <span className="text-slate-500">(Bs. {Number(sp.amount_bs).toFixed(0)})</span>
+                      ${fmt(sp.amount_usd)} {!isAr && <span className="text-slate-500">(Bs. {Number(sp.amount_bs).toFixed(0)})</span>}
                     </span>
                   </div>
                 ))}
@@ -579,10 +598,12 @@ export default function QuickCashModal({
                         )}
                       </div>
                       <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-dark-800/60">
-                        <span className="text-xs font-black text-emerald-400">${item.price_usd}</span>
-                        <span className="text-[9px] text-slate-400 font-mono">
-                          Bs. {(item.price_usd * exchangeRate).toFixed(0)}
-                        </span>
+                        <span className="text-xs font-black text-emerald-400">${fmt(item.price_usd)}</span>
+                        {!isAr && (
+                          <span className="text-[9px] text-slate-400 font-mono">
+                            Bs. {(item.price_usd * exchangeRate).toFixed(0)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   )
@@ -615,14 +636,16 @@ export default function QuickCashModal({
                         </div>
                         <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-dark-800/60">
                           <div>
-                            <span className="text-xs font-black text-emerald-400">${item.price_usd}</span>
+                            <span className="text-xs font-black text-emerald-400">${fmt(item.price_usd)}</span>
                             <span className="text-[9px] text-blue-400 ml-1 font-mono">
                               (Disp: {item.stock})
                             </span>
                           </div>
-                          <span className="text-[9px] text-slate-400 font-mono">
-                            Bs. {(item.price_usd * exchangeRate).toFixed(0)}
-                          </span>
+                          {!isAr && (
+                            <span className="text-[9px] text-slate-400 font-mono">
+                              Bs. {(item.price_usd * exchangeRate).toFixed(0)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )
@@ -696,8 +719,8 @@ export default function QuickCashModal({
                             +
                           </button>
                         </div>
-                        <span className="font-mono font-bold text-emerald-400 text-xs w-14 text-right">
-                          ${(ci.price_usd * ci.qty).toFixed(2)}
+                        <span className="font-mono font-bold text-emerald-400 text-xs w-16 text-right">
+                          ${fmt(ci.price_usd * ci.qty)}
                         </span>
                         <button
                           type="button"
@@ -721,14 +744,21 @@ export default function QuickCashModal({
               3. ¿Cómo pagó el cliente?
             </label>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-              {[
+              {(isAr ? [
+                { id: 'pago_movil', label: 'Mercado Pago', badge: 'Transf / QR' },
+                { id: 'efectivo_usd', label: 'Efectivo', badge: 'En Caja' },
+                { id: 'punto_de_venta', label: 'Tarjeta / Point', badge: 'Déb / Créd' },
+                { id: 'zelle', label: 'Digital / USDT', badge: 'Dólares' },
+                { id: 'fiado', label: 'Fiado / Cta.', badge: 'Pendiente' },
+                { id: 'mixto', label: '🔀 Mixto', badge: '2 Métodos' },
+              ] : [
                 { id: 'pago_movil', label: 'Pago Móvil', badge: 'Bs. Banco' },
                 { id: 'efectivo_usd', label: 'Efectivo $', badge: 'Gaveta' },
                 { id: 'punto_de_venta', label: 'Punto Venta', badge: 'Bs. Tarjeta' },
                 { id: 'zelle', label: 'Zelle / Binance', badge: 'Dólares' },
                 { id: 'fiado', label: 'Fiado (Debe)', badge: 'Pendiente' },
                 { id: 'mixto', label: '🔀 Mixto', badge: '2 Métodos' },
-              ].map(method => (
+              ]).map(method => (
                 <button
                   type="button"
                   key={method.id}
@@ -755,7 +785,7 @@ export default function QuickCashModal({
                     🔀 División de Cobro Mixto
                   </span>
                   <span className="font-mono text-slate-300">
-                    Total: <strong className="text-white">${grandTotalUSD.toFixed(2)}</strong> (Bs. {grandTotalBs})
+                    Total: <strong className="text-white">${fmt(grandTotalUSD)} {currTag}</strong> {!isAr && `(Bs. ${grandTotalBs})`}
                   </span>
                 </div>
 
@@ -765,36 +795,38 @@ export default function QuickCashModal({
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
                       1ra Parte (Recibido):
                     </span>
-                    <div className="flex items-center gap-1 bg-dark-950 border border-dark-750 p-0.5 rounded-lg">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSplitCurrency1('USD')
-                          setSplitInput1('')
-                        }}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                          splitCurrency1 === 'USD'
-                            ? 'bg-emerald-500 text-black'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        En $ USD
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSplitCurrency1('Bs')
-                          setSplitInput1('')
-                        }}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                          splitCurrency1 === 'Bs'
-                            ? 'bg-emerald-500 text-black'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        En Bs.
-                      </button>
-                    </div>
+                    {!isAr && (
+                      <div className="flex items-center gap-1 bg-dark-950 border border-dark-750 p-0.5 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSplitCurrency1('USD')
+                            setSplitInput1('')
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            splitCurrency1 === 'USD'
+                              ? 'bg-emerald-500 text-black'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          En $ USD
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSplitCurrency1('Bs')
+                            setSplitInput1('')
+                          }}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            splitCurrency1 === 'Bs'
+                              ? 'bg-emerald-500 text-black'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          En Bs.
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -839,7 +871,7 @@ export default function QuickCashModal({
 
                   {split1USD > 0 && (
                     <div className="text-right text-[10px] font-mono text-slate-400">
-                      1ra Parte: <strong className="text-emerald-400">${split1USD.toFixed(2)} USD</strong> (Bs. {split1Bs.toFixed(2)})
+                      1ra Parte: <strong className="text-emerald-400">${fmt(split1USD)} {currTag}</strong> {!isAr && `(Bs. ${split1Bs.toFixed(2)})`}
                     </div>
                   )}
                 </div>
@@ -877,11 +909,13 @@ export default function QuickCashModal({
                       <span className="text-[10px] text-slate-400 font-semibold">Falta cobrar:</span>
                       <div className="text-right font-mono">
                         <span className="text-sm font-black text-amber-400 block leading-tight">
-                          ${split2USD.toFixed(2)} USD
+                          ${fmt(split2USD)} {currTag}
                         </span>
-                        <span className="text-[10px] text-emerald-400 font-bold block">
-                          Bs. {split2Bs.toFixed(2)}
-                        </span>
+                        {!isAr && (
+                          <span className="text-[10px] text-emerald-400 font-bold block">
+                            Bs. {split2Bs.toFixed(2)}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -889,7 +923,7 @@ export default function QuickCashModal({
 
                 {!isSplitValid && splitInput1 !== '' && (
                   <p className="text-[11px] text-red-400 font-semibold text-center">
-                    ⚠️ El monto de la 1ra parte debe ser menor al total (${grandTotalUSD.toFixed(2)}) y con métodos distintos.
+                    ⚠️ El monto de la 1ra parte debe ser menor al total (${fmt(grandTotalUSD)}) y con métodos distintos.
                   </p>
                 )}
               </div>
@@ -934,39 +968,41 @@ export default function QuickCashModal({
                 <span>🪙 Propina {staffObj?.name.split(' ')[0] ? `para ${staffObj.name.split(' ')[0]}` : ''} (Opcional)</span>
               </label>
 
-              {/* Currency Toggle: [$ USD] | [Bs. Bolívares] */}
-              <div className="flex items-center gap-1 bg-dark-900 border border-dark-750 p-0.5 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTipCurrency('USD')
-                    setTipUSD(0)
-                    setCustomTip('')
-                  }}
-                  className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all ${
-                    tipCurrency === 'USD'
-                      ? 'bg-amber-500 text-black shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  $ Dólares
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTipCurrency('Bs')
-                    setTipUSD(0)
-                    setCustomTip('')
-                  }}
-                  className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all ${
-                    tipCurrency === 'Bs'
-                      ? 'bg-amber-500 text-black shadow'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Bs. Bolívares
-                </button>
-              </div>
+              {/* Currency Toggle: [$ USD] | [Bs. Bolívares] (solo VE) */}
+              {!isAr && (
+                <div className="flex items-center gap-1 bg-dark-900 border border-dark-750 p-0.5 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTipCurrency('USD')
+                      setTipUSD(0)
+                      setCustomTip('')
+                    }}
+                    className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                      tipCurrency === 'USD'
+                        ? 'bg-amber-500 text-black shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    $ Dólares
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTipCurrency('Bs')
+                      setTipUSD(0)
+                      setCustomTip('')
+                    }}
+                    className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold transition-all ${
+                      tipCurrency === 'Bs'
+                        ? 'bg-amber-500 text-black shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Bs. Bolívares
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -978,7 +1014,7 @@ export default function QuickCashModal({
                   type="number"
                   step="any"
                   min="0"
-                  placeholder={tipCurrency === 'USD' ? 'Escribe el monto de propina en $ (ej: 2)' : 'Escribe el monto de propina en Bs (ej: 150)'}
+                  placeholder={isAr ? 'Monto de propina en $ ARS (ej: 1000)' : tipCurrency === 'USD' ? 'Escribe el monto de propina en $ (ej: 2)' : 'Escribe el monto de propina en Bs (ej: 150)'}
                   value={customTip}
                   onChange={(e) => {
                     const val = e.target.value
@@ -1014,12 +1050,34 @@ export default function QuickCashModal({
               {tipUSD > 0 && (
                 <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-right shrink-0">
                   <span className="text-[11px] font-mono font-bold text-amber-300 block">
-                    {tipCurrency === 'Bs'
-                      ? `+$${tipUSD.toFixed(2)} USD (Bs. ${(tipUSD * exchangeRate).toFixed(2)})`
-                      : `+$${tipUSD.toFixed(2)} USD (Bs. ${(tipUSD * exchangeRate).toFixed(2)})`}
+                    {isAr
+                      ? `+${fmt(tipUSD)} ARS`
+                      : `+${tipUSD.toFixed(2)} USD (Bs. ${(tipUSD * exchangeRate).toFixed(2)})`}
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Quick Tip Chips */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              {(isAr ? [0, 1000, 2000, 3000] : [0, 1, 2, 5]).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => {
+                    setTipCurrency('USD')
+                    setTipUSD(v)
+                    setCustomTip(v > 0 ? String(v) : '')
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                    tipUSD === v
+                      ? 'bg-amber-500 text-black border-amber-400 font-black'
+                      : 'bg-dark-900 hover:bg-dark-800 text-slate-300 border-dark-750'
+                  }`}
+                >
+                  {v === 0 ? 'Sin propina' : `+${fmt(v)}`}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1028,10 +1086,12 @@ export default function QuickCashModal({
             <div className="flex items-center justify-between pb-2 border-b border-dark-750">
               <span className="text-xs text-slate-400">Total a Cobrar al Cliente:</span>
               <div className="text-right">
-                <span className="text-xl font-black text-white">${grandTotalUSD.toFixed(2)}</span>
-                <span className="text-xs text-gold-400 font-mono ml-2 font-bold">
-                  (Bs. {grandTotalBs})
-                </span>
+                <span className="text-xl font-black text-white">${fmt(grandTotalUSD)} {isAr ? 'ARS' : ''}</span>
+                {!isAr && (
+                  <span className="text-xs text-gold-400 font-mono ml-2 font-bold">
+                    (Bs. {grandTotalBs})
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1042,7 +1102,7 @@ export default function QuickCashModal({
                   Comisión {staffObj?.name.split(' ')[0]}:
                 </span>
                 <span className="text-xs font-bold text-amber-400">
-                  ${staffCommissionUSD.toFixed(2)}
+                  ${fmt(staffCommissionUSD)}
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
@@ -1050,7 +1110,7 @@ export default function QuickCashModal({
                   Propina (Aparte):
                 </span>
                 <span className="text-xs font-bold text-gold-400">
-                  +${tipUSD.toFixed(2)}
+                  +${fmt(tipUSD)}
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
@@ -1058,7 +1118,7 @@ export default function QuickCashModal({
                   Para el Local:
                 </span>
                 <span className="text-xs font-bold text-emerald-400">
-                  ${businessProfitUSD.toFixed(2)}
+                  ${fmt(businessProfitUSD)}
                 </span>
               </div>
             </div>
@@ -1075,7 +1135,7 @@ export default function QuickCashModal({
             }`}
           >
             <Check className="w-5 h-5 stroke-[3]" />
-            <span>GUARDAR COBRO (${grandTotalUSD.toFixed(2)}) Y DIVIDIR PLATA</span>
+            <span>GUARDAR COBRO (${fmt(grandTotalUSD)}) Y DIVIDIR PLATA</span>
           </button>
 
         </form>

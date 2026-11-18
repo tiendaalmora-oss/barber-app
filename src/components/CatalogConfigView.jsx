@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Globe, Copy, Check, ExternalLink, Share2, Store, MapPin, Phone, Clock, Sparkles, Plus, Trash2, CreditCard, Instagram, Pencil, X } from 'lucide-react'
 import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN, DEFAULT_WEEKLY_SCHEDULE } from '../lib/mockData'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 import { inferServiceDuration, formatDurationLabel, DAYS_OF_WEEK } from '../lib/dateUtils'
 
 export default function CatalogConfigView({
@@ -15,6 +16,8 @@ export default function CatalogConfigView({
 }) {
   const [form, setForm] = useState(businessProfile)
   const [copied, setCopied] = useState(false)
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
   const [savedToast, setSavedToast] = useState(false)
 
   // Sync when businessProfile changes (e.g. switching tenant)
@@ -207,7 +210,7 @@ export default function CatalogConfigView({
               Mi Catálogo y Link de Turnos
             </h2>
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              Pon este link en tu biografía de Instagram o mándaselo por WhatsApp a tus clientes. Ellos verán tu presentación, precios en <span className="text-gold-400 font-bold">$ y Bs.</span> y podrán apartar su turno directo en tu calendario.
+              Pon este link en tu biografía de Instagram o mándaselo por WhatsApp a tus clientes. Ellos verán tu presentación, precios en <span className="text-gold-400 font-bold">{isAr ? 'Pesos ($ ARS)' : '$ y Bs.'}</span> y podrán apartar su turno directo en tu calendario.
             </p>
           </div>
 
@@ -555,7 +558,7 @@ export default function CatalogConfigView({
                   <span>Métodos de Pago Aceptados</span>
                 </label>
                 <div className="flex flex-wrap gap-1.5 pt-0.5">
-                  {['Pago Móvil BCV', 'Efectivo ($)', 'Zelle', 'Punto de Venta'].map(method => {
+                  {(isAr ? ['Efectivo', 'Mercado Pago', 'Transferencia', 'Tarjeta / Point'] : ['Pago Móvil BCV', 'Efectivo ($)', 'Zelle', 'Punto de Venta']).map(method => {
                     const active = (form.paymentMethods || []).includes(method)
                     return (
                       <button
@@ -594,7 +597,7 @@ export default function CatalogConfigView({
               Tus Servicios y Precios ({services.length})
             </h3>
             <p className="text-xs text-slate-400 mb-4">
-              Agrega, edita o elimina cualquier servicio. Se actualiza en tu Caja y en tu Link Web (<span className="text-gold-400 font-bold">Bs. {exchangeRate.toFixed(2)}</span>).
+              Agrega, edita o elimina cualquier servicio. Se actualiza en tu Caja y en tu Link Web{!isAr && <> (<span className="text-gold-400 font-bold">Bs. {exchangeRate.toFixed(2)}</span>)</>}.
             </p>
 
             {/* Form to Add or Edit a Service */}
@@ -747,14 +750,16 @@ export default function CatalogConfigView({
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-slate-400">
-                        Bs. {(svc.price_usd * exchangeRate).toFixed(2)}
-                      </span>
+                      {!isAr && (
+                        <span className="text-[10px] text-slate-400">
+                          Bs. {(svc.price_usd * exchangeRate).toFixed(2)}
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-bold text-xs">
-                        ${svc.price_usd}
+                        ${fmt(svc.price_usd)}
                       </span>
                       <button
                         type="button"

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wallet, Clock, Plus, Minus, MessageSquare, Send, Trash2, RotateCcw, Lock, Receipt, Smartphone, X, Calendar as CalendarIcon } from 'lucide-react'
 import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD, formatTxPaymentSummary, normalizeWhatsAppPhone } from '../lib/dateUtils'
 import ReceiptModal from './ReceiptModal'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function DashboardView({ 
   transactions = [], 
@@ -14,6 +15,8 @@ export default function DashboardView({
   nicheData = {},
   businessProfile = {}
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
   const safeTransactions = Array.isArray(transactions) ? transactions : []
   const todayIso = getLocalDateIso()
   const yesterdayDate = new Date()
@@ -99,10 +102,10 @@ export default function DashboardView({
 
   // 2. DYNAMIC real payment methods breakdown (Unified IDs & Split Payments Support) for selected date
   const paymentMethodsList = [
-    { id: 'pago_movil', label: 'Pago Móvil (Bs)', color: 'bg-blue-500' },
-    { id: 'efectivo', label: 'Efectivo $ (Gaveta)', color: 'bg-emerald-500' },
-    { id: 'zelle', label: 'Zelle / Binance', color: 'bg-purple-500' },
-    { id: 'punto', label: 'Punto de Venta', color: 'bg-teal-500' },
+    { id: 'pago_movil', label: isAr ? 'Mercado Pago / Transf.' : 'Pago Móvil (Bs)', color: 'bg-blue-500' },
+    { id: 'efectivo', label: isAr ? 'Efectivo (Caja)' : 'Efectivo $ (Gaveta)', color: 'bg-emerald-500' },
+    { id: 'zelle', label: isAr ? 'Digital / USDT' : 'Zelle / Binance', color: 'bg-purple-500' },
+    { id: 'punto', label: isAr ? 'Tarjeta / Point' : 'Punto de Venta', color: 'bg-teal-500' },
     { id: 'fiado', label: 'Fiados (Por Cobrar)', color: 'bg-amber-500' },
   ].map(m => {
     const sum = dateTransactions.reduce((acc, t) => acc + getTxMethodAmountUSD(t, m.id), 0)
@@ -246,17 +249,21 @@ export default function DashboardView({
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
-                  ${totalBusinessNetUSD.toFixed(2)}
+                  ${fmt(totalBusinessNetUSD)}
                 </span>
                 <span className="text-base sm:text-lg font-bold text-emerald-400">
-                  USD
+                  {isAr ? 'ARS' : 'USD'}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-1.5 text-xs sm:text-sm">
-                <span className="font-mono font-bold text-slate-300">
-                  ≈ Bs. {(totalBusinessNetUSD * exchangeRate).toFixed(2)}
-                </span>
-                <span className="text-slate-600">•</span>
+                {!isAr && (
+                  <>
+                    <span className="font-mono font-bold text-slate-300">
+                      ≈ Bs. {(totalBusinessNetUSD * exchangeRate).toFixed(2)}
+                    </span>
+                    <span className="text-slate-600">•</span>
+                  </>
+                )}
                 <span className="text-emerald-400/90 text-xs font-medium flex items-center gap-1">
                   <TrendingUp className="w-3.5 h-3.5 inline" />
                   Libre de comisiones y gastos
@@ -267,17 +274,17 @@ export default function DashboardView({
             {/* Cash Drawer vs Digital Pill (Quick Criollo Glance) */}
             <div className="flex items-center gap-2 bg-dark-950/80 border border-dark-800 p-2.5 rounded-2xl">
               <div className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-left">
-                <span className="text-[10px] uppercase font-bold text-emerald-400 block">💵 Gaveta Físico</span>
-                <span className="text-xs font-black font-mono text-white">${cashUSD.toFixed(2)}</span>
+                <span className="text-[10px] uppercase font-bold text-emerald-400 block">{isAr ? '💵 Caja Efectivo' : '💵 Gaveta Físico'}</span>
+                <span className="text-xs font-black font-mono text-white">${fmt(cashUSD)}</span>
               </div>
               <div className="px-2.5 py-1 rounded-xl bg-blue-500/10 border border-blue-500/20 text-left">
-                <span className="text-[10px] uppercase font-bold text-blue-400 block">📱 Banco / Digital</span>
-                <span className="text-xs font-black font-mono text-white">${digitalUSD.toFixed(2)}</span>
+                <span className="text-[10px] uppercase font-bold text-blue-400 block">{isAr ? '📱 MP / Tarjeta' : '📱 Banco / Digital'}</span>
+                <span className="text-xs font-black font-mono text-white">${fmt(digitalUSD)}</span>
               </div>
               {fiadoUSD > 0 && (
                 <div className="px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-left">
                   <span className="text-[10px] uppercase font-bold text-amber-400 block">⏳ Fiados</span>
-                  <span className="text-xs font-black font-mono text-white">${fiadoUSD.toFixed(2)}</span>
+                  <span className="text-xs font-black font-mono text-white">${fmt(fiadoUSD)}</span>
                 </div>
               )}
             </div>
@@ -338,11 +345,13 @@ export default function DashboardView({
                 Plata que Entró
               </span>
               <div className="text-xl font-black text-white mt-0.5">
-                ${totalIncomeUSD.toFixed(2)}
+                ${fmt(totalIncomeUSD)}
               </div>
-              <div className="text-[11px] font-mono text-slate-400 mt-0.5">
-                Bs. {(totalIncomeUSD * exchangeRate).toFixed(1)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Bs. {(totalIncomeUSD * exchangeRate).toFixed(1)}
+                </div>
+              )}
             </div>
             <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
               <DollarSign className="w-4 h-4" />
@@ -356,11 +365,13 @@ export default function DashboardView({
                 A Pagar ({nicheData?.rolePlural || 'Personal'})
               </span>
               <div className="text-xl font-black text-amber-400 mt-0.5">
-                ${totalCommissionsUSD.toFixed(2)}
+                ${fmt(totalCommissionsUSD)}
               </div>
-              <div className="text-[11px] font-mono text-slate-400 mt-0.5">
-                Bs. {(totalCommissionsUSD * exchangeRate).toFixed(1)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Bs. {(totalCommissionsUSD * exchangeRate).toFixed(1)}
+                </div>
+              )}
             </div>
             <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
               <Users className="w-4 h-4" />
@@ -374,11 +385,13 @@ export default function DashboardView({
                 Gastos del Local
               </span>
               <div className="text-xl font-black text-red-400 mt-0.5">
-                -${totalExpensesUSD.toFixed(2)}
+                -${fmt(totalExpensesUSD)}
               </div>
-              <div className="text-[11px] font-mono text-slate-400 mt-0.5">
-                Bs. {(totalExpensesUSD * exchangeRate).toFixed(1)}
-              </div>
+              {!isAr && (
+                <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Bs. {(totalExpensesUSD * exchangeRate).toFixed(1)}
+                </div>
+              )}
             </div>
             <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center shrink-0">
               <ArrowDownRight className="w-4 h-4" />
@@ -460,8 +473,8 @@ export default function DashboardView({
           <div className="flex items-center justify-between pt-3 text-xs text-slate-400">
             <span>
               {bestDay && bestDay.revenue > 0
-                ? `Día más movido: ${bestDay.day} ($${bestDay.revenue.toFixed(2)})`
-                : 'Día más movido: Sin registros aún ($0.00)'}
+                ? `Día más movido: ${bestDay.day} (${fmt(bestDay.revenue)})`
+                : (isAr ? 'Día más movido: Sin registros aún ($0)' : 'Día más movido: Sin registros aún ($0.00)')}
             </span>
             <span className="text-emerald-400 font-medium">{totalServicesCount} atenciones hoy</span>
           </div>
@@ -471,15 +484,15 @@ export default function DashboardView({
         <div className="bg-dark-900 border border-dark-800/80 p-5 sm:p-6 rounded-3xl shadow-xl flex flex-col justify-between">
           <div>
             <h3 className="font-bold text-white text-base mb-1">Métodos de Pago • Hoy</h3>
-            <p className="text-xs text-slate-400 mb-4">Efectivo vs. Pago Móvil y Digital</p>
+            <p className="text-xs text-slate-400 mb-4">{isAr ? 'Efectivo vs. Mercado Pago y Tarjeta' : 'Efectivo vs. Pago Móvil y Digital'}</p>
 
             {totalIncomeUSD === 0 ? (
               <div className="py-8 text-center space-y-2 bg-dark-850/50 rounded-2xl p-4 border border-dark-800">
                 <span className="text-xs font-bold text-slate-400 block">
-                  Sin cobros registrados hoy ($0.00)
+                  Sin cobros registrados hoy ({isAr ? '$0' : '$0.00'})
                 </span>
                 <p className="text-[11px] text-slate-500">
-                  Al anotar cobros con Pago Móvil, Efectivo o Zelle, aquí verás la proporción exacta en tiempo real.
+                  {isAr ? 'Al anotar cobros con Mercado Pago, Efectivo o Tarjeta, aquí verás la proporción exacta en tiempo real.' : 'Al anotar cobros con Pago Móvil, Efectivo o Zelle, aquí verás la proporción exacta en tiempo real.'}
                 </p>
               </div>
             ) : (
@@ -487,7 +500,7 @@ export default function DashboardView({
                 {paymentMethodsList.map((m, idx) => (
                   <div key={idx} className="space-y-1">
                     <div className="flex justify-between text-xs font-medium">
-                      <span className="text-slate-300">{m.label} (${m.sum.toFixed(2)})</span>
+                      <span className="text-slate-300">{m.label} (${fmt(m.sum)})</span>
                       <span className="text-white font-mono">{m.pct}%</span>
                     </div>
                     <div className="w-full h-2 rounded-full bg-dark-800 overflow-hidden">
@@ -506,7 +519,7 @@ export default function DashboardView({
                 ? (isViewingToday 
                     ? 'Mantén tu caja al día anotando cada servicio y gasto para tener tu arqueo perfecto al final del día.'
                     : `No se registraron ventas en esta fecha (${selectedDate}).`)
-                : `Tienes $${totalIncomeUSD.toFixed(2)} facturados (${formatDateLabel(selectedDate)}). ${isViewingToday ? 'Recuerda hacer tu arqueo de gaveta antes de cerrar la jornada.' : 'Registro auditado de fecha anterior.'}`}
+                : `Tienes ${fmt(totalIncomeUSD)} facturados (${formatDateLabel(selectedDate)}). ${isViewingToday ? 'Recuerda hacer tu arqueo de caja antes de cerrar la jornada.' : 'Registro auditado de fecha anterior.'}`}
             </span>
           </div>
         </div>
@@ -636,7 +649,7 @@ export default function DashboardView({
                           {tx.propina_usd > 0 && (
                             <>
                               <span className="text-slate-600">•</span>
-                              <span className="text-amber-400 font-bold">🪙 +${tx.propina_usd.toFixed(2)}</span>
+                              <span className="text-amber-400 font-bold">🪙 +${fmt(tx.propina_usd)}</span>
                             </>
                           )}
                           <span className="text-slate-600">•</span>
@@ -649,11 +662,13 @@ export default function DashboardView({
                       {/* Amount */}
                       <div className="text-left sm:text-right">
                         <div className={`text-sm font-black font-mono ${isExpense ? 'text-red-400' : 'text-white'}`}>
-                          {isExpense ? `-$${Math.abs(Number(tx.monto_usd || 0)).toFixed(2)}` : `+$${Number(tx.monto_usd || 0).toFixed(2)}`}
+                          {isExpense ? `-${fmt(Math.abs(Number(tx.monto_usd || 0)))}` : `+${fmt(Number(tx.monto_usd || 0))}`}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          Bs. {Math.abs(Number(tx.monto_bs || (Number(tx.monto_usd || 0) * exchangeRate) || 0)).toFixed(1)}
-                        </div>
+                        {!isAr && (
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            Bs. {Math.abs(Number(tx.monto_bs || (Number(tx.monto_usd || 0) * exchangeRate) || 0)).toFixed(1)}
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons: Factura & Borrar */}

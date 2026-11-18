@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award, FileText, Calendar, Clock, ArrowDownRight, MessageSquare, AlertCircle, Receipt, Wallet, Check, AlertTriangle } from 'lucide-react'
 import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 
 const AVATAR_OPTIONS = ['✂️', '💈', '⚡', '👑', '🔥', '💅', '✨', '🧔', '💄', '💇']
 
@@ -22,6 +23,9 @@ export default function CommissionsView({
   onLiquidateStaff,
   onDeleteTransaction
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
   // Top Tabs: 'equipo' | 'vales'
   const [activeTab, setActiveTab] = useState('equipo')
   
@@ -274,23 +278,28 @@ export default function CommissionsView({
     let msg = `💈 *RECIBO DE LIQUIDACIÓN • ${bizName.toUpperCase()}*\n`
     msg += `👤 *Profesional:* ${st.name}\n`
     msg += `📅 *Fecha:* ${dateStr} - ${nowHour}\n`
-    msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    if (!isAr) {
+      msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
+    }
     msg += `------------------------------------\n\n`
-    msg += `✂️ *Servicios Realizados:* ${st.servicesCount} cortes ($${st.totalBilledUSD.toFixed(2)})\n`
-    msg += `📈 *Tus Comisiones (${st.commission_pct}%):* +$${st.totalEarnedUSD.toFixed(2)} USD\n`
+    msg += `✂️ *Servicios Realizados:* ${st.servicesCount} serv. (${fmt(st.totalBilledUSD)})\n`
+    msg += `📈 *Tus Comisiones (${st.commission_pct}%):* +${fmt(st.totalEarnedUSD)} ${currTag}\n`
     if (st.totalTipsUSD > 0) {
-      msg += `🪙 *Propinas acumuladas:* +$${st.totalTipsUSD.toFixed(2)} USD\n`
+      msg += `🪙 *Propinas acumuladas:* +${fmt(st.totalTipsUSD)} ${currTag}\n`
     }
     if (st.valesUSD > 0) {
       msg += `\n🧾 *Vales y Adelantos Descontados:*\n`
       st.pendingVales.forEach(v => {
-        msg += `  - ${v.motivo || 'Vale'}: -$${Math.abs(v.monto_usd).toFixed(2)} USD (${v.metodo_pago === 'efectivo_usd' ? 'Efectivo' : 'Banco'})\n`
+        msg += `  - ${v.motivo || 'Vale'}: -${fmt(Math.abs(v.monto_usd))} ${currTag} (${v.metodo_pago === 'efectivo_usd' ? 'Efectivo' : (isAr ? 'Mercado Pago' : 'Banco')})\n`
       })
-      msg += `• Total Vales: -$${st.valesUSD.toFixed(2)} USD\n`
+      msg += `• Total Vales: -${fmt(st.valesUSD)} ${currTag}\n`
     }
     msg += `\n------------------------------------\n`
-    msg += `💰 *TOTAL NETO A RECIBIR: $${st.netBalanceUSD.toFixed(2)} USD*\n`
-    msg += `👉 *En Bolívares: Bs. ${st.netBalanceBs.toFixed(2)}*\n\n`
+    msg += `💰 *TOTAL NETO A RECIBIR: ${fmt(st.netBalanceUSD)} ${currTag}*\n`
+    if (!isAr) {
+      msg += `👉 *En Bolívares: Bs. ${st.netBalanceBs.toFixed(2)}*\n`
+    }
+    msg += `\n`
     msg += `¡Cuentas claras conservan amistades! ✅`
 
     const url = cleanPhone
@@ -354,17 +363,21 @@ export default function CommissionsView({
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
-                  ${totalTeamNetUSD.toFixed(2)}
+                  ${fmt(totalTeamNetUSD)}
                 </span>
                 <span className="text-base sm:text-lg font-bold text-gold-400">
-                  USD
+                  {currTag}
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-1.5 text-xs sm:text-sm">
-                <span className="font-mono font-bold text-slate-300">
-                  ≈ Bs. {totalTeamNetBs.toFixed(2)}
-                </span>
-                <span className="text-slate-600">•</span>
+                {!isAr && (
+                  <>
+                    <span className="font-mono font-bold text-slate-300">
+                      ≈ Bs. {totalTeamNetBs.toFixed(2)}
+                    </span>
+                    <span className="text-slate-600">•</span>
+                  </>
+                )}
                 <span className="text-gold-400/90 text-xs font-medium">
                   Listo para pagar tras descontar vales y adelantos
                 </span>
@@ -379,12 +392,12 @@ export default function CommissionsView({
               </div>
               <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-left">
                 <span className="text-[10px] uppercase font-bold text-emerald-400 block">📈 Comisiones</span>
-                <span className="text-xs font-black font-mono text-white">${totalTeamEarnedUSD.toFixed(2)}</span>
+                <span className="text-xs font-black font-mono text-white">${fmt(totalTeamEarnedUSD)}</span>
               </div>
               {pendingValesTotalUSD > 0 && (
                 <div className="px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-left">
                   <span className="text-[10px] uppercase font-bold text-amber-400 block">🧾 Vales Activos</span>
-                  <span className="text-xs font-black font-mono text-white">-${pendingValesTotalUSD.toFixed(2)}</span>
+                  <span className="text-xs font-black font-mono text-white">-${fmt(pendingValesTotalUSD)}</span>
                 </div>
               )}
             </div>
@@ -569,7 +582,7 @@ export default function CommissionsView({
                         </div>
                         <div className="p-2.5 rounded-2xl bg-dark-850 border border-dark-750/80">
                           <span className="text-slate-400 block text-[10px] uppercase font-bold">Generó en Caja</span>
-                          <span className="text-sm font-black text-slate-200">${st.totalBilledUSD.toFixed(2)}</span>
+                          <span className="text-sm font-black text-slate-200">${fmt(st.totalBilledUSD)}</span>
                         </div>
                       </div>
 
@@ -577,18 +590,18 @@ export default function CommissionsView({
                       <div className="space-y-1.5 text-xs bg-dark-950/80 p-3 rounded-2xl border border-dark-800/80">
                         <div className="flex justify-between items-center text-slate-300">
                           <span>📈 Comisiones ganadas:</span>
-                          <span className="font-mono font-bold text-white">+${st.totalEarnedUSD.toFixed(2)}</span>
+                          <span className="font-mono font-bold text-white">+${fmt(st.totalEarnedUSD)}</span>
                         </div>
                         {st.totalTipsUSD > 0 && (
                           <div className="flex justify-between items-center text-emerald-400">
                             <span>🪙 Propinas acumuladas:</span>
-                            <span className="font-mono font-bold">+${st.totalTipsUSD.toFixed(2)}</span>
+                            <span className="font-mono font-bold">+${fmt(st.totalTipsUSD)}</span>
                           </div>
                         )}
                         {hasPendingVales && (
                           <div className="flex justify-between items-center text-amber-400 pt-1 border-t border-dark-800">
                             <span>🧾 Vales a descontar ({st.valesCount}):</span>
-                            <span className="font-mono font-black">-${st.valesUSD.toFixed(2)}</span>
+                            <span className="font-mono font-black">-${fmt(st.valesUSD)}</span>
                           </div>
                         )}
                       </div>
@@ -605,17 +618,21 @@ export default function CommissionsView({
                           <span className="text-[10px] font-black uppercase tracking-wider">
                             {isNegative ? '⚠️ Saldo en Contra (Debe al Local)' : '💰 Saldo Neto a Liquidar'}
                           </span>
-                          <span className="text-[10px] font-mono text-slate-400">
-                            Tasa: {exchangeRate.toFixed(0)}
-                          </span>
+                          {!isAr && (
+                            <span className="text-[10px] font-mono text-slate-400">
+                              Tasa: {exchangeRate.toFixed(0)}
+                            </span>
+                          )}
                         </div>
 
                         <div className="text-2xl font-black mt-1">
-                          ${st.netBalanceUSD.toFixed(2)} <span className="text-xs font-normal text-slate-400">USD</span>
+                          ${fmt(st.netBalanceUSD)} <span className="text-xs font-normal text-slate-400">{currTag}</span>
                         </div>
-                        <div className="text-xs text-gold-400 font-mono mt-0.5">
-                          Bs. {st.netBalanceBs.toFixed(2)}
-                        </div>
+                        {!isAr && (
+                          <div className="text-xs text-gold-400 font-mono mt-0.5">
+                            Bs. {st.netBalanceBs.toFixed(2)}
+                          </div>
+                        )}
 
                         {isNegative && (
                           <p className="text-[10px] text-rose-300/80 mt-1">
@@ -812,26 +829,32 @@ export default function CommissionsView({
                   <label className="text-xs font-bold text-slate-300">
                     Monto a Entregar
                   </label>
-                  <div className="flex items-center gap-1 bg-dark-800 p-0.5 rounded-lg border border-dark-700 text-[11px]">
-                    <button
-                      type="button"
-                      onClick={() => setValeCurrency('USD')}
-                      className={`px-2 py-0.5 rounded-md font-bold transition-all ${
-                        valeCurrency === 'USD' ? 'bg-amber-500 text-black' : 'text-slate-400'
-                      }`}
-                    >
-                      $ USD
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setValeCurrency('Bs')}
-                      className={`px-2 py-0.5 rounded-md font-bold transition-all ${
-                        valeCurrency === 'Bs' ? 'bg-amber-500 text-black' : 'text-slate-400'
-                      }`}
-                    >
-                      Bs.
-                    </button>
-                  </div>
+                  {isAr ? (
+                    <span className="text-[11px] font-mono font-bold text-sky-300 bg-sky-500/15 px-2 py-0.5 rounded-lg border border-sky-500/30">
+                      🇦🇷 Pesos ($ ARS)
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-1 bg-dark-800 p-0.5 rounded-lg border border-dark-700 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setValeCurrency('USD')}
+                        className={`px-2 py-0.5 rounded-md font-bold transition-all ${
+                          valeCurrency === 'USD' ? 'bg-amber-500 text-black' : 'text-slate-400'
+                        }`}
+                      >
+                        $ USD
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setValeCurrency('Bs')}
+                        className={`px-2 py-0.5 rounded-md font-bold transition-all ${
+                          valeCurrency === 'Bs' ? 'bg-amber-500 text-black' : 'text-slate-400'
+                        }`}
+                      >
+                        Bs.
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="relative">
@@ -853,7 +876,7 @@ export default function CommissionsView({
 
                 {/* Chips rápidos de monto */}
                 <div className="flex gap-1.5 mt-2">
-                  {[2, 5, 10, 20].map(v => (
+                  {(isAr ? [2000, 5000, 10000, 20000] : [2, 5, 10, 20]).map(v => (
                     <button
                       key={v}
                       type="button"
@@ -867,7 +890,7 @@ export default function CommissionsView({
                           : 'bg-dark-850 hover:bg-dark-750 text-slate-300 border-dark-750'
                       }`}
                     >
-                      ${v}
+                      ${fmt(v)}
                     </button>
                   ))}
                 </div>
@@ -926,8 +949,8 @@ export default function CommissionsView({
                         : 'bg-dark-850 border-dark-750 text-slate-400'
                     }`}
                   >
-                    📱 Pago Móvil / Banco
-                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">No toca la gaveta física</span>
+                    {isAr ? '📱 Mercado Pago / Transf.' : '📱 Pago Móvil / Banco'}
+                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5">{isAr ? 'No toca la caja física' : 'No toca la gaveta física'}</span>
                   </button>
                 </div>
               </div>
@@ -975,33 +998,35 @@ export default function CommissionsView({
             <div className="bg-dark-950 p-4 rounded-2xl border border-dark-800 space-y-2 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-400">✂️ Cortes realizados:</span>
-                <span className="font-bold text-white">{liquidatingStaff.servicesCount} ($ {liquidatingStaff.totalBilledUSD.toFixed(2)})</span>
+                <span className="font-bold text-white">{liquidatingStaff.servicesCount} (${fmt(liquidatingStaff.totalBilledUSD)})</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">📈 Comisiones ganadas ({liquidatingStaff.commission_pct}%):</span>
-                <span className="font-bold text-emerald-400">+${liquidatingStaff.totalEarnedUSD.toFixed(2)} USD</span>
+                <span className="font-bold text-emerald-400">+${fmt(liquidatingStaff.totalEarnedUSD)} {currTag}</span>
               </div>
               {liquidatingStaff.totalTipsUSD > 0 && (
                 <div className="flex justify-between">
                   <span className="text-slate-400">🪙 Propinas acumuladas:</span>
-                  <span className="font-bold text-emerald-400">+${liquidatingStaff.totalTipsUSD.toFixed(2)} USD</span>
+                  <span className="font-bold text-emerald-400">+${fmt(liquidatingStaff.totalTipsUSD)} {currTag}</span>
                 </div>
               )}
               {liquidatingStaff.valesUSD > 0 && (
                 <div className="flex justify-between text-amber-400 pt-1.5 border-t border-dark-800">
                   <span>🧾 Vales a descontar ({liquidatingStaff.valesCount}):</span>
-                  <span className="font-black">-${liquidatingStaff.valesUSD.toFixed(2)} USD</span>
+                  <span className="font-black">-${fmt(liquidatingStaff.valesUSD)} {currTag}</span>
                 </div>
               )}
               <div className="flex justify-between pt-2 border-t border-dark-800 text-sm font-black">
                 <span className="text-white">💰 NETO A ENTREGAR:</span>
                 <span className="text-gold-400 font-mono text-base">
-                  ${liquidatingStaff.netBalanceUSD.toFixed(2)} USD
+                  ${fmt(liquidatingStaff.netBalanceUSD)} {currTag}
                 </span>
               </div>
-              <div className="text-right text-[11px] text-slate-400 font-mono">
-                Al cambio BCV: Bs. {liquidatingStaff.netBalanceBs.toFixed(2)}
-              </div>
+              {!isAr && (
+                <div className="text-right text-[11px] text-slate-400 font-mono">
+                  Al cambio BCV: Bs. {liquidatingStaff.netBalanceBs.toFixed(2)}
+                </div>
+              )}
             </div>
 
             {/* Método con el que se le paga */}
@@ -1030,7 +1055,7 @@ export default function CommissionsView({
                       : 'bg-dark-850 border-dark-750 text-slate-400'
                   }`}
                 >
-                  📱 Pago Móvil / Banco
+                  {isAr ? '📱 Mercado Pago / Transf.' : '📱 Pago Móvil / Banco'}
                 </button>
               </div>
             </div>

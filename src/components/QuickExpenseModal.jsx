@@ -1,13 +1,17 @@
 import React, { useState } from 'react'
 import { X, Check, ArrowDownRight, Tag, DollarSign } from 'lucide-react'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 
 export default function QuickExpenseModal({
   isOpen,
   onClose,
   exchangeRate,
+  businessProfile = {},
   staffList = [],
   onRegisterExpense
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('insumos')
   const [amountUSD, setAmountUSD] = useState('')
@@ -181,30 +185,36 @@ export default function QuickExpenseModal({
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                 {isVale ? 'Monto del Vale a Entregar' : 'Monto del Gasto'}
               </label>
-              <div className="flex items-center gap-1 bg-dark-800 p-0.5 rounded-lg border border-dark-700 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setCurrencyMode('USD')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition-all ${
-                    currencyMode === 'USD' 
-                      ? isVale ? 'bg-amber-500 text-black' : 'bg-red-500 text-white' 
-                      : 'text-slate-400'
-                  }`}
-                >
-                  $ USD
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrencyMode('Bs')}
-                  className={`px-2 py-0.5 rounded-md font-bold transition-all ${
-                    currencyMode === 'Bs' 
-                      ? isVale ? 'bg-amber-500 text-black' : 'bg-red-500 text-white' 
-                      : 'text-slate-400'
-                  }`}
-                >
-                  Bs.
-                </button>
-              </div>
+              {isAr ? (
+                <span className="text-[11px] font-mono font-bold text-sky-300 bg-sky-500/15 px-2 py-0.5 rounded-lg border border-sky-500/30">
+                  🇦🇷 Pesos ($ ARS)
+                </span>
+              ) : (
+                <div className="flex items-center gap-1 bg-dark-800 p-0.5 rounded-lg border border-dark-700 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setCurrencyMode('USD')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition-all ${
+                      currencyMode === 'USD' 
+                        ? isVale ? 'bg-amber-500 text-black' : 'bg-red-500 text-white' 
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    $ USD
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrencyMode('Bs')}
+                    className={`px-2 py-0.5 rounded-md font-bold transition-all ${
+                      currencyMode === 'Bs' 
+                        ? isVale ? 'bg-amber-500 text-black' : 'bg-red-500 text-white' 
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    Bs.
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="relative">
@@ -227,7 +237,7 @@ export default function QuickExpenseModal({
 
             {/* Chips rápidos de monto */}
             <div className="flex gap-1.5 mt-2">
-              {[2, 5, 10, 20].map(v => (
+              {(isAr ? [2000, 5000, 10000, 20000] : [2, 5, 10, 20]).map(v => (
                 <button
                   key={v}
                   type="button"
@@ -241,15 +251,15 @@ export default function QuickExpenseModal({
                       : 'bg-dark-850 hover:bg-dark-750 text-slate-300 border-dark-750'
                   }`}
                 >
-                  ${v}
+                  ${fmt(v)}
                 </button>
               ))}
             </div>
 
-            {/* Equivalent preview */}
-            {numAmount > 0 && (
+            {/* Equivalent preview (VE only) */}
+            {!isAr && numAmount > 0 && (
               <div className="text-right text-xs text-slate-400 font-mono mt-1">
-                Equivalente: <strong className="text-white">{currencyMode === 'USD' ? `Bs. ${finalBs.toFixed(2)}` : `$${finalUSD.toFixed(2)} USD`}</strong> (Tasa: {exchangeRate.toFixed(2)})
+                Equivalente: <strong className="text-white">{currencyMode === 'USD' ? `Bs. ${finalBs.toFixed(2)}` : `${finalUSD.toFixed(2)} USD`}</strong> (Tasa: {exchangeRate.toFixed(2)})
               </div>
             )}
           </div>
@@ -269,7 +279,7 @@ export default function QuickExpenseModal({
                     : 'bg-dark-800 border-dark-700/60 text-slate-400'
                 }`}
               >
-                💵 Gaveta (Efectivo $)
+                {isAr ? '💵 Caja (Efectivo)' : '💵 Gaveta (Efectivo $)'}
               </button>
               <button
                 type="button"
@@ -280,7 +290,7 @@ export default function QuickExpenseModal({
                     : 'bg-dark-800 border-dark-700/60 text-slate-400'
                 }`}
               >
-                📱 Cuenta Banco / Pago Móvil
+                {isAr ? '📱 Mercado Pago / Transf.' : '📱 Cuenta Banco / Pago Móvil'}
               </button>
             </div>
             {paymentMethod === 'efectivo_usd' && (

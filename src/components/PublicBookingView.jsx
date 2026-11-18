@@ -30,6 +30,7 @@ import {
   getDayLabelFromDate
 } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
+import { isArgentina, formatCurrency } from '../lib/brandConfig'
 import PhoneCountryInput from './PhoneCountryInput'
 
 const SHORT_DAY_NAMES = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
@@ -45,6 +46,8 @@ export default function PublicBookingView({
   isOwnerPreview = false,
   onExitPreview
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
   const safeRate = Number(exchangeRate) > 0 ? Number(exchangeRate) : 889.26
   const isSalonNiche = nicheData?.nicheId === 'estetica' || (nicheData?.roleName || '').toLowerCase().includes('estilista') || (nicheData?.roleName || '').toLowerCase().includes('especialista')
 
@@ -299,7 +302,7 @@ export default function PublicBookingView({
     const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de apartar mi turno desde su Ventana Digital:\n\n` +
       `🎫 *Pase:* #${bookedTicket.code}\n` +
       `👤 *Cliente:* ${bookedTicket.client_name}\n` +
-      `✨ *Servicio:* ${bookedTicket.service} ($${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n` +
+      (isAr ? `✨ *Servicio:* ${bookedTicket.service} (${fmt(bookedTicket.priceUsd)} ARS)\n` : `✨ *Servicio:* ${bookedTicket.service} (${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n`) +
       `⏱️ *Duración:* ~${formatDurationLabel(bookedTicket.durationMin || 30)}\n` +
       `💈 *Atiende:* ${bookedTicket.staffName}\n` +
       `📅 *Fecha:* ${bookedTicket.date}\n` +
@@ -314,7 +317,7 @@ export default function PublicBookingView({
   const handleOrderProductWhatsApp = (prod) => {
     const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
     const bs = (prod.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* ($${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
+    const msg = isAr ? `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* (${fmt(prod.price_usd)} ARS) y quiero encargarlo.` : `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* (${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
       : `https://wa.me/?text=${encodeURIComponent(msg)}`
@@ -494,14 +497,16 @@ export default function PublicBookingView({
 
           {/* Unified Glass Footer Strip: BCV & Accepted Payment Methods */}
           <div className="bg-white/[0.02] border-t border-white/[0.06] px-4 py-2.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-slate-400">
-            <div className="inline-flex items-center gap-1.5 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-gold-400" />
-              <span>Tasa BCV:</span>
-              <strong className="text-white font-mono">Bs. {safeRate.toFixed(2)}</strong>
-            </div>
+            {!isAr && (
+              <div className="inline-flex items-center gap-1.5 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-gold-400" />
+                <span>Tasa BCV:</span>
+                <strong className="text-white font-mono">Bs. {safeRate.toFixed(2)}</strong>
+              </div>
+            )}
             {(businessProfile?.paymentMethods || []).length > 0 && (
               <>
-                <span className="text-slate-700">|</span>
+                {!isAr && <span className="text-slate-700">|</span>}
                 <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-slate-300">
                   {(businessProfile.paymentMethods || []).map((pm, idx) => (
                     <React.Fragment key={pm}>
@@ -625,10 +630,14 @@ export default function PublicBookingView({
                           <Clock className="w-3 h-3 text-gold-400/80" />
                           <span>{formatDurationLabel(dur)}</span>
                         </span>
-                        <span className="text-slate-600">•</span>
-                        <span>
-                          Bs. <strong className="text-slate-300 font-mono font-semibold">{priceBs}</strong>
-                        </span>
+                        {!isAr && (
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <span>
+                              Bs. <strong className="text-slate-300 font-mono font-semibold">{priceBs}</strong>
+                            </span>
+                          </>
+                        )}
                         {svc.category && (
                           <>
                             <span className="text-slate-600">•</span>
@@ -644,7 +653,7 @@ export default function PublicBookingView({
                         <span className={`block text-lg sm:text-xl font-black font-mono tracking-tight ${
                           isSelected ? 'text-gold-400' : 'text-white'
                         }`}>
-                          ${svc.price_usd}
+                          ${fmt(svc.price_usd)}
                         </span>
                       </div>
 
@@ -729,12 +738,14 @@ export default function PublicBookingView({
                               {prod.name}
                             </h3>
                             <span className="text-base font-black text-gold-400 font-mono shrink-0">
-                              ${prod.price_usd}
+                              ${fmt(prod.price_usd)}
                             </span>
                           </div>
-                          <p className="text-xs text-slate-300 mt-1 font-mono">
-                            Bs. {priceBs}
-                          </p>
+                          {!isAr && (
+                            <p className="text-xs text-slate-300 mt-1 font-mono">
+                              Bs. {priceBs}
+                            </p>
+                          )}
                           <p className="text-[10px] text-emerald-400 mt-1 font-semibold">
                             ● Disponible en tienda
                           </p>
@@ -837,8 +848,8 @@ export default function PublicBookingView({
                   <div className="flex justify-between items-center pt-1">
                     <span className="text-slate-400 font-medium">Valor del Servicio</span>
                     <div className="text-right">
-                      <span className="text-base font-black text-white font-mono">${bookedTicket.priceUsd}</span>
-                      <span className="text-[11px] text-slate-400 block font-mono">Bs. {bookedTicket.priceBs}</span>
+                      <span className="text-base font-black text-white font-mono">${fmt(bookedTicket.priceUsd)} {isAr ? 'ARS' : ''}</span>
+                      {!isAr && <span className="text-[11px] text-slate-400 block font-mono">Bs. {bookedTicket.priceBs}</span>}
                     </div>
                   </div>
                 </div>
@@ -913,7 +924,7 @@ export default function PublicBookingView({
                       const bs = (s.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                       return (
                         <option key={s.id} value={s.name}>
-                          {s.name} ({formatDurationLabel(dur)}) — ${s.price_usd} / Bs. {bs}
+                          {s.name} ({formatDurationLabel(dur)}) — {isAr ? `${fmt(s.price_usd)} ARS` : `${s.price_usd} / Bs. ${bs}`}
                         </option>
                       )
                     })}
@@ -1212,11 +1223,13 @@ export default function PublicBookingView({
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-base font-black text-white font-mono">
-                      ${currentServiceObj.price_usd}
+                      ${fmt(currentServiceObj.price_usd)} {isAr ? 'ARS' : ''}
                     </span>
-                    <span className="block text-[10px] text-slate-400 font-mono">
-                      Bs. {(currentServiceObj.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
+                    {!isAr && (
+                      <span className="block text-[10px] text-slate-400 font-mono">
+                        Bs. {(currentServiceObj.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

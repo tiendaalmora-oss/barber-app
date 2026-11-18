@@ -56,7 +56,12 @@ const DEFAULT_SAAS_CONFIG = {
   binanceEmail: 'ID: 92423494 (IngenioOS)',
   binanceIdOnly: '92423494',
   zelleInfo: 'BNB Smart Chain (BEP20): 0xf34fe548272f23d363462ba2685f92932ddbd7aa',
-  bep20Address: '0xf34fe548272f23d363462ba2685f92932ddbd7aa'
+  bep20Address: '0xf34fe548272f23d363462ba2685f92932ddbd7aa',
+  monthlyPriceArsFixed: '9.800',
+  argBank: 'Mercado Pago / Transferencia (CBU / CVU)',
+  argHolder: 'Roberto (Ingenio OS)',
+  argAlias: 'ingenio.os.mp',
+  argCvu: '0000003100000000000000'
 }
 
 const DEFAULT_TENANTS = [
@@ -744,9 +749,11 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
     }
 
     const isSalon = Boolean(context.isSalon)
+    const isAr = context.country === 'AR'
     const roleCopilot = isSalon ? 'Socia GlamOS' : 'Socio BarberOS'
+    const currLabel = isAr ? 'ARS' : 'USD'
 
-    const systemPrompt = `Eres "${roleCopilot}", el asistente virtual de inteligencia artificial especializado en la gestión y operación de ${isSalon ? 'salones de belleza, uñas y spas en GlamOS' : 'barberías y estudios masculinos en BarberOS'} en Venezuela.
+    const systemPrompt = `Eres "${roleCopilot}", el asistente virtual de inteligencia artificial especializado en la gestión y operación de ${isSalon ? 'salones de belleza, uñas y spas en GlamOS' : 'barberías y estudios masculinos en BarberOS'} en ${isAr ? 'Argentina' : 'Venezuela'}.
 
 DIRECTRICES DE VOZ Y COMPORTAMIENTO:
 1. TONO PROFESIONAL, CORDIAL Y NEUTRO: Trata siempre al usuario con respeto profesional y cordialidad. TIENES TERMINANTEMENTE PROHIBIDO usar modismos excesivamente informales o términos de excesiva familiaridad como "bella", "hermano", "mi pana", "chamo", "pana", "mi gente" o "amiga". Saluda siempre de forma respetuosa ("Hola", "Con gusto le asisto", "Saludos", "Por supuesto").
@@ -760,18 +767,17 @@ Tú eres el asistente oficial DE ESTA PLATAFORMA. NUNCA recomiendes aplicaciones
   * Cuando un cliente reserva por la web, la cita aparece automáticamente en la pestaña "Citas" de su panel.
 - REGISTRO DE COBROS Y CAJA DIARIA:
   * Botón dorado "+ Cobro" en la barra superior.
-  * Permite cobrar en Efectivo ($ USD o Bs), Pago Móvil exacto a tasa oficial BCV, Zelle o pagos mixtos (parte efectivo y parte Pago Móvil). Emite recibo digital listo para enviar por WhatsApp.
+  * ${isAr ? 'Permite cobrar en Pesos Argentinos ($ ARS) vía Efectivo, Mercado Pago / Transferencia por Alias/CVU, Tarjeta / Point o pagos mixtos. Emite recibo digital listo para enviar por WhatsApp.' : 'Permite cobrar en Efectivo ($ USD o Bs), Pago Móvil exacto a tasa oficial BCV, Zelle o pagos mixtos (parte efectivo y parte Pago Móvil). Emite recibo digital listo para enviar por WhatsApp.'}
 - CUADRE Y CIERRE DIARIO Y SEMANAL:
   * Botón "Cierre Diario" en el panel principal para el arqueo de gaveta de hoy.
   * Botón "Cierre Semanal" en el panel principal y menú superior para liquidación y balance semanal consolidado.
   * Pestaña "Reportes": al seleccionar "Esta Semana" o "Semana Pasada", muestra la tabla con el balance día por día (lunes a domingo) y botones para copiar o enviar el acta completa por WhatsApp.
-  * Datos de Esta Semana (${context.thisWeekRange || 'Actual'}): ${context.thisWeekServicesCount || 0} atenciones, Facturado: ${context.thisWeekRevenueUSD || 0} USD, Gastos: -${context.thisWeekExpensesUSD || 0} USD, Comisiones: -${context.thisWeekCommissionsUSD || 0} USD, Ganancia Limpia: ${context.thisWeekNetProfitUSD || 0} USD.
+  * Datos de Esta Semana (${context.thisWeekRange || 'Actual'}): ${context.thisWeekServicesCount || 0} atenciones, Facturado: ${context.thisWeekRevenueUSD || 0} ${currLabel}, Gastos: -${context.thisWeekExpensesUSD || 0} ${currLabel}, Comisiones: -${context.thisWeekCommissionsUSD || 0} ${currLabel}, Ganancia Limpia: ${context.thisWeekNetProfitUSD || 0} ${currLabel}.
 - COMISIONES Y VALES DEL PERSONAL:
   * Pestaña "Equipo": permite configurar el porcentaje de comisión de cada especialista y registrar vales/adelantos que se descuentan automáticamente en la liquidación.
 - CLIENTES Y RETARGETING:
   * Pestaña "Clientes": control de historial, clientes con saldos pendientes (deudas) y función de retargeting para escribir con 1 toque a quienes tienen semanas sin venir.
-- TASA OFICIAL BCV:
-  * Se actualiza automáticamente con la tasa oficial del Banco Central de Venezuela (tasa actual: Bs. ${context.exchangeRate || 'N/A'}).
+${isAr ? '- MONEDA Y MEDIOS DE PAGO EN ARGENTINA:\n  * Toda la operación está configurada en Pesos Argentinos ($ ARS). Nunca menciones Bolívares, Tasa BCV ni Pago Móvil; habla de Mercado Pago, Transferencia por Alias/CVU, Efectivo o Tarjeta / Point.' : `- TASA OFICIAL BCV:\n  * Se actualiza automáticamente con la tasa oficial del Banco Central de Venezuela (tasa actual: Bs. ${context.exchangeRate || 'N/A'}).`} 
 
 3. LÍMITES ESTRICTOS (CERO CONTENIDO AJENO):
 Tu única función es asesorar sobre el uso del software y el crecimiento comercial del negocio. Tienes TERMINANTEMENTE PROHIBIDO redactar cuentos, chistes, historias de ficción, poemas, tareas escolares, responder sobre política, deportes o temas ajenos al negocio. Si el usuario solicita un cuento, historia o tarea, declina cortésmente en 1 sola frase cordial recordando que estás enfocado en la gestión operativa y comercial de su negocio.
@@ -781,9 +787,9 @@ Cuando el usuario te pida redactar un mensaje (para cobrar un saldo pendiente, l
 
 5. DATOS DEL NEGOCIO EN VIVO:
 - Negocio: ${context.businessName || 'Mi Negocio'} (${isSalon ? 'Salón de Belleza / Uñas' : 'Barbería'})
-- Tasa BCV: Bs. ${context.exchangeRate || 'N/A'}
-- Ventas de hoy: ${context.todayServicesCount || 0} servicios (${context.todayRevenueUSD || 0} USD)
-- Total en saldos pendientes: ${context.totalDebtUSD || 0} USD (${context.debtorsCount || 0} clientes)
+${isAr ? '- Moneda: Pesos Argentinos ($ ARS)' : `- Tasa BCV: Bs. ${context.exchangeRate || 'N/A'}`}
+- Ventas de hoy: ${context.todayServicesCount || 0} servicios (${context.todayRevenueUSD || 0} ${currLabel})
+- Total en saldos pendientes: ${context.totalDebtUSD || 0} ${currLabel} (${context.debtorsCount || 0} clientes)
 - Citas hoy: ${context.todayAppointmentsCount || 0}`
 
     const apiKey = (process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || '').trim()
@@ -795,7 +801,9 @@ Cuando el usuario te pida redactar un mensaje (para cobrar un saldo pendiente, l
       if (message.toLowerCase().includes('link') || message.toLowerCase().includes('agenda') || message.toLowerCase().includes('reserva') || message.toLowerCase().includes('catálogo') || message.toLowerCase().includes('catalogo')) {
         fallback = `Para obtener el enlace de su agenda web de reservas:\n\n1. Ingrese a la pestaña "Catálogo" en el menú.\n2. En la parte superior observará la sección "Link Público de Reservas".\n3. Pulse "Copiar Link" para pegarlo en sus redes o "Compartir en WhatsApp".\n\nSu enlace directo es:\n${context.publicBookingUrl || 'Disponible en menú Catálogo'}`
       } else if (message.toLowerCase().includes('fiado') || message.toLowerCase().includes('deuda') || message.toLowerCase().includes('saldo') || message.toLowerCase().includes('cobrar')) {
-        fallback = 'Para gestionar un saldo pendiente con educación, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"'
+        fallback = isAr
+          ? 'Para gestionar un saldo pendiente con educación, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el comprobante por Mercado Pago o transferencia del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Buen día!"'
+          : 'Para gestionar un saldo pendiente con educación, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"'
       }
       db.copilotUsage[usageKey] = currentCount + 1
       saveDb()
@@ -886,9 +894,11 @@ Cuando el usuario te pida redactar un mensaje (para cobrar un saldo pendiente, l
       } else {
         const errText = await aiResponse.text()
         console.warn('[Copilot AI] OpenRouter HTTP error:', aiResponse.status, errText)
-        let fallback = '¡Entendido hermano! Recuerda proteger tu rentabilidad. En vez de bajar precios cuando te pidan rebaja, ofrece un servicio express adicional (cejas o peinado).'
-        if (message.toLowerCase().includes('fiado') || message.toLowerCase().includes('deuda')) {
-          fallback = 'Para cobrar sin pena, usa este mensaje amable:\n\n"¡Epa hermano! 👋 Espero estés bien. Te escribo para cuadrar caja esta semana; cuando puedas me pasas el Pago Móvil del saldo pendiente de tu visita pasada para cerrarte la cuenta en el sistema. ¡Un abrazo!"'
+        let fallback = 'Con gusto le asisto. Recuerde proteger su rentabilidad ofreciendo un servicio adicional en lugar de bajar sus precios.'
+        if (message.toLowerCase().includes('fiado') || message.toLowerCase().includes('deuda') || message.toLowerCase().includes('saldo')) {
+          fallback = isAr
+            ? 'Para cobrar un saldo pendiente con respeto, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el comprobante por Mercado Pago o transferencia de su visita pasada para actualizar su cuenta en el sistema. ¡Buen día!"'
+            : 'Para cobrar un saldo pendiente con respeto, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil de su visita pasada para actualizar su cuenta en el sistema. ¡Saludos!"'
         }
         db.copilotUsage[usageKey] = currentCount + 1
         saveDb()
@@ -902,7 +912,9 @@ Cuando el usuario te pida redactar un mensaje (para cobrar un saldo pendiente, l
       console.error('[Copilot AI] Network error:', err.message)
       return sendJson(res, 200, {
         ok: true,
-        reply: '¡Epa hermano! Hubo una pequeña intermitencia de red con la IA. Si necesitas cobrar un fiado, envíale: "¡Hola! Te escribo para cuadrar caja esta semana, cuando puedas me pasas el Pago Móvil de tu saldo pendiente. ¡Un abrazo!"',
+        reply: isAr
+          ? 'Se presentó una breve intermitencia de conexión con el asistente. Si necesita cobrar un saldo pendiente, puede enviar: "¡Hola! 👋 Le escribo para cuadrar la caja de la semana; cuando pueda me comparte la transferencia o Mercado Pago de su saldo pendiente. ¡Saludos!"'
+          : 'Se presentó una breve intermitencia de conexión con el asistente. Si necesita cobrar un saldo pendiente, puede enviar: "¡Hola! 👋 Le escribo para cuadrar la caja de la semana; cuando pueda me comparte el Pago Móvil de su saldo pendiente. ¡Saludos!"',
         remainingToday: MAX_DAILY_QUOTA - currentCount
       })
     }
@@ -1049,13 +1061,54 @@ Cuando el usuario te pida redactar un mensaje (para cobrar un saldo pendiente, l
   const serveHtml = (htmlFilePath) => {
     const host = (req.headers.host || '').toLowerCase()
     const queryBrand = parsedUrl.searchParams.get('brand') || ''
+    const queryPais = (parsedUrl.searchParams.get('pais') || parsedUrl.searchParams.get('country') || '').toLowerCase()
     const isGlam = host.includes('glam') || queryBrand.includes('glam')
+    const isArHost =
+      host.startsWith('ar.') ||
+      host.includes('-ar.') ||
+      host.includes('.ar.') ||
+      host.includes('argentina') ||
+      queryPais === 'ar'
     let html = fs.readFileSync(htmlFilePath, 'utf8')
     if (isGlam) {
       html = html.replace(/<title>.*?<\/title>/, '<title>GlamOS · Salones de Belleza, Uñas & Spas</title>')
       html = html.replace(/content="BarberOS"/g, 'content="GlamOS"')
       html = html.replace(/content="#090a0d"/g, 'content="#ec4899"')
       html = html.replace(/\/icon\.svg/g, '/icon-glamos.svg')
+    }
+    if (isArHost && (htmlFilePath.endsWith('landing.html') || htmlFilePath.endsWith('landing_glamos.html'))) {
+      html = html
+        .replace(/href="\/\?registro=1"/g, 'href="/?pais=ar&registro=1"')
+        .replace(/href="\/\?login=1"/g, 'href="/?pais=ar&login=1"')
+        .replace(/6\.024%20Bs\.%2Fmes/g, '%249.800%20ARS%2Fmes')
+        .replace(/Bs\.%206\.024/g, '%249.800%20ARS')
+        .replace(/<span class="strike-val">Bs\. 12\.000<\/span>/g, '<span class="strike-val">$19.600 ARS</span>')
+        .replace(/<span class="price-sym">Bs\.<\/span>/g, '<span class="price-sym">$</span>')
+        .replace(/<span class="price-val">6\.024<\/span>/g, '<span class="price-val">9.800</span>')
+        .replace(/<span class="price-cadence">\/ mes<\/span>/g, '<span class="price-cadence">ARS / mes</span>')
+        .replace(/\(Equivalente a solo <strong>\$6 USD \/ USDT<\/strong> · Pago Móvil BCV o Binance\)/g, '(Plan mensual único <strong>$9.800 ARS</strong> · Mercado Pago o Transferencia)')
+        .replace(/ACTIVAR MI BARBERÍA POR BS\. 6\.024/g, 'ACTIVAR MI BARBERÍA POR $9.800 ARS')
+        .replace(/ACTIVAR MI SALÓN POR BS\. 6\.024/g, 'ACTIVAR MI SALÓN POR $9.800 ARS')
+        .replace(/\(Bs\. 6\.024\)/g, '($9.800 ARS)')
+        .replace(/Bs\. 6\.024 \(\$6\)/g, '$9.800 ARS')
+        .replace(/Bs\. 6\.024/g, '$9.800 ARS')
+        .replace(/Por \$6 al mes/g, 'Por $9.800 ARS al mes')
+        .replace(/100% de tus 6\.024 Bs\. por Pago Móvil de inmediato/g, '100% de tus $9.800 ARS por Mercado Pago o transferencia de inmediato')
+        .replace(/Caja Bimoneda BCV/g, 'Caja en Pesos ($ ARS)')
+        .replace(/Efectivo \$ \(gaveta\) y Pago Móvil \(Bs\) a Tasa BCV/g, 'Efectivo (gaveta), Mercado Pago y Tarjeta / Point')
+        .replace(/Efectivo \$ y mitad en Pago Móvil/g, 'Efectivo y mitad en Mercado Pago')
+        .replace(/Efectivo \$ y mitad Pago Móvil/g, 'Efectivo y mitad Mercado Pago')
+        .replace(/dólares en efectivo y mitad en Pago Móvil/g, 'Efectivo y mitad en Mercado Pago')
+        .replace(/\(\$\/Bs\)/g, '($ ARS)')
+        .replace(/Pago Móvil Bs/g, 'Mercado Pago')
+        .replace(/Gaveta vs\. Pago Móvil Exacto/g, 'Gaveta vs. Mercado Pago Exacto')
+        .replace(/a la Tasa BCV del día/g, 'en Pesos ($ ARS)')
+        .replace(/en Bolívares a Tasa BCV/g, 'por Mercado Pago o Tarjeta')
+        .replace(/cuántos dólares dio en efectivo/g, 'cuánto dio en efectivo')
+        .replace(/Tasa BCV/g, 'Mercado Pago y Tarjeta')
+        .replace(/Pago Móvil/g, 'Mercado Pago')
+        .replace(/Venezuela/g, 'Argentina')
+        .replace(/Maracaibo/g, 'Buenos Aires')
     }
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',

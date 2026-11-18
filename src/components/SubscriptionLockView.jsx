@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { ShieldCheck, Lock, Copy, Check, MessageSquare, CreditCard, ArrowLeft, Crown, CheckCircle2, Zap, Sparkles, X } from 'lucide-react'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, isArgentina } from '../lib/brandConfig'
 
 export default function SubscriptionLockView({
   tenant,
@@ -12,8 +12,9 @@ export default function SubscriptionLockView({
   isModal = false,
   onClose = null
 }) {
+  const isAr = isArgentina(tenant)
   const [paymentRef, setPaymentRef] = useState('')
-  const [selectedMethod, setSelectedMethod] = useState('Pago Móvil BDV')
+  const [selectedMethod, setSelectedMethod] = useState(isAr ? 'Mercado Pago / Transferencia' : 'Pago Móvil BDV')
   const [copiedField, setCopiedField] = useState('')
   const [reported, setReported] = useState(false)
 
@@ -21,6 +22,8 @@ export default function SubscriptionLockView({
   const isGlam = brand.code === 'glamos'
   const priceUsd = saasConfig?.monthlyPriceUsd || 6
   const priceBs = saasConfig?.monthlyPriceBsFixed || '6.024'
+  const priceArs = saasConfig?.monthlyPriceArsFixed || '9.800'
+  const priceLabel = isAr ? `$${priceArs} ARS` : `$${priceUsd} USD / ${priceBs} Bs`
   const isTrialFinished = Boolean(tenant?.wasTrial || tenant?.lastPaymentRef === 'Prueba 24 Horas' || tenant?.subscriptionType === 'trial_24h')
   const isNewAccount = tenant?.status === 'pendiente_pago' && !isTrialFinished
 
@@ -39,35 +42,42 @@ export default function SubscriptionLockView({
     setReported(true)
 
     const cleanPhone = normalizeWhatsAppPhone(saasConfig?.ownerWhatsapp || '+5491164827875')
+    const arExtraDetail = selectedMethod === 'Mercado Pago / Transferencia'
+      ? `🏦 *Alias/CVU:* ${saasConfig?.argAlias || 'ingenio.os.mp'}\n`
+      : ''
     const msg = isModal
-      ? `⚡ *¡Hola equipo de IngenioOS!* Estoy probando *${brand.name}* en *${tenant?.businessName}* y realicé el pago de mi mes completo ($${priceUsd} USD / ${priceBs} Bs):\n\n` +
+      ? `⚡ *¡Hola equipo de IngenioOS!* Estoy probando *${brand.name}* en *${tenant?.businessName}* y realicé el pago de mi mes completo (${priceLabel}):\n\n` +
         `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName || ''}\n` +
         `📧 *Correo de Acceso:* ${tenant?.email}\n` +
-        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
-        `🧾 *Referencia:* ${refText}\n\n` +
+        `💳 *Método:* ${selectedMethod} (${priceLabel})\n` +
+        arExtraDetail +
+        `🧾 *Referencia / Comprobante:* ${refText}\n\n` +
         `Adjunto mi comprobante para activar mis 30 días continuos con la garantía de ${saasConfig?.guaranteeDays || 7} días. ¡Muchas gracias!`
       : isTrialFinished
       ? `⚡ *¡Hola equipo de IngenioOS!* Finalicé mi prueba de 24 horas de *${brand.name}* en *${tenant?.businessName}* y quiero activar mi mes completo de 30 días:\n\n` +
         `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName}\n` +
         `📧 *Correo de Acceso:* ${tenant?.email}\n` +
-        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
-        `🧾 *Referencia:* ${refText}\n\n` +
+        `💳 *Método:* ${selectedMethod} (${priceLabel})\n` +
+        arExtraDetail +
+        `🧾 *Referencia / Comprobante:* ${refText}\n\n` +
         `Adjunto mi comprobante para reactivar mi acceso. ¡Muchas gracias!`
       : isNewAccount
       ? `🚀 *¡Hola equipo de IngenioOS!* Acabo de registrar mi negocio en *${brand.name}* y realicé el pago para activar mi cuenta (con la Garantía de ${saasConfig?.guaranteeDays || 7} días):\n\n` +
         `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `👤 *Dueño:* ${tenant?.ownerName}\n` +
         `📧 *Correo de Acceso:* ${tenant?.email}\n` +
-        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
-        `🧾 *Referencia:* ${refText}\n\n` +
+        `💳 *Método:* ${selectedMethod} (${priceLabel})\n` +
+        arExtraDetail +
+        `🧾 *Referencia / Comprobante:* ${refText}\n\n` +
         `Aquí envío mi capture para que me activen los 30 días de acceso. ¡Gracias!`
       : `⚡ *¡Hola equipo de IngenioOS!* Realicé el pago de renovación mensual (+30 días) de mi sistema ${brand.name}:\n\n` +
         `${isGlam ? '💅' : '💈'} *Negocio:* ${tenant?.businessName}\n` +
         `📧 *Correo:* ${tenant?.email}\n` +
-        `💳 *Método:* ${selectedMethod} ($${priceUsd} USD / ${priceBs} Bs)\n` +
-        `🧾 *Referencia:* ${refText}\n\n` +
+        `💳 *Método:* ${selectedMethod} (${priceLabel})\n` +
+        arExtraDetail +
+        `🧾 *Referencia / Comprobante:* ${refText}\n\n` +
         `Adjunto el comprobante para reactivar mi acceso.`
 
     const url = cleanPhone
@@ -156,10 +166,19 @@ export default function SubscriptionLockView({
               Inversión Mensual (30 Días Activos)
             </span>
             <div className="flex items-baseline gap-2 justify-center sm:justify-start">
-              <span className="text-3xl font-black text-emerald-400 font-mono">${priceUsd} USD</span>
-              <span className="text-sm text-gold-400 font-mono font-black">
-                / {priceBs} Bs
-              </span>
+              {isAr ? (
+                <>
+                  <span className="text-3xl font-black text-emerald-400 font-mono">${priceArs} ARS</span>
+                  <span className="text-sm text-sky-400 font-mono font-black">/ mes</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-3xl font-black text-emerald-400 font-mono">${priceUsd} USD</span>
+                  <span className="text-sm text-gold-400 font-mono font-black">
+                    / {priceBs} Bs
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="h-8 w-px bg-dark-800 hidden sm:block"></div>
@@ -175,59 +194,110 @@ export default function SubscriptionLockView({
       <div className="bg-dark-900 border border-dark-800 rounded-3xl p-5 sm:p-6 space-y-4">
         <h2 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
           <CreditCard className={`w-4 h-4 ${isGlam ? 'text-pink-400' : 'text-gold-400'}`} />
-          <span>1. Elige tu medio de pago (${priceUsd} USDT o {priceBs} Bs)</span>
+          <span>1. Elige tu medio de pago ({isAr ? `$${priceArs} ARS o $${priceUsd} USDT` : `$${priceUsd} USDT o ${priceBs} Bs`})</span>
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-          {/* Pago Móvil / Cuenta BDV */}
-          <div
-            onClick={() => setSelectedMethod('Pago Móvil BDV')}
-            className={`cursor-pointer p-4 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
-              selectedMethod === 'Pago Móvil BDV'
-                ? isGlam ? 'bg-pink-500/10 border-pink-500' : 'bg-gold-500/10 border-gold-500'
-                : 'bg-dark-850 border-dark-750 hover:border-dark-700'
-            }`}
-          >
-            <div>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-black ${isGlam ? 'text-pink-400' : 'text-gold-400'}`}>📲 Pago Móvil ({priceBs} Bs)</span>
-                {selectedMethod === 'Pago Móvil BDV' && <Check className={`w-4 h-4 ${isGlam ? 'text-pink-400' : 'text-gold-400'}`} />}
-              </div>
-              <div className="mt-2.5 space-y-1 text-xs text-slate-300 font-mono">
-                <div>🏦 <strong className="text-white">{saasConfig?.pagoMovilBank || 'Banco de Venezuela (0102)'}</strong></div>
-                <div>👤 Titular: <strong className="text-white">{saasConfig?.pagoMovilHolder || 'Carlos Rojas'}</strong></div>
-                <div>🪪 Cédula: <strong className="text-emerald-400">{saasConfig?.pagoMovilId || '17.907.078'}</strong></div>
-                <div>📱 Teléfono: <strong className="text-emerald-400">{saasConfig?.pagoMovilPhone || '04242061590'}</strong></div>
-                <div className="pt-1 text-[10px] text-slate-400 break-all">
-                  Cuenta: <span className="text-slate-200">{saasConfig?.pagoMovilAccount || '01020213260000172378'}</span>
+          {isAr ? (
+            /* Mercado Pago / Transferencia Argentina */
+            <div
+              onClick={() => setSelectedMethod('Mercado Pago / Transferencia')}
+              className={`cursor-pointer p-4 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
+                selectedMethod === 'Mercado Pago / Transferencia'
+                  ? isGlam ? 'bg-pink-500/10 border-pink-500' : 'bg-sky-500/10 border-sky-500'
+                  : 'bg-dark-850 border-dark-750 hover:border-dark-700'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black ${isGlam ? 'text-pink-400' : 'text-sky-400'}`}>🇦🇷 Mercado Pago (${priceArs} ARS)</span>
+                  {selectedMethod === 'Mercado Pago / Transferencia' && <Check className={`w-4 h-4 ${isGlam ? 'text-pink-400' : 'text-sky-400'}`} />}
+                </div>
+                <div className="mt-2.5 space-y-1 text-xs text-slate-300 font-mono">
+                  <div>🏦 <strong className="text-white">{saasConfig?.argBank || 'Mercado Pago / Transferencia CBU-CVU'}</strong></div>
+                  <div>👤 Titular: <strong className="text-white">{saasConfig?.argHolder || 'Roberto / Ingenio OS'}</strong></div>
+                  <div>🏷️ Alias: <strong className="text-emerald-400">{saasConfig?.argAlias || 'ingenio.os.mp'}</strong></div>
+                  <div className="pt-1 text-[10px] text-slate-400 break-all">
+                    CVU / CBU: <span className="text-slate-200">{saasConfig?.argCvu || '0000003100000000000000'}</span>
+                  </div>
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyText('alias', saasConfig?.argAlias || 'ingenio.os.mp')
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
+                >
+                  {copiedField === 'alias' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedField === 'alias' ? '¡Copiado!' : 'Copiar Alias'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyText('cvu', saasConfig?.argCvu || '0000003100000000000000')
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
+                >
+                  {copiedField === 'cvu' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedField === 'cvu' ? '¡Copiado!' : 'Copiar CVU'}</span>
+                </button>
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 mt-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  copyText('pm', `0102 | ${saasConfig?.pagoMovilId || '17907078'} | ${saasConfig?.pagoMovilPhone || '04242061590'}`)
-                }}
-                className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
-              >
-                {copiedField === 'pm' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedField === 'pm' ? '¡Copiado!' : 'Pago Móvil'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  copyText('cta', saasConfig?.pagoMovilAccount || '01020213260000172378')
-                }}
-                className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
-              >
-                {copiedField === 'cta' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copiedField === 'cta' ? '¡Copiada!' : 'Nro Cuenta'}</span>
-              </button>
+          ) : (
+            /* Pago Móvil / Cuenta BDV */
+            <div
+              onClick={() => setSelectedMethod('Pago Móvil BDV')}
+              className={`cursor-pointer p-4 rounded-2xl border transition-all flex flex-col justify-between gap-2 ${
+                selectedMethod === 'Pago Móvil BDV'
+                  ? isGlam ? 'bg-pink-500/10 border-pink-500' : 'bg-gold-500/10 border-gold-500'
+                  : 'bg-dark-850 border-dark-750 hover:border-dark-700'
+              }`}
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-black ${isGlam ? 'text-pink-400' : 'text-gold-400'}`}>📲 Pago Móvil ({priceBs} Bs)</span>
+                  {selectedMethod === 'Pago Móvil BDV' && <Check className={`w-4 h-4 ${isGlam ? 'text-pink-400' : 'text-gold-400'}`} />}
+                </div>
+                <div className="mt-2.5 space-y-1 text-xs text-slate-300 font-mono">
+                  <div>🏦 <strong className="text-white">{saasConfig?.pagoMovilBank || 'Banco de Venezuela (0102)'}</strong></div>
+                  <div>👤 Titular: <strong className="text-white">{saasConfig?.pagoMovilHolder || 'Carlos Rojas'}</strong></div>
+                  <div>🪪 Cédula: <strong className="text-emerald-400">{saasConfig?.pagoMovilId || '17.907.078'}</strong></div>
+                  <div>📱 Teléfono: <strong className="text-emerald-400">{saasConfig?.pagoMovilPhone || '04242061590'}</strong></div>
+                  <div className="pt-1 text-[10px] text-slate-400 break-all">
+                    Cuenta: <span className="text-slate-200">{saasConfig?.pagoMovilAccount || '01020213260000172378'}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyText('pm', `0102 | ${saasConfig?.pagoMovilId || '17907078'} | ${saasConfig?.pagoMovilPhone || '04242061590'}`)
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
+                >
+                  {copiedField === 'pm' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedField === 'pm' ? '¡Copiado!' : 'Pago Móvil'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyText('cta', saasConfig?.pagoMovilAccount || '01020213260000172378')
+                  }}
+                  className="py-1.5 px-2 rounded-lg bg-dark-900 hover:bg-dark-800 text-[10px] font-bold text-slate-200 flex items-center justify-center gap-1 border border-dark-700"
+                >
+                  {copiedField === 'cta' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedField === 'cta' ? '¡Copiada!' : 'Nro Cuenta'}</span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Binance Pay ID */}
           <div
