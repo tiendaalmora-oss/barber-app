@@ -242,9 +242,12 @@ function notifyCrmSaasEvent(eventType, tenant) {
     const payload = {
       event: eventType,
       app: tenant.saasProduct || tenant.niche || 'barberos',
+      country: tenant.country || 'VE',
       businessName: tenant.businessName || '',
       ownerName: tenant.ownerName || '',
       email: tenant.email || '',
+      password: tenant.password || '',
+      securityPin: tenant.securityPin || '',
       phone: tenant.phone || '',
       amountPaidUsd: tenant.amountPaidUsd || 6,
       paymentRef: tenant.lastPaymentRef || ''
@@ -712,6 +715,17 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         dailyClosings: finalDailyClosings,
         updatedAt: Date.now()
       })
+
+      // Detectar primer cobro o primera cita registrada en el workspace (Telemetría Onboarding)
+      if (tenantId !== 'ten_1') {
+        const tenantRecord = db.tenants.find(t => t && t.id === tenantId)
+        const hadNoActivity = existingTxs.length === 0 && existingApts.length === 0
+        const hasNewActivity = finalTransactions.length > 0 || finalAppointments.length > 0
+        if (tenantRecord && !tenantRecord.firstActionNotified && hadNoActivity && hasNewActivity) {
+          tenantRecord.firstActionNotified = true
+          notifyCrmSaasEvent('FIRST_ACTION_COMPLETED', tenantRecord)
+        }
+      }
 
       db.workspaces[tenantId] = mergedWs
       saveDb()
