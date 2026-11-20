@@ -273,6 +273,58 @@ function notifyCrmSaasEvent(eventType, tenant) {
   }
 }
 
+// Routine to auto-expire trials and subscriptions in database
+function pruneAndExpireTenants() {
+  const now = Date.now()
+  let changed = false
+  const idSet = new Set(db.deletedTenantIds || [])
+  const emailSet = new Set((db.deletedTenantEmails || []).map(e => (e || '').toLowerCase().trim()))
+
+  // 1. Strict tombstone prune
+  const prevLen = db.tenants.length
+  db.tenants = db.tenants.filter(
+    t => !idSet.has(t.id) && (!t.email || !emailSet.has((t.email || '').toLowerCase().trim()))
+  )
+  if (db.tenants.length !== prevLen) changed = true
+
+  // 2. Auto-expire 24h trials & 30d subscriptions
+  for (const t of db.tenants) {
+    if (t.id === 'ten_1') continue // Official demo account stays intact
+    const isTrial = Boolean(t.isTrial24h || t.subscriptionType === 'trial_24h')
+    if (isTrial && t.trialExpiresAt) {
+      const trialExpired = new Date(t.trialExpiresAt).getTime() <= now
+      if (trialExpired && t.status !== 'vencido') {
+        t.status = 'vencido'
+        t.daysRemaining = 0
+        t.wasTrial = true
+        changed = true
+      }
+    } else if (t.status === 'activo' && t.subscriptionType === 'mes_30d' && t.activatedAt) {
+      const startMs = new Date(t.activatedAt + 'T00:00:00').getTime()
+      if (!isNaN(startMs)) {
+        const daysPassed = Math.floor((now - startMs) / (1000 * 60 * 60 * 24))
+        const subDays = db.saasConfig?.subscriptionDays || 30
+        const daysLeft = Math.max(0, subDays - daysPassed)
+        if (t.daysRemaining !== daysLeft) {
+          t.daysRemaining = daysLeft
+          changed = true
+        }
+        if (daysLeft === 0 && t.status !== 'vencido') {
+          t.status = 'vencido'
+          changed = true
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    saveDb()
+  }
+}
+
+// Auto-run expiration routine every 60 seconds
+setInterval(pruneAndExpireTenants, 60000)
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     return sendJson(res, 200, { ok: true })
@@ -283,6 +335,7 @@ const server = http.createServer(async (req, res) => {
 
   // --- API ROUTES ---
   if (pathname === '/api/bootstrap' && req.method === 'GET') {
+    pruneAndExpireTenants()
     return sendJson(res, 200, {
       saasConfig: db.saasConfig,
       tenants: db.tenants,

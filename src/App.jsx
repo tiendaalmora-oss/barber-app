@@ -200,6 +200,24 @@ export default function App() {
 
   const activeTenant = tenants.find(t => t.id === activeTenantId) || (cachedActiveTenant && cachedActiveTenant.id === activeTenantId ? cachedActiveTenant : null)
 
+  // Security guard: If current logged tenant was deleted or tombstoned, purge session immediately
+  useEffect(() => {
+    if (!activeTenantId) return
+    const activeEmail = (cachedActiveTenant?.email || activeTenant?.email || '').toLowerCase().trim()
+    const isTombstoned = deletedTenantIds.includes(activeTenantId) || (activeEmail && deletedTenantEmails.includes(activeEmail))
+    if (isTombstoned) {
+      console.warn('[Session Guard] Active tenant is in deletion blacklist. Purging session.')
+      const idToPurge = activeTenantId
+      setActiveTenantId(null)
+      setCachedActiveTenant(null)
+      localStorage.removeItem('barber_logged_tenant_id')
+      localStorage.removeItem('barber_logged_tenant')
+      if (idToPurge) {
+        try { localStorage.removeItem(`barber_ws_${idToPurge}`) } catch (e) {}
+      }
+    }
+  }, [activeTenantId, deletedTenantIds, deletedTenantEmails, cachedActiveTenant?.email, activeTenant?.email])
+
   // Scoped workspace helper: reads isolated data for active tenant if available
   const getInitialWorkspace = () => {
     try {
@@ -768,6 +786,28 @@ export default function App() {
           nextDelIds.forEach(id => {
             try { localStorage.removeItem(`barber_ws_${id}`) } catch (e) {}
           })
+
+          // Multi-device session guard: ensure active tenant is still alive and status is synchronized
+          const currentLoggedId = localStorage.getItem('barber_logged_tenant_id') || activeTenantId
+          if (currentLoggedId) {
+            const serverTenant = cleanTenants.find(t => t.id === currentLoggedId)
+            const currentEmail = (cachedActiveTenant?.email || serverTenant?.email || '').toLowerCase().trim()
+            const isGone = nextDelIds.includes(currentLoggedId) ||
+              (currentEmail && nextDelEmails.includes(currentEmail)) ||
+              (!serverTenant && currentLoggedId !== 'ten_1')
+
+            if (isGone) {
+              console.warn('[Multi-Device Guard] Tenant deleted on server. Logging out immediately.')
+              setActiveTenantId(null)
+              setCachedActiveTenant(null)
+              localStorage.removeItem('barber_logged_tenant_id')
+              localStorage.removeItem('barber_logged_tenant')
+              try { localStorage.removeItem(`barber_ws_${currentLoggedId}`) } catch (e) {}
+            } else if (serverTenant) {
+              setCachedActiveTenant(serverTenant)
+              localStorage.setItem('barber_logged_tenant', JSON.stringify(serverTenant))
+            }
+          }
         }
         if (data.saasConfig) {
           setSaasConfig(data.saasConfig)
