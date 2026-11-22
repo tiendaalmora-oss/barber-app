@@ -2,8 +2,15 @@ import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award, FileText, Calendar, Clock, ArrowDownRight, MessageSquare, AlertCircle, Receipt, Wallet, Check, AlertTriangle } from 'lucide-react'
 import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone } from '../lib/dateUtils'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
+import {
+  isCashierStaff,
+  getCashierStaff,
+  calculateCashierCommissionForTx,
+  getSalaryPeriodLabel,
+  getCommissionScopeLabel
+} from '../lib/securityUtils'
 
-const AVATAR_OPTIONS = ['✂️', '💈', '⚡', '👑', '🔥', '💅', '✨', '🧔', '💄', '💇']
+const AVATAR_OPTIONS = ['✂️', '💈', '⚡', '👑', '🔥', '💅', '✨', '🧔', '💼', '👩‍💻', '🧾']
 
 // Helper to check if ISO date is in current week (Monday to Sunday in local timezone)
 const isDateInCurrentWeek = (dateStr) => isDateInWeek(dateStr, 0)
@@ -41,7 +48,12 @@ export default function CommissionsView({
 
   // Staff Form state
   const [name, setName] = useState('')
+  const [staffRole, setStaffRole] = useState('operativo') // 'operativo' | 'cajero'
   const [commissionPct, setCommissionPct] = useState(50)
+  const [baseSalaryUsd, setBaseSalaryUsd] = useState('0')
+  const [salaryPeriod, setSalaryPeriod] = useState('semanal')
+  const [commissionScope, setCommissionScope] = useState('servicios')
+  const [staffPin, setStaffPin] = useState('')
   const [avatar, setAvatar] = useState('✂️')
   const [serviceCommissions, setServiceCommissions] = useState({}) // { [serviceId]: percentage }
   const [selectedServiceToAdd, setSelectedServiceToAdd] = useState('')
@@ -56,6 +68,7 @@ export default function CommissionsView({
 
   // Liquidation Form state
   const [payoutPaymentMethod, setPayoutPaymentMethod] = useState('efectivo_usd')
+  const [liquidateBaseSalary, setLiquidateBaseSalary] = useState('0')
 
   // Quick Vale Motives
   const QUICK_MOTIVOS = ['Almuerzo', 'Pasaje', 'Gasolina', 'Medicina', 'Adelanto Personal', 'Emergencia']
@@ -65,9 +78,86 @@ export default function CommissionsView({
   const pendingValesTotal = allVales.filter(t => t.status !== 'liquidado')
   const pendingValesTotalUSD = pendingValesTotal.reduce((sum, t) => sum + Math.abs(t.monto_usd || 0), 0)
 
-  // 2. Compute stats per staff member under the Ledger model
+  const cashiersList = getCashierStaff(staffList)
+
+  // 2. Compute stats per staff member under the Ledger model (Barbers/Stylists + Cashiers)
   const staffStats = staffList.map((st) => {
-    // All cuts/services
+    const isCashier = isCashierStaff(st)
+
+    if (isCashier) {
+      const allShopIncome = transactions.filter(t => t && Number(t.monto_usd) > 0)
+      const attributedIncome = allShopIncome.filter(t => {
+        if (t.cajero_staff_id) return t.cajero_staff_id === st.id
+        if (t.registered_by_id) return t.registered_by_id === st.id
+        return cashiersList.length <= 1
+      })
+      const pendingCuts = attributedIncome.filter(t => !t.cajero_comision_pagada)
+
+      let periodCuts = attributedIncome
+      if (periodFilter === 'today') periodCuts = attributedIncome.filter(t => isDateToday(t.fecha))
+      else if (periodFilter === 'week') periodCuts = attributedIncome.filter(t => isDateInCurrentWeek(t.fecha))
+      else if (periodFilter === 'pending') periodCuts = pendingCuts
+
+      const periodServicesCount = periodCuts.length
+      const periodBilledUSD = periodCuts.reduce((sum, t) => sum + (Number(t.monto_usd) || 0), 0)
+      const periodEarnedUSD = periodCuts.reduce((sum, t) => {
+        if (t.cajero_staff_id === st.id && typeof t.comision_cajero_usd === 'number') {
+          return sum + t.comision_cajero_usd
+        }
+        return sum + calculateCashierCommissionForTx(t, st)
+      }, 0)
+
+      // Per-barber breakdown for transparent cashier liquidation
+      const barberMap = {}
+      periodCuts.forEach(t => {
+        const bName = t.staff_name || 'Local'
+        if (!barberMap[bName]) barberMap[bName] = { barberName: bName, count: 0, billedUSD: 0, bonusUSD: 0 }
+        const txBonus = (t.cajero_staff_id === st.id && typeof t.comision_cajero_usd === 'number')
+          ? t.comision_cajero_usd
+          : calculateCashierCommissionForTx(t, st)
+        barberMap[bName].count += 1
+        barberMap[bName].billedUSD += Number(t.monto_usd) || 0
+        barberMap[bName].bonusUSD += txBonus
+      })
+      const barberBreakdown = Object.values(barberMap).sort((a, b) => b.bonusUSD - a.bonusUSD)
+
+      // Vales of this cashier
+      const staffVales = allVales.filter(t => t.staff_id === st.id || t.staff_name === st.name)
+      const pendingStaffVales = staffVales.filter(t => t.status !== 'liquidado')
+      let periodStaffVales = staffVales
+      if (periodFilter === 'today') periodStaffVales = staffVales.filter(t => isDateToday(t.fecha))
+      else if (periodFilter === 'week') periodStaffVales = staffVales.filter(t => isDateInCurrentWeek(t.fecha))
+      else if (periodFilter === 'pending') periodStaffVales = pendingStaffVales
+
+      const periodValesUSD = periodStaffVales.reduce((sum, t) => sum + Math.abs(t.monto_usd || 0), 0)
+      const pendingValesUSD = pendingStaffVales.reduce((sum, t) => sum + Math.abs(t.monto_usd || 0), 0)
+
+      const baseSalaryUSD = Number(st.base_salary_usd) || 0
+      const activeVales = periodFilter === 'pending' ? pendingValesUSD : periodValesUSD
+      const netBalanceUSD = baseSalaryUSD + periodEarnedUSD - activeVales
+
+      return {
+        ...st,
+        isCashier: true,
+        baseSalaryUSD,
+        servicesCount: periodServicesCount,
+        totalBilledUSD: periodBilledUSD,
+        totalEarnedUSD: periodEarnedUSD,
+        totalEarnedBs: periodEarnedUSD * exchangeRate,
+        totalTipsUSD: 0,
+        totalTipsBs: 0,
+        valesUSD: activeVales,
+        valesCount: (periodFilter === 'pending' ? pendingStaffVales : periodStaffVales).length,
+        pendingVales: pendingStaffVales,
+        pendingCuts,
+        pendingTips: [],
+        barberBreakdown,
+        netBalanceUSD,
+        netBalanceBs: netBalanceUSD * exchangeRate
+      }
+    }
+
+    // All cuts/services for Barber / Operative staff
     const allCuts = transactions.filter(t => (t.staff_id === st.id || t.staff_name === st.name) && t.monto_usd > 0)
     // Pending cuts (not liquidated yet)
     const pendingCuts = allCuts.filter(t => !t.comision_pagada)
@@ -108,6 +198,8 @@ export default function CommissionsView({
 
     return {
       ...st,
+      isCashier: false,
+      baseSalaryUSD: 0,
       servicesCount: periodServicesCount,
       totalBilledUSD: periodBilledUSD,
       totalEarnedUSD: periodEarnedUSD,
@@ -119,6 +211,7 @@ export default function CommissionsView({
       pendingVales: pendingStaffVales,
       pendingCuts,
       pendingTips,
+      barberBreakdown: [],
       netBalanceUSD,
       netBalanceBs: netBalanceUSD * exchangeRate
     }
@@ -128,7 +221,12 @@ export default function CommissionsView({
   const openCreateStaffModal = () => {
     setEditingStaff(null)
     setName('')
+    setStaffRole('operativo')
     setCommissionPct(50)
+    setBaseSalaryUsd('0')
+    setSalaryPeriod('semanal')
+    setCommissionScope('servicios')
+    setStaffPin('')
     setAvatar('✂️')
     setServiceCommissions({})
     setSelectedServiceToAdd('')
@@ -138,10 +236,16 @@ export default function CommissionsView({
   }
 
   const openEditStaffModal = (st) => {
+    const isCashier = isCashierStaff(st)
     setEditingStaff(st)
     setName(st.name)
-    setCommissionPct(st.commission_pct || 50)
-    setAvatar(st.avatar || '✂️')
+    setStaffRole(isCashier ? 'cajero' : 'operativo')
+    setCommissionPct(st.commission_pct !== undefined ? st.commission_pct : (isCashier ? 5 : 50))
+    setBaseSalaryUsd(String(st.base_salary_usd ?? 0))
+    setSalaryPeriod(st.salary_period || 'semanal')
+    setCommissionScope(st.commission_scope || 'servicios')
+    setStaffPin(st.pin || '')
+    setAvatar(st.avatar || (isCashier ? '💼' : '✂️'))
     setServiceCommissions(st.service_commissions || {})
     setSelectedServiceToAdd('')
     setCustomPctToAdd('')
@@ -153,20 +257,28 @@ export default function CommissionsView({
     e.preventDefault()
     if (!name.trim()) return
 
+    const isCashier = staffRole === 'cajero'
+
     // Auto-commit any pending service selection and % typed before saving
     let finalServiceCommissions = { ...serviceCommissions }
-    if (selectedServiceToAdd && customPctToAdd) {
+    if (!isCashier && selectedServiceToAdd && customPctToAdd) {
       const pct = parseFloat(customPctToAdd)
       if (!isNaN(pct) && pct > 0 && pct <= 100) {
         finalServiceCommissions[selectedServiceToAdd] = pct
       }
     }
 
+    const parsedPct = parseFloat(commissionPct)
     const staffPayload = {
       name: name.trim(),
-      commission_pct: parseFloat(commissionPct) || 50,
+      staff_role: isCashier ? 'cajero' : 'operativo',
+      commission_pct: isNaN(parsedPct) ? (isCashier ? 0 : 50) : parsedPct,
+      base_salary_usd: isCashier ? (parseFloat(baseSalaryUsd) || 0) : 0,
+      salary_period: isCashier ? salaryPeriod : null,
+      commission_scope: isCashier ? commissionScope : null,
+      pin: isCashier ? staffPin.trim() : '',
       avatar,
-      service_commissions: finalServiceCommissions
+      service_commissions: isCashier ? {} : finalServiceCommissions
     }
 
     if (editingStaff) {
@@ -234,17 +346,19 @@ export default function CommissionsView({
   const openLiquidateModal = (staffStat) => {
     setLiquidatingStaff(staffStat)
     setPayoutPaymentMethod('efectivo_usd')
+    setLiquidateBaseSalary(staffStat?.isCashier ? String(staffStat.baseSalaryUSD || 0) : '0')
   }
 
   const handleConfirmLiquidation = () => {
     if (!liquidatingStaff) return
-    const netUSD = liquidatingStaff.netBalanceUSD
+    const salaryToPay = liquidatingStaff.isCashier ? (parseFloat(liquidateBaseSalary) || 0) : 0
+    const netUSD = salaryToPay + liquidatingStaff.totalEarnedUSD + liquidatingStaff.totalTipsUSD - liquidatingStaff.valesUSD
     const netBs = netUSD * exchangeRate
 
     const payoutTx = {
       id: 'liq_' + Date.now(),
       type: 'gasto',
-      item_name: `Liquidación - ${liquidatingStaff.name} (Neto: $${netUSD.toFixed(2)})`,
+      item_name: `Liquidación ${liquidatingStaff.isCashier ? 'Caja' : ''} - ${liquidatingStaff.name} (Neto: $${netUSD.toFixed(2)})`,
       category: 'Comisiones',
       staff_id: liquidatingStaff.id,
       staff_name: liquidatingStaff.name,
@@ -261,7 +375,10 @@ export default function CommissionsView({
     const settledValeIds = (liquidatingStaff.pendingVales || []).map(t => t.id)
 
     if (onLiquidateStaff) {
-      onLiquidateStaff(payoutTx, settledTxIds, settledValeIds)
+      onLiquidateStaff(payoutTx, settledTxIds, settledValeIds, {
+        isCashier: Boolean(liquidatingStaff.isCashier),
+        baseSalaryPaid: salaryToPay
+      })
     } else if (onRegisterExpense) {
       onRegisterExpense(payoutTx)
     }
@@ -276,14 +393,28 @@ export default function CommissionsView({
     const nowHour = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
     let msg = `💈 *RECIBO DE LIQUIDACIÓN • ${bizName.toUpperCase()}*\n`
-    msg += `👤 *Profesional:* ${st.name}\n`
+    msg += `👤 *${st.isCashier ? 'Cajera / Recepción' : 'Profesional'}:* ${st.name}\n`
     msg += `📅 *Fecha:* ${dateStr} - ${nowHour}\n`
     if (!isAr) {
       msg += `💵 *Tasa BCV:* Bs. ${exchangeRate.toFixed(2)}\n`
     }
     msg += `------------------------------------\n\n`
-    msg += `✂️ *Servicios Realizados:* ${st.servicesCount} serv. (${fmt(st.totalBilledUSD)})\n`
-    msg += `📈 *Tus Comisiones (${st.commission_pct}%):* +${fmt(st.totalEarnedUSD)} ${currTag}\n`
+    if (st.isCashier) {
+      if ((st.baseSalaryUSD || 0) > 0) {
+        msg += `💼 *Sueldo Base (${getSalaryPeriodLabel(st.salary_period)}):* +${fmt(st.baseSalaryUSD)} ${currTag}\n`
+      }
+      msg += `📊 *Ventas supervisadas:* ${st.servicesCount} tickets (${fmt(st.totalBilledUSD)})\n`
+      msg += `📈 *Bono Extra (${st.commission_pct}% s/ ${getCommissionScopeLabel(st.commission_scope)}):* +${fmt(st.totalEarnedUSD)} ${currTag}\n`
+      if (st.barberBreakdown && st.barberBreakdown.length > 0) {
+        msg += `✂️ *Desglose por barbero:*\n`
+        st.barberBreakdown.forEach(b => {
+          msg += `  - ${b.barberName} (${b.count} serv.): +${fmt(b.bonusUSD)} ${currTag}\n`
+        })
+      }
+    } else {
+      msg += `✂️ *Servicios Realizados:* ${st.servicesCount} serv. (${fmt(st.totalBilledUSD)})\n`
+      msg += `📈 *Tus Comisiones (${st.commission_pct}%):* +${fmt(st.totalEarnedUSD)} ${currTag}\n`
+    }
     if (st.totalTipsUSD > 0) {
       msg += `🪙 *Propinas acumuladas:* +${fmt(st.totalTipsUSD)} ${currTag}\n`
     }
@@ -522,17 +653,37 @@ export default function CommissionsView({
                             {st.avatar}
                           </div>
                           <div className="min-w-0">
-                            <h3 className="font-black text-white text-base leading-snug truncate">{st.name}</h3>
+                            <div className="flex items-center gap-1.5">
+                              <h3 className="font-black text-white text-base leading-snug truncate">{st.name}</h3>
+                              {st.isCashier && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/40 font-black uppercase shrink-0">
+                                  💼 Caja
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                               <button
                                 type="button"
                                 onClick={() => openEditStaffModal(st)}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-gold-500/15 hover:bg-gold-500/25 border border-gold-500/30 text-[11px] text-gold-400 font-bold transition-all"
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[11px] font-bold transition-all ${
+                                  st.isCashier
+                                    ? 'bg-sky-500/15 hover:bg-sky-500/25 border-sky-500/30 text-sky-300'
+                                    : 'bg-gold-500/15 hover:bg-gold-500/25 border-gold-500/30 text-gold-400'
+                                }`}
                               >
-                                <span>{st.commission_pct}% base</span>
+                                <span>
+                                  {st.isCashier
+                                    ? `${st.baseSalaryUSD > 0 ? `$${fmt(st.baseSalaryUSD)} base + ` : ''}${st.commission_pct}% extra`
+                                    : `${st.commission_pct}% base`}
+                                </span>
                                 <Pencil className="w-2.5 h-2.5" />
                               </button>
-                              {st.service_commissions && Object.keys(st.service_commissions).length > 0 && (
+                              {st.isCashier && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-lg bg-dark-850 text-slate-300 border border-dark-750 font-medium">
+                                  {getSalaryPeriodLabel(st.salary_period)}
+                                </span>
+                              )}
+                              {!st.isCashier && st.service_commissions && Object.keys(st.service_commissions).length > 0 && (
                                 <span 
                                   title={`${Object.keys(st.service_commissions).length} servicios con porcentaje personalizado`}
                                   className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-300 border border-blue-500/30 font-medium"
@@ -577,21 +728,47 @@ export default function CommissionsView({
                       {/* Micro Stats Grid */}
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div className="p-2.5 rounded-2xl bg-dark-850 border border-dark-750/80">
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Atenciones</span>
-                          <span className="text-sm font-black text-white">{st.servicesCount} cortes</span>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">
+                            {st.isCashier ? 'Ventas Barberos' : 'Atenciones'}
+                          </span>
+                          <span className="text-sm font-black text-white">
+                            {st.servicesCount} {st.isCashier ? 'tickets' : 'cortes'}
+                          </span>
                         </div>
                         <div className="p-2.5 rounded-2xl bg-dark-850 border border-dark-750/80">
-                          <span className="text-slate-400 block text-[10px] uppercase font-bold">Generó en Caja</span>
+                          <span className="text-slate-400 block text-[10px] uppercase font-bold">
+                            {st.isCashier ? 'Total Supervisado' : 'Generó en Caja'}
+                          </span>
                           <span className="text-sm font-black text-slate-200">${fmt(st.totalBilledUSD)}</span>
                         </div>
                       </div>
 
                       {/* Revenue Flow Breakdown */}
                       <div className="space-y-1.5 text-xs bg-dark-950/80 p-3 rounded-2xl border border-dark-800/80">
+                        {st.isCashier && st.baseSalaryUSD > 0 && (
+                          <div className="flex justify-between items-center text-sky-300">
+                            <span>💼 Sueldo Fijo ({getSalaryPeriodLabel(st.salary_period)}):</span>
+                            <span className="font-mono font-bold">+${fmt(st.baseSalaryUSD)}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center text-slate-300">
-                          <span>📈 Comisiones ganadas:</span>
+                          <span>
+                            {st.isCashier
+                              ? `📈 Bono Extra (${st.commission_pct}%):`
+                              : '📈 Comisiones ganadas:'}
+                          </span>
                           <span className="font-mono font-bold text-white">+${fmt(st.totalEarnedUSD)}</span>
                         </div>
+                        {st.isCashier && st.barberBreakdown && st.barberBreakdown.length > 0 && (
+                          <div className="pt-1 border-t border-dark-800/70 space-y-0.5 text-[10px] text-slate-400">
+                            {st.barberBreakdown.slice(0, 4).map(b => (
+                              <div key={b.barberName} className="flex justify-between">
+                                <span className="truncate pr-2">• Por {b.barberName} ({b.count})</span>
+                                <span className="font-mono text-sky-300">+${fmt(b.bonusUSD)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         {st.totalTipsUSD > 0 && (
                           <div className="flex justify-between items-center text-emerald-400">
                             <span>🪙 Propinas acumuladas:</span>
@@ -996,14 +1173,40 @@ export default function CommissionsView({
 
             {/* Resumen del Corte */}
             <div className="bg-dark-950 p-4 rounded-2xl border border-dark-800 space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-400">✂️ Cortes realizados:</span>
-                <span className="font-bold text-white">{liquidatingStaff.servicesCount} (${fmt(liquidatingStaff.totalBilledUSD)})</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">📈 Comisiones ganadas ({liquidatingStaff.commission_pct}%):</span>
-                <span className="font-bold text-emerald-400">+${fmt(liquidatingStaff.totalEarnedUSD)} {currTag}</span>
-              </div>
+              {liquidatingStaff.isCashier ? (
+                <>
+                  <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-dark-800">
+                    <span className="text-sky-300 font-bold">💼 Sueldo Fijo a incluir ({currTag}):</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={liquidateBaseSalary}
+                      onChange={(e) => setLiquidateBaseSalary(e.target.value)}
+                      className="w-28 px-2.5 py-1 rounded-lg bg-dark-900 border border-sky-500/40 text-right font-mono font-black text-white text-xs"
+                    />
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">📊 Ventas supervisadas:</span>
+                    <span className="font-bold text-white">{liquidatingStaff.servicesCount} (${fmt(liquidatingStaff.totalBilledUSD)})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">📈 Bono extra ({liquidatingStaff.commission_pct}%):</span>
+                    <span className="font-bold text-emerald-400">+${fmt(liquidatingStaff.totalEarnedUSD)} {currTag}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">✂️ Cortes realizados:</span>
+                    <span className="font-bold text-white">{liquidatingStaff.servicesCount} (${fmt(liquidatingStaff.totalBilledUSD)})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">📈 Comisiones ganadas ({liquidatingStaff.commission_pct}%):</span>
+                    <span className="font-bold text-emerald-400">+${fmt(liquidatingStaff.totalEarnedUSD)} {currTag}</span>
+                  </div>
+                </>
+              )}
               {liquidatingStaff.totalTipsUSD > 0 && (
                 <div className="flex justify-between">
                   <span className="text-slate-400">🪙 Propinas acumuladas:</span>
@@ -1016,17 +1219,25 @@ export default function CommissionsView({
                   <span className="font-black">-${fmt(liquidatingStaff.valesUSD)} {currTag}</span>
                 </div>
               )}
-              <div className="flex justify-between pt-2 border-t border-dark-800 text-sm font-black">
-                <span className="text-white">💰 NETO A ENTREGAR:</span>
-                <span className="text-gold-400 font-mono text-base">
-                  ${fmt(liquidatingStaff.netBalanceUSD)} {currTag}
-                </span>
-              </div>
-              {!isAr && (
-                <div className="text-right text-[11px] text-slate-400 font-mono">
-                  Al cambio BCV: Bs. {liquidatingStaff.netBalanceBs.toFixed(2)}
-                </div>
-              )}
+              {(() => {
+                const salaryToPay = liquidatingStaff.isCashier ? (parseFloat(liquidateBaseSalary) || 0) : 0
+                const finalNet = salaryToPay + liquidatingStaff.totalEarnedUSD + liquidatingStaff.totalTipsUSD - liquidatingStaff.valesUSD
+                return (
+                  <>
+                    <div className="flex justify-between pt-2 border-t border-dark-800 text-sm font-black">
+                      <span className="text-white">💰 NETO A ENTREGAR:</span>
+                      <span className="text-gold-400 font-mono text-base">
+                        ${fmt(finalNet)} {currTag}
+                      </span>
+                    </div>
+                    {!isAr && (
+                      <div className="text-right text-[11px] text-slate-400 font-mono">
+                        Al cambio BCV: Bs. {(finalNet * exchangeRate).toFixed(2)}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
 
             {/* Método con el que se le paga */}
@@ -1108,14 +1319,53 @@ export default function CommissionsView({
 
             {/* Formulario Scrolleable */}
             <form onSubmit={handleSaveStaff} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-left">
+              {/* Role Selector */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Rol en el Local:
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-dark-950 p-1.5 rounded-2xl border border-dark-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaffRole('operativo')
+                      if (Number(commissionPct) < 15) setCommissionPct(50)
+                      if (avatar === '💼') setAvatar('✂️')
+                    }}
+                    className={`py-2 px-2 rounded-xl text-xs font-black transition-all ${
+                      staffRole === 'operativo'
+                        ? 'bg-gold-500 text-black shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    ✂️ {roleName} / Especialista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStaffRole('cajero')
+                      if (Number(commissionPct) >= 30) setCommissionPct(5)
+                      if (avatar === '✂️' || avatar === '💈') setAvatar('💼')
+                    }}
+                    className={`py-2 px-2 rounded-xl text-xs font-black transition-all ${
+                      staffRole === 'cajero'
+                        ? 'bg-sky-500 text-black shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    💼 Cajera / Recepción
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Nombre o Apodo del {roleName}
+                  Nombre o Apodo del {staffRole === 'cajero' ? 'Encargado/a de Caja' : roleName}
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Ej. Carlos El Fino"
+                  placeholder={staffRole === 'cajero' ? 'Ej. María (Caja)' : 'Ej. Carlos El Fino'}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
@@ -1123,53 +1373,153 @@ export default function CommissionsView({
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gold-400 mb-1.5">
-                  Porcentaje de Comisión Base (%)
-                </label>
-                <div className="grid grid-cols-5 gap-1.5 mb-2">
-                  {[40, 50, 55, 60, 70].map(pct => (
-                    <button
-                      type="button"
-                      key={pct}
-                      onClick={() => setCommissionPct(pct)}
-                      className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                        Number(commissionPct) === pct
-                          ? 'bg-gold-500 text-black border-gold-400'
-                          : 'bg-dark-850 text-slate-400 border-dark-750'
-                      }`}
-                    >
-                      {pct}%
-                    </button>
-                  ))}
+              {staffRole === 'cajero' ? (
+                <div className="space-y-3.5 p-3.5 rounded-2xl bg-sky-950/20 border border-sky-500/30">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-bold text-sky-300 mb-1">
+                        Sueldo Base Fijo ($ {currTag})
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={baseSalaryUsd}
+                        onChange={(e) => setBaseSalaryUsd(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        Frecuencia de Sueldo
+                      </label>
+                      <select
+                        value={salaryPeriod}
+                        onChange={(e) => setSalaryPeriod(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-sky-400"
+                      >
+                        <option value="diario">Diario</option>
+                        <option value="semanal">Semanal</option>
+                        <option value="quincenal">Quincenal</option>
+                        <option value="mensual">Mensual</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-sky-300 mb-1.5">
+                      % Adicional sobre Ventas de Barberos:
+                    </label>
+                    <div className="grid grid-cols-5 gap-1.5 mb-2">
+                      {[0, 2, 3, 5, 10].map(pct => (
+                        <button
+                          type="button"
+                          key={pct}
+                          onClick={() => setCommissionPct(pct)}
+                          className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                            Number(commissionPct) === pct
+                              ? 'bg-sky-500 text-black border-sky-400'
+                              : 'bg-dark-900 text-slate-400 border-dark-750'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={commissionPct}
+                      onChange={(e) => setCommissionPct(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-sky-400"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Se suma aparte como bono para la caja; <strong>no</strong> descuenta nada a los barberos.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        Aplica sobre:
+                      </label>
+                      <select
+                        value={commissionScope}
+                        onChange={(e) => setCommissionScope(e.target.value)}
+                        className="w-full px-2.5 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white focus:outline-none focus:border-sky-400"
+                      >
+                        <option value="servicios">Ventas de Barberos / Serv.</option>
+                        <option value="productos">Solo Productos</option>
+                        <option value="ambos">Servicios + Productos</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        PIN Personal (Opcional)
+                      </label>
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={8}
+                        placeholder="Ej. 1111"
+                        value={staffPin}
+                        onChange={(e) => setStaffPin(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-sky-400"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    required
-                    value={commissionPct}
-                    onChange={(e) => setCommissionPct(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
-                  />
-                  <span className="text-xs text-slate-400 shrink-0">
-                    (Local: {Math.max(0, 100 - (Number(commissionPct) || 0))}%)
-                  </span>
+              ) : (
+                <div>
+                  <label className="block text-xs font-bold text-gold-400 mb-1.5">
+                    Porcentaje de Comisión Base (%)
+                  </label>
+                  <div className="grid grid-cols-5 gap-1.5 mb-2">
+                    {[40, 50, 55, 60, 70].map(pct => (
+                      <button
+                        type="button"
+                        key={pct}
+                        onClick={() => setCommissionPct(pct)}
+                        className={`py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                          Number(commissionPct) === pct
+                            ? 'bg-gold-500 text-black border-gold-400'
+                            : 'bg-dark-850 text-slate-400 border-dark-750'
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      required
+                      value={commissionPct}
+                      onChange={(e) => setCommissionPct(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-gold-500"
+                    />
+                    <span className="text-xs text-slate-400 shrink-0">
+                      (Local: {Math.max(0, 100 - (Number(commissionPct) || 0))}%)
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1.5">
                   Elige su Ícono
                 </label>
-                <div className="flex items-center justify-between gap-1 bg-dark-850 p-2 rounded-xl border border-dark-750">
+                <div className="flex items-center justify-between gap-1 bg-dark-850 p-2 rounded-xl border border-dark-750 overflow-x-auto">
                   {AVATAR_OPTIONS.map(ic => (
                     <button
                       type="button"
                       key={ic}
                       onClick={() => setAvatar(ic)}
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg transition-all ${
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg shrink-0 transition-all ${
                         avatar === ic ? 'bg-gold-500/25 border border-gold-500 scale-110' : 'hover:bg-dark-800'
                       }`}
                     >
@@ -1179,7 +1529,8 @@ export default function CommissionsView({
                 </div>
               </div>
 
-              {/* Sección: Comisiones Especiales por Servicio */}
+              {/* Sección: Comisiones Especiales por Servicio (Solo Operativos) */}
+              {staffRole !== 'cajero' && (
               <div className="pt-2 border-t border-dark-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-gold-400 flex items-center gap-1.5">
@@ -1309,6 +1660,7 @@ export default function CommissionsView({
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Botones de Acción (Fijos al final del formulario) */}
               <div className="flex gap-2 pt-2">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
+import { isCashierStaff, calculateCashierCommissionForTx } from '../lib/securityUtils'
 
 export default function DailyCloseModal({
   isOpen,
@@ -13,7 +14,11 @@ export default function DailyCloseModal({
   onResetDay,
   onResetDailyTransactions,
   onSaveDailyClose,
-  initialPeriod = 'today'
+  initialPeriod = 'today',
+  isCashierMode = false,
+  securityConfig = {},
+  auditLogs = [],
+  activeOperator = null
 }) {
   const [cashInDrawerCounted, setCashInDrawerCounted] = useState('')
   const [copied, setCopied] = useState(false)
@@ -22,10 +27,11 @@ export default function DailyCloseModal({
   const [closePeriod, setClosePeriod] = useState(initialPeriod || 'today')
 
   useEffect(() => {
-    if (isOpen && initialPeriod) {
-      setClosePeriod(initialPeriod)
+    if (isOpen) {
+      setClosePeriod(isCashierMode ? 'today' : (initialPeriod || 'today'))
+      setCashInDrawerCounted('')
     }
-  }, [isOpen, initialPeriod]) // 'today' | 'this_week' | 'prev_week'
+  }, [isOpen, initialPeriod, isCashierMode]) // 'today' | 'this_week' | 'prev_week'
 
   const handleResetAction = onResetDay || onResetDailyTransactions
 
@@ -34,20 +40,23 @@ export default function DailyCloseModal({
   const isAr = isArgentina(null, businessProfile)
   const fmt = (val) => formatCurrency(val, isAr)
   const currTag = isAr ? 'ARS' : 'USD'
+  const hideProfits = Boolean(isCashierMode && securityConfig?.enabled && securityConfig?.hideOwnerProfits)
+  const isBlindCount = Boolean(isCashierMode && securityConfig?.enabled && securityConfig?.blindCashCount)
+  const effectivePeriod = isCashierMode ? 'today' : closePeriod
   const thisWeekBounds = getWeekBoundsLocal(0)
   const prevWeekBounds = getWeekBoundsLocal(-1)
-  const isWeekly = closePeriod !== 'today'
-  const periodTitle = closePeriod === 'this_week'
+  const isWeekly = effectivePeriod !== 'today'
+  const periodTitle = effectivePeriod === 'this_week'
     ? `Esta Semana (${thisWeekBounds.rangeLabel})`
-    : closePeriod === 'prev_week'
+    : effectivePeriod === 'prev_week'
     ? `Semana Pasada (${prevWeekBounds.rangeLabel})`
     : 'Hoy'
   const periodShortLabel = isWeekly ? 'en la semana' : 'hoy'
 
   // 1. Filter transactions for selected period in local time
   const periodTx = (transactions || []).filter(t => {
-    if (closePeriod === 'this_week') return isDateInWeek(t.fecha, 0)
-    if (closePeriod === 'prev_week') return isDateInWeek(t.fecha, -1)
+    if (effectivePeriod === 'this_week') return isDateInWeek(t.fecha, 0)
+    if (effectivePeriod === 'prev_week') return isDateInWeek(t.fecha, -1)
     return isDateToday(t.fecha)
   })
   const incomeTx = periodTx.filter(t => t.monto_usd > 0)
@@ -103,12 +112,18 @@ export default function DailyCloseModal({
   )
   const expectedCashInDrawer = Math.max(0, efectivoUSD - cashExpensesUSD)
 
-  // 3. Commissions by Staff Member (with Vales of today deducted!)
+  // 3. Commissions by Staff Member (Operative + Cashier extra bonus, with Vales deducted)
+  const cashierListInClose = (staffList || []).filter(s => isCashierStaff(s))
   const commissionsByStaff = (staffList || []).map(staff => {
-    const staffTx = incomeTx.filter(t => t.staff_id === staff.id || t.staff_name === staff.name)
+    const isCashier = isCashierStaff(staff)
+    const staffTx = isCashier
+      ? incomeTx.filter(t => (t.cajero_staff_id ? t.cajero_staff_id === staff.id : cashierListInClose.length <= 1))
+      : incomeTx.filter(t => t.staff_id === staff.id || t.staff_name === staff.name)
     const count = staffTx.length
     const generatedUSD = staffTx.reduce((sum, t) => sum + t.monto_usd, 0)
-    const commissionUSD = staffTx.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
+    const commissionUSD = isCashier
+      ? staffTx.reduce((sum, t) => sum + (t.cajero_staff_id === staff.id && typeof t.comision_cajero_usd === 'number' ? t.comision_cajero_usd : calculateCashierCommissionForTx(t, staff)), 0)
+      : staffTx.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
 
     // Vales of this staff member today
     const staffValesToday = valesTx.filter(t => t.staff_id === staff.id || t.staff_name === staff.name)
@@ -117,8 +132,9 @@ export default function DailyCloseModal({
 
     return {
       id: staff.id,
-      name: staff.name,
-      percentage: staff.commission_percentage || 50,
+      name: isCashier ? `${staff.name} (Caja)` : staff.name,
+      isCashier,
+      percentage: staff.commission_pct ?? staff.commission_percentage ?? (isCashier ? 0 : 50),
       count,
       generatedUSD,
       commissionUSD,
@@ -129,8 +145,20 @@ export default function DailyCloseModal({
     }
   }).filter(s => s.count > 0 || s.commissionUSD > 0 || s.valesUSD > 0)
 
+  const totalCashierCommissionsUSD = commissionsByStaff.filter(s => s.isCashier).reduce((sum, s) => sum + s.commissionUSD, 0)
   const totalCommissionsUSD = commissionsByStaff.reduce((sum, s) => sum + s.commissionUSD, 0)
   const totalNetCommissionsUSD = commissionsByStaff.reduce((sum, s) => sum + s.netCommissionUSD, 0)
+
+  // Audit metrics for this period
+  const periodAuditLogs = (auditLogs || []).filter(l => {
+    const dt = l.timestamp || l.fecha
+    if (effectivePeriod === 'this_week') return isDateInWeek(dt, 0)
+    if (effectivePeriod === 'prev_week') return isDateInWeek(dt, -1)
+    return isDateToday(dt)
+  })
+  const periodVoidsCount = periodAuditLogs.filter(l => l.type === 'TX_VOIDED').length
+  const periodPriceChangesCount = periodAuditLogs.filter(l => l.type === 'PRICE_CHANGED').length
+  const periodPinFailsCount = periodAuditLogs.filter(l => l.type === 'PIN_FAILED').length
 
   // 4. Net Profit in Pocket for Business (Income - Operating Expenses - Raw Commissions)
   const netProfitUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
@@ -246,6 +274,9 @@ export default function DailyCloseModal({
       }
     }
 
+    if (periodAuditLogs.length > 0 || securityConfig?.enabled) {
+      msg += `\n🛡️ *Control Auditoría:* ${periodVoidsCount} anulac. | ${periodPriceChangesCount} camb. precio${periodPinFailsCount > 0 ? ` | ⚠️ ${periodPinFailsCount} PIN fallido(s)` : ''}\n`
+    }
     msg += `\nGenerado con ${getActiveBrand().name} • Ingenio Digital`
     return msg
   }
@@ -295,7 +326,8 @@ export default function DailyCloseModal({
           </button>
         </div>
 
-        {/* Selector de Período: Hoy vs Semanal */}
+        {/* Selector de Período: Hoy vs Semanal (Solo Dueño) */}
+        {!isCashierMode && (
         <div className="grid grid-cols-3 gap-1.5 bg-dark-950 p-1 rounded-2xl border border-dark-800">
           <button
             type="button"
@@ -333,9 +365,10 @@ export default function DailyCloseModal({
             <span className="block text-[9px] font-mono opacity-80">{prevWeekBounds.rangeLabel}</span>
           </button>
         </div>
+        )}
 
         {/* 4 Pillars Summary Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className={`grid ${hideProfits ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4'} gap-2.5`}>
           <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Entró</span>
             <div className="text-lg font-black text-white mt-0.5">${fmt(totalIncomeUSD)}</div>
@@ -350,19 +383,23 @@ export default function DailyCloseModal({
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
-            <span className="text-[10px] uppercase font-bold text-amber-400 block">Comisiones</span>
-            <div className="text-lg font-black text-amber-400 mt-0.5">${fmt(totalCommissionsUSD)}</div>
-            <span className="text-[10px] text-slate-500 font-mono">
-              {totalValesUSD > 0 ? `Neto ${periodShortLabel}: ${fmt(totalNetCommissionsUSD)}` : 'Al equipo'}
-            </span>
-          </div>
+          {!hideProfits && (
+            <>
+              <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750">
+                <span className="text-[10px] uppercase font-bold text-amber-400 block">Comisiones</span>
+                <div className="text-lg font-black text-amber-400 mt-0.5">${fmt(totalCommissionsUSD)}</div>
+                <span className="text-[10px] text-slate-500 font-mono">
+                  {totalValesUSD > 0 ? `Neto ${periodShortLabel}: ${fmt(totalNetCommissionsUSD)}` : 'Al equipo'}
+                </span>
+              </div>
 
-          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
-            <span className="text-[10px] uppercase font-black text-emerald-400 block">Ganancia Limpia</span>
-            <div className="text-lg font-black text-emerald-400 mt-0.5">${fmt(netProfitUSD)}</div>
-            <span className="text-[10px] text-slate-300 font-mono">{isAr ? 'Pesos ARS' : 'En tu bolsillo'}</span>
-          </div>
+              <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30">
+                <span className="text-[10px] uppercase font-black text-emerald-400 block">Ganancia Limpia</span>
+                <div className="text-lg font-black text-emerald-400 mt-0.5">${fmt(netProfitUSD)}</div>
+                <span className="text-[10px] text-slate-300 font-mono">{isAr ? 'Pesos ARS' : 'En tu bolsillo'}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Breakdown by Payment Method */}
@@ -413,6 +450,7 @@ export default function DailyCloseModal({
         </div>
 
         {/* Staff Payout List */}
+        {!hideProfits && (
         <div className="p-4 rounded-2xl bg-dark-850 border border-dark-750 space-y-2">
           <span className="text-xs font-bold text-slate-300 block">
             Liquidación de Comisiones {isWeekly ? `(${periodTitle})` : 'de Hoy'} (A Pagar al Personal):
@@ -452,6 +490,7 @@ export default function DailyCloseModal({
             </div>
           )}
         </div>
+        )}
 
         {/* Propinas del Período (Aparte) */}
         <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-2.5">
@@ -532,15 +571,27 @@ export default function DailyCloseModal({
 
         {/* Physical Drawer Cash Audit (Arqueo de Gaveta) */}
         <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/30 to-dark-850 border border-purple-500/30 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-xs font-black text-purple-300 flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-purple-400" />
               <span>Arqueo Físico de Gaveta (¿Cuánto Efectivo $ tienes en mano?)</span>
             </span>
-            <span className="text-[10px] text-slate-400">
-              Esperado: <strong className="text-white font-mono">${fmt(expectedCashInDrawer)}</strong>
-            </span>
+            {!isBlindCount ? (
+              <span className="text-[10px] text-slate-400">
+                Esperado: <strong className="text-white font-mono">${fmt(expectedCashInDrawer)}</strong>
+              </span>
+            ) : (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
+                🔒 Arqueo Ciego Activo
+              </span>
+            )}
           </div>
+
+          {isBlindCount && (
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-200">
+              Cuenta físicamente el dinero en gaveta e ingresa el monto exacto. El sistema enviará la comparación y el cuadre directo al panel del Dueño.
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-2.5 items-center">
             <div className="relative w-full sm:w-60">
@@ -555,7 +606,7 @@ export default function DailyCloseModal({
               />
             </div>
 
-            {hasCounted && (
+            {hasCounted && !isBlindCount && (
               <div className="flex-1 w-full text-xs font-bold">
                 {Math.abs(differenceUSD) < 0.01 ? (
                   <span className="text-emerald-400 flex items-center gap-1">
@@ -603,12 +654,16 @@ export default function DailyCloseModal({
           <div className="w-full sm:w-auto flex items-center justify-end gap-2">
             <button
               type="button"
-              disabled={closingSaved}
+              disabled={closingSaved || (isBlindCount && !hasCounted)}
               onClick={() => {
+                if (isBlindCount && !hasCounted) {
+                  alert('Debes ingresar el monto contado en gaveta para cerrar en modo Arqueo Ciego.')
+                  return
+                }
                 const closingRecord = {
                   id: `close_${Date.now()}`,
                   fecha: getLocalDateIso(),
-                  periodType: closePeriod,
+                  periodType: effectivePeriod,
                   periodLabel: periodTitle,
                   timestamp: new Date().toISOString(),
                   totalIncomeUSD,
@@ -616,6 +671,7 @@ export default function DailyCloseModal({
                   totalExpensesUSD,
                   totalValesUSD,
                   totalCommissionsUSD,
+                  cashierCommissionsUSD: totalCashierCommissionsUSD,
                   totalTipsUSD,
                   efectivoUSD,
                   pagoMovilUSD,
@@ -630,7 +686,10 @@ export default function DailyCloseModal({
                   transactionsCount: periodTx.length,
                   commissionsByStaff,
                   tipsByStaff,
-                  exchangeRate
+                  exchangeRate,
+                  blindMode: isBlindCount,
+                  closedByName: activeOperator?.name || (isCashierMode ? 'Cajero' : 'Dueño'),
+                  closedByRole: isCashierMode ? 'cajero' : 'dueno'
                 }
 
                 if (onSaveDailyClose) {
@@ -646,7 +705,7 @@ export default function DailyCloseModal({
                   onClose()
                 }, 1200)
               }}
-              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black text-xs font-black flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 disabled:opacity-45 disabled:cursor-not-allowed text-black text-xs font-black flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
             >
               {closingSaved ? (
                 <>

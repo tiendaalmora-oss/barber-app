@@ -3,6 +3,7 @@ import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2,
 import PhoneCountryInput from './PhoneCountryInput'
 import { getLocalDateIso, normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
+import { getOperativeStaff, getCashierStaff, calculateCashierCommissionForTx } from '../lib/securityUtils'
 
 const getSplitMethodOptions = (isAr) => isAr ? [
   { id: 'efectivo_usd', label: '💵 Efectivo (En Caja)' },
@@ -26,13 +27,20 @@ export default function QuickCashModal({
   businessProfile = {},
   onRegisterTransaction,
   clients = [],
-  prefillData = null
+  prefillData = null,
+  isCashierMode = false,
+  securityConfig = {},
+  activeOperator = null
 }) {
   const isAr = isArgentina(null, businessProfile)
   const SPLIT_METHOD_OPTIONS = getSplitMethodOptions(isAr)
   const fmt = (val) => formatCurrency(val, isAr)
   const currTag = isAr ? 'ARS' : 'USD'
-  const [selectedStaff, setSelectedStaff] = useState(nicheData.staff[0]?.id || '')
+  const operativeRaw = getOperativeStaff(nicheData.staff || [])
+  const operativeStaff = operativeRaw.length > 0 ? operativeRaw : (nicheData.staff || [])
+  const cashiersList = getCashierStaff(nicheData.staff || [])
+  const hideProfitsInCashier = Boolean(isCashierMode && securityConfig?.enabled && securityConfig?.hideOwnerProfits)
+  const [selectedStaff, setSelectedStaff] = useState(operativeStaff[0]?.id || '')
   const [activeItemTab, setActiveItemTab] = useState('servicios') // 'servicios' | 'productos'
   const [paymentMethod, setPaymentMethod] = useState('pago_movil')
   const [clientName, setClientName] = useState('')
@@ -104,9 +112,9 @@ export default function QuickCashModal({
     if (prefillData) {
       setClientName(prefillData.clientName || '')
       setClientPhone(prefillData.clientPhone || '')
-      const targetStaffId = prefillData.staffId || nicheData.staff[0]?.id || ''
+      const targetStaffId = prefillData.staffId || operativeStaff[0]?.id || ''
       setSelectedStaff(targetStaffId)
-      const targetStaffObj = nicheData.staff.find(s => s.id === targetStaffId) || nicheData.staff[0]
+      const targetStaffObj = operativeStaff.find(s => s.id === targetStaffId) || operativeStaff[0]
 
       // Pre-fill cart with the appointment's service
       const svcMatch = (nicheData.services || []).find(s => 
@@ -137,9 +145,9 @@ export default function QuickCashModal({
       // Normal open: reset or default
       setClientName('')
       setClientPhone('')
-      const defaultStaffId = nicheData.staff[0]?.id || ''
+      const defaultStaffId = operativeStaff[0]?.id || ''
       if (defaultStaffId) setSelectedStaff(defaultStaffId)
-      const defaultStaffObj = nicheData.staff[0]
+      const defaultStaffObj = operativeStaff[0]
       const firstSvc = nicheData.services[0]
       const firstComm = firstSvc ? resolveItemCommission(firstSvc, defaultStaffObj) : 50
       setCart(firstSvc ? [{
@@ -156,15 +164,18 @@ export default function QuickCashModal({
   if (!isOpen) return null
 
   // Resolve staff
-  const staffObj = nicheData.staff.find(s => s.id === selectedStaff) || nicheData.staff[0]
+  const staffObj = operativeStaff.find(s => s.id === selectedStaff) || operativeStaff[0]
   const commissionPct = staffObj?.commission_pct || 50
+  const activeCashierObj =
+    (activeOperator?.staff_role === 'cajero' ? cashiersList.find(c => c.id === activeOperator.id) : null) ||
+    (cashiersList.length === 1 ? cashiersList[0] : null)
 
   const servicesList = nicheData.services || []
   const productsList = nicheData.products || []
 
   const handleSelectStaff = (newStaffId) => {
     setSelectedStaff(newStaffId)
-    const newStaffObj = nicheData.staff.find(s => s.id === newStaffId)
+    const newStaffObj = operativeStaff.find(s => s.id === newStaffId)
     if (newStaffObj) {
       setCart(prev => prev.map(ci => {
         if (ci.isProduct) return ci
@@ -181,7 +192,7 @@ export default function QuickCashModal({
       if (idx >= 0) {
         return prev.map((ci, i) => i === idx ? { ...ci, qty: ci.qty + 1 } : ci)
       } else {
-        const currentStaffObj = nicheData.staff.find(s => s.id === selectedStaff) || staffObj
+        const currentStaffObj = operativeStaff.find(s => s.id === selectedStaff) || staffObj
         const itemComm = resolveItemCommission(item, currentStaffObj)
         return [...prev, {
           id: item.id,
@@ -235,7 +246,8 @@ export default function QuickCashModal({
       const pct = typeof ci.commission_pct === 'number' ? ci.commission_pct : commissionPct
       return sum + (ci.price_usd * ci.qty * (pct / 100))
     }, 0)
-  const businessProfitUSD = totalUSD - staffCommissionUSD
+  const cashierCommissionUSD = calculateCashierCommissionForTx(cart, activeCashierObj)
+  const businessProfitUSD = Math.max(0, totalUSD - staffCommissionUSD - cashierCommissionUSD)
 
   // Grand total including tip
   const grandTotalUSD = totalUSD + tipUSD
@@ -328,6 +340,13 @@ export default function QuickCashModal({
       metodo_pago: paymentMethod,
       payment_splits: paymentSplits,
       comision_usd: staffCommissionUSD,
+      comision_cajero_usd: cashierCommissionUSD,
+      cajero_staff_id: activeCashierObj?.id || null,
+      cajero_staff_name: activeCashierObj?.name || null,
+      cajero_pct: activeCashierObj ? (Number(activeCashierObj.commission_pct) || 0) : 0,
+      registered_by_role: isCashierMode ? 'cajero' : 'dueno',
+      registered_by_name: activeOperator?.name || (isCashierMode ? 'Cajero' : 'Dueño'),
+      registered_by_id: activeOperator?.id || null,
       ganancia_negocio_usd: businessProfitUSD,
       hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       fecha: new Date().toISOString(),
@@ -517,7 +536,7 @@ export default function QuickCashModal({
               1. ¿Quién atendió? ({nicheData.roleName})
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {nicheData.staff.map((st) => (
+              {operativeStaff.map((st) => (
                 <button
                   type="button"
                   key={st.id}
@@ -532,9 +551,11 @@ export default function QuickCashModal({
                     <span>{st.avatar}</span>
                     <span className="text-xs font-bold truncate">{st.name.split(' ')[0]}</span>
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    Comisión: <span className="text-gold-400 font-semibold">{st.commission_pct}%</span>
-                  </div>
+                  {!hideProfitsInCashier && (
+                    <div className="text-[10px] text-slate-400">
+                      Comisión: <span className="text-gold-400 font-semibold">{st.commission_pct}%</span>
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -681,24 +702,33 @@ export default function QuickCashModal({
                       <div className="flex items-center gap-1.5 min-w-0 pr-1">
                         <span className="text-xs">{ci.isProduct ? '🧴' : '✂️'}</span>
                         <span className="font-semibold text-white truncate text-[11px]">{ci.name}</span>
-                        {!ci.isProduct && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const currentVal = ci.commission_pct !== undefined ? ci.commission_pct : commissionPct
-                              const promptVal = prompt(`Ajustar comisión para "${ci.name}" (%) en este cobro:`, currentVal)
-                              if (promptVal !== null) {
-                                const parsed = parseFloat(promptVal)
-                                if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-                                  handleUpdateItemCommission(ci.id, parsed)
+                        {!ci.isProduct && !hideProfitsInCashier && (
+                          isCashierMode ? (
+                            <span
+                              title="Porcentaje fijado por el Dueño"
+                              className="text-[9px] px-1.5 py-0.2 rounded bg-dark-800 border border-dark-700 text-slate-400 font-bold shrink-0 font-mono"
+                            >
+                              {ci.commission_pct ?? commissionPct}%
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentVal = ci.commission_pct !== undefined ? ci.commission_pct : commissionPct
+                                const promptVal = prompt(`Ajustar comisión para "${ci.name}" (%) en este cobro:`, currentVal)
+                                if (promptVal !== null) {
+                                  const parsed = parseFloat(promptVal)
+                                  if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                                    handleUpdateItemCommission(ci.id, parsed)
+                                  }
                                 }
-                              }
-                            }}
-                            title="Toca para ajustar el % de comisión de este servicio para este cobro"
-                            className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold shrink-0 font-mono transition-colors cursor-pointer"
-                          >
-                            {ci.commission_pct ?? commissionPct}% ✎
-                          </button>
+                              }}
+                              title="Toca para ajustar el % de comisión de este servicio para este cobro"
+                              className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 font-bold shrink-0 font-mono transition-colors cursor-pointer"
+                            >
+                              {ci.commission_pct ?? commissionPct}% ✎
+                            </button>
+                          )
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -1096,32 +1126,44 @@ export default function QuickCashModal({
             </div>
 
             {/* Split */}
-            <div className="grid grid-cols-3 gap-2 text-xs pt-0.5">
-              <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
-                <span className="text-[10px] text-slate-400 block truncate">
-                  Comisión {staffObj?.name.split(' ')[0]}:
-                </span>
-                <span className="text-xs font-bold text-amber-400">
-                  ${fmt(staffCommissionUSD)}
-                </span>
+            {!hideProfitsInCashier && (
+              <div className={`grid ${cashierCommissionUSD > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-2 text-xs pt-0.5`}>
+                <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
+                  <span className="text-[10px] text-slate-400 block truncate">
+                    Comisión {staffObj?.name.split(' ')[0]}:
+                  </span>
+                  <span className="text-xs font-bold text-amber-400">
+                    ${fmt(staffCommissionUSD)}
+                  </span>
+                </div>
+                {cashierCommissionUSD > 0 && (
+                  <div className="p-2 rounded-lg bg-dark-900 border border-sky-500/30">
+                    <span className="text-[10px] text-sky-400 block truncate">
+                      Caja ({activeCashierObj?.name.split(' ')[0]} {activeCashierObj?.commission_pct}%):
+                    </span>
+                    <span className="text-xs font-bold text-sky-300">
+                      +${fmt(cashierCommissionUSD)}
+                    </span>
+                  </div>
+                )}
+                <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
+                  <span className="text-[10px] text-slate-400 block truncate">
+                    Propina (Aparte):
+                  </span>
+                  <span className="text-xs font-bold text-gold-400">
+                    +${fmt(tipUSD)}
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
+                  <span className="text-[10px] text-slate-400 block truncate">
+                    Para el Local:
+                  </span>
+                  <span className="text-xs font-bold text-emerald-400">
+                    ${fmt(businessProfitUSD)}
+                  </span>
+                </div>
               </div>
-              <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
-                <span className="text-[10px] text-slate-400 block truncate">
-                  Propina (Aparte):
-                </span>
-                <span className="text-xs font-bold text-gold-400">
-                  +${fmt(tipUSD)}
-                </span>
-              </div>
-              <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
-                <span className="text-[10px] text-slate-400 block truncate">
-                  Para el Local:
-                </span>
-                <span className="text-xs font-bold text-emerald-400">
-                  ${fmt(businessProfitUSD)}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Submit CTA */}

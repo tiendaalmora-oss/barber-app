@@ -8,7 +8,8 @@ export default function InventoryView({
   exchangeRate,
   onAddProduct,
   onUpdateProduct,
-  onDeleteProduct
+  onDeleteProduct,
+  isCashierMode = false
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProd, setEditingProd] = useState(null)
@@ -148,24 +149,30 @@ export default function InventoryView({
           </p>
         </div>
 
-        {/* Inventory Valuation + Add Button */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <div className="p-2.5 bg-dark-850 border border-dark-750 rounded-xl">
-            <span className="text-[10px] text-slate-400 block uppercase">Invertido:</span>
-            <span className="text-sm font-bold text-white">${fmt(totalInventoryCostUSD)} {currTag}</span>
+        {/* Inventory Valuation + Add Button (Solo Dueño) */}
+        {!isCashierMode ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="p-2.5 bg-dark-850 border border-dark-750 rounded-xl">
+              <span className="text-[10px] text-slate-400 block uppercase">Invertido:</span>
+              <span className="text-sm font-bold text-white">${fmt(totalInventoryCostUSD)} {currTag}</span>
+            </div>
+            <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <span className="text-[10px] text-emerald-400 block uppercase">Ganancia Estimada:</span>
+              <span className="text-sm font-bold text-emerald-400">+${fmt(totalPotentialProfitUSD)} {currTag}</span>
+            </div>
+            <button
+              onClick={openCreateModal}
+              className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>Agregar Producto</span>
+            </button>
           </div>
-          <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
-            <span className="text-[10px] text-emerald-400 block uppercase">Ganancia Estimada:</span>
-            <span className="text-sm font-bold text-emerald-400">+${fmt(totalPotentialProfitUSD)} {currTag}</span>
+        ) : (
+          <div className="px-3 py-2 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 text-xs font-bold">
+            🔒 Modo Cajero (Consulta de Precios y Stock)
           </div>
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 px-4 py-3 rounded-xl bg-gold-500 hover:bg-gold-400 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
-          >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Agregar Producto</span>
-          </button>
-        </div>
+        )}
       </div>
 
       {/* Empty state */}
@@ -252,11 +259,13 @@ export default function InventoryView({
                           </button>
                         </div>
 
-                        <div className="flex items-center gap-2 mt-1 text-xs">
-                          <span className="text-slate-400">Costo: ${fmt(prod.cost_usd)}</span>
-                          <span>•</span>
-                          <span className="text-emerald-400 font-semibold">Ganas: +${fmt(unitProfitUSD)}/u</span>
-                        </div>
+                        {!isCashierMode && (
+                          <div className="flex items-center gap-2 mt-1 text-xs">
+                            <span className="text-slate-400">Costo: ${fmt(prod.cost_usd)}</span>
+                            <span>•</span>
+                            <span className="text-emerald-400 font-semibold">Ganas: +${fmt(unitProfitUSD)}/u</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -267,24 +276,28 @@ export default function InventoryView({
                           Poco Stock
                         </span>
                       )}
-                      <button
-                        onClick={() => openEditModal(prod)}
-                        className="p-1.5 rounded-lg bg-dark-850 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-750"
-                        title="Editar producto"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Eliminar "${prod.name}" del inventario?`)) {
-                            onDeleteProduct(prod.id)
-                          }
-                        }}
-                        className="p-1.5 rounded-lg bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
-                        title="Eliminar producto"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {!isCashierMode && (
+                        <>
+                          <button
+                            onClick={() => openEditModal(prod)}
+                            className="p-1.5 rounded-lg bg-dark-850 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-750"
+                            title="Editar producto"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm(`¿Eliminar "${prod.name}" del inventario?`)) {
+                                onDeleteProduct(prod.id)
+                              }
+                            }}
+                            className="p-1.5 rounded-lg bg-dark-850 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-750"
+                            title="Eliminar producto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -309,22 +322,24 @@ export default function InventoryView({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => updateStock(prod, -1)}
-                      className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-200 border border-dark-700 flex items-center justify-center font-bold active:scale-90 transition-all"
-                      title="Restar 1 unidad"
-                    >
-                      <Minus className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => updateStock(prod, 1)}
-                      className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-750 text-gold-400 border border-dark-700 flex items-center justify-center font-bold active:scale-90 transition-all"
-                      title="Sumar 1 unidad"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {!isCashierMode && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => updateStock(prod, -1)}
+                        className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-750 text-slate-200 border border-dark-700 flex items-center justify-center font-bold active:scale-90 transition-all"
+                        title="Restar 1 unidad"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => updateStock(prod, 1)}
+                        className="w-8 h-8 rounded-lg bg-dark-800 hover:bg-dark-750 text-gold-400 border border-dark-700 flex items-center justify-center font-bold active:scale-90 transition-all"
+                        title="Sumar 1 unidad"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
               </div>

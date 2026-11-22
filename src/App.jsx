@@ -19,6 +19,9 @@ import WhatsAppCloseModal from './components/WhatsAppCloseModal'
 import BusinessSettingsModal from './components/BusinessSettingsModal'
 import DailyCloseModal from './components/DailyCloseModal'
 import CopilotChatWidget from './components/CopilotChatWidget'
+import RolePinModal from './components/RolePinModal'
+import VoidTransactionModal from './components/VoidTransactionModal'
+import AuditLogView from './components/AuditLogView'
 import {
   NICHES,
   NICHES_AR,
@@ -34,6 +37,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck } from 'lucide-react'
 import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
 import { getActiveBrand, isArgentina } from './lib/brandConfig'
+import { getSecurityConfig, createAuditEntry, getDeviceForceCashier } from './lib/securityUtils'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -344,6 +348,30 @@ export default function App() {
     }
   })
 
+  const [auditLogs, setAuditLogs] = useState(() => {
+    try {
+      if (initWs && Array.isArray(initWs.auditLogs)) return initWs.auditLogs
+      return []
+    } catch (e) {
+      return []
+    }
+  })
+
+  // Owner vs. Cashier security mode state
+  const ownerUnlockedThisSessionRef = useRef(false)
+  const [isCashierMode, setIsCashierMode] = useState(() => {
+    try {
+      const sec = getSecurityConfig(initWs?.businessProfile || {})
+      const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+      return Boolean(sec.enabled && loggedId && getDeviceForceCashier(loggedId))
+    } catch (e) {
+      return false
+    }
+  })
+  const [activeOperator, setActiveOperator] = useState(null)
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false)
+  const [voidingTx, setVoidingTx] = useState(null)
+
   // Modals
   const [isCashModalOpen, setIsCashModalOpen] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState(null)
@@ -408,6 +436,68 @@ export default function App() {
     products: currentProducts
   }
 
+  const securityConfig = getSecurityConfig(businessProfile)
+  const todayAuditAlertCount = (auditLogs || []).filter(l =>
+    isDateToday(l.timestamp || l.fecha) && (l.type === 'TX_VOIDED' || l.type === 'PIN_FAILED')
+  ).length
+
+  const addAuditLog = (entryPayload) => {
+    const entry = createAuditEntry({
+      ...entryPayload,
+      actorName: entryPayload.actorName || activeOperator?.name || (isCashierMode ? 'Cajero' : 'Dueño'),
+      actorRole: entryPayload.actorRole || (isCashierMode ? 'cajero' : 'dueno')
+    })
+    setAuditLogs(prev => [entry, ...(Array.isArray(prev) ? prev : [])].slice(0, 2000))
+  }
+
+  // Enforce device cashier lock on startup if configured for this PC
+  useEffect(() => {
+    if (!activeTenantId || ownerUnlockedThisSessionRef.current) return
+    if (securityConfig.enabled && getDeviceForceCashier(activeTenantId)) {
+      setIsCashierMode(true)
+    } else if (!securityConfig.enabled) {
+      setIsCashierMode(false)
+    }
+  }, [activeTenantId, securityConfig.enabled])
+
+  // Redirect away from Owner-only tabs when in Cashier mode
+  useEffect(() => {
+    if (isCashierMode && ['commissions', 'monthly', 'audit'].includes(activeTab)) {
+      setActiveTab('dashboard')
+    }
+  }, [isCashierMode, activeTab])
+
+  // Auto-lock PC back to Cashier mode after inactivity if device is forced to Cashier mode
+  useEffect(() => {
+    if (!activeTenantId || !securityConfig.enabled || isCashierMode) return
+    const autoMins = Number(securityConfig.autoLockMinutes) || 0
+    if (autoMins <= 0 || !getDeviceForceCashier(activeTenantId)) return
+
+    let timer = null
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        ownerUnlockedThisSessionRef.current = false
+        setIsCashierMode(true)
+        setActiveOperator(null)
+        addAuditLog({
+          type: 'ROLE_SWITCH',
+          actorName: 'Sistema',
+          actorRole: 'dueno',
+          summary: `Auto-bloqueo a Modo Cajero tras ${autoMins} min de inactividad`
+        })
+      }, autoMins * 60 * 1000)
+    }
+
+    resetTimer()
+    const events = ['click', 'keydown', 'touchstart']
+    events.forEach(ev => window.addEventListener(ev, resetTimer, { passive: true }))
+    return () => {
+      if (timer) clearTimeout(timer)
+      events.forEach(ev => window.removeEventListener(ev, resetTimer))
+    }
+  }, [activeTenantId, securityConfig.enabled, securityConfig.autoLockMinutes, isCashierMode])
+
   // Persist to local storage
   useEffect(() => {
     localStorage.setItem('barber_rate', exchangeRate.toString())
@@ -439,7 +529,8 @@ export default function App() {
       servicesByNiche,
       productsByNiche,
       exchangeRate,
-      dailyClosings
+      dailyClosings,
+      auditLogs
     }
     // 1. Save in local browser storage isolated for this tenant
     try {
@@ -473,7 +564,7 @@ export default function App() {
     }, 1200)
 
     return () => clearTimeout(timeout)
-  }, [activeTenantId, currentNiche, transactions, deletedTxIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings])
+  }, [activeTenantId, currentNiche, transactions, deletedTxIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings, auditLogs])
 
   // Auto-reconstruct historical transactions from client visit history if wiped by legacy reset button
   useEffect(() => {
@@ -646,6 +737,17 @@ export default function App() {
                 const newIncoming = serverClosings.filter(c => c && c.id && !prevIds.has(c.id))
                 if (newIncoming.length > 0) {
                   return [...newIncoming, ...prev]
+                }
+                return prev
+              })
+            }
+            if (Array.isArray(ws.auditLogs)) {
+              const serverAudits = ws.auditLogs
+              setAuditLogs(prev => {
+                const prevIds = new Set((prev || []).map(l => l.id))
+                const newIncoming = serverAudits.filter(l => l && l.id && !prevIds.has(l.id))
+                if (newIncoming.length > 0) {
+                  return [...newIncoming, ...(prev || [])].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
                 }
                 return prev
               })
@@ -995,6 +1097,15 @@ export default function App() {
   }
 
   const handleUpdateService = (updatedSvc) => {
+    const existing = (servicesByNiche[currentNiche] || []).find(s => s.id === updatedSvc.id)
+    if (existing && Number(existing.price_usd) !== Number(updatedSvc.price_usd)) {
+      addAuditLog({
+        type: 'PRICE_CHANGED',
+        summary: `Precio de servicio modificado: ${updatedSvc.name}`,
+        amountUsd: updatedSvc.price_usd,
+        details: { oldPrice: existing.price_usd, newPrice: updatedSvc.price_usd }
+      })
+    }
     setServicesByNiche(prev => ({
       ...prev,
       [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSvc.id ? updatedSvc : s)
@@ -1002,6 +1113,14 @@ export default function App() {
   }
 
   const handleDeleteService = (id) => {
+    const existing = (servicesByNiche[currentNiche] || []).find(s => s.id === id)
+    if (existing) {
+      addAuditLog({
+        type: 'SERVICE_DELETED',
+        summary: `Servicio eliminado del catálogo: ${existing.name}`,
+        amountUsd: existing.price_usd
+      })
+    }
     setServicesByNiche(prev => ({
       ...prev,
       [currentNiche]: (prev[currentNiche] || []).filter(s => s.id !== id)
@@ -1017,6 +1136,15 @@ export default function App() {
   }
 
   const handleUpdateProduct = (updatedProd) => {
+    const existing = (productsByNiche[currentNiche] || []).find(p => p.id === updatedProd.id)
+    if (existing && Number(existing.price_usd) !== Number(updatedProd.price_usd)) {
+      addAuditLog({
+        type: 'PRICE_CHANGED',
+        summary: `Precio de producto modificado: ${updatedProd.name}`,
+        amountUsd: updatedProd.price_usd,
+        details: { oldPrice: existing.price_usd, newPrice: updatedProd.price_usd }
+      })
+    }
     setProductsByNiche(prev => ({
       ...prev,
       [currentNiche]: (prev[currentNiche] || []).map(p => p.id === updatedProd.id ? updatedProd : p)
@@ -1024,6 +1152,14 @@ export default function App() {
   }
 
   const handleDeleteProduct = (id) => {
+    const existing = (productsByNiche[currentNiche] || []).find(p => p.id === id)
+    if (existing) {
+      addAuditLog({
+        type: 'PRODUCT_DELETED',
+        summary: `Producto eliminado del inventario: ${existing.name}`,
+        amountUsd: existing.price_usd
+      })
+    }
     setProductsByNiche(prev => ({
       ...prev,
       [currentNiche]: (prev[currentNiche] || []).filter(p => p.id !== id)
@@ -1074,6 +1210,14 @@ export default function App() {
               const serverIds = new Set(ws.dailyClosings.map(c => c && c.id).filter(Boolean))
               const localOnly = localList.filter(c => c && c.id && !serverIds.has(c.id))
               return [...ws.dailyClosings, ...localOnly]
+            })
+          }
+          if (Array.isArray(ws.auditLogs)) {
+            setAuditLogs(prev => {
+              const localList = Array.isArray(prev) ? prev : []
+              const serverIds = new Set(ws.auditLogs.map(l => l && l.id).filter(Boolean))
+              const localOnly = localList.filter(l => l && l.id && !serverIds.has(l.id))
+              return [...ws.auditLogs, ...localOnly].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
             })
           }
           if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
@@ -1142,7 +1286,12 @@ export default function App() {
           setClients(Array.isArray(parsed.clients) ? parsed.clients : [])
           setAppointments(Array.isArray(parsed.appointments) ? parsed.appointments : [])
           setDailyClosings(Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [])
+          setAuditLogs(Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [])
           if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
+          ownerUnlockedThisSessionRef.current = false
+          const parsedSec = getSecurityConfig(parsed.businessProfile || {})
+          setIsCashierMode(Boolean(parsedSec.enabled && getDeviceForceCashier(tenant.id)))
+          setActiveOperator(null)
           if (parsed.staffByNiche) setStaffByNiche(parsed.staffByNiche)
           if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
           if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
@@ -1169,6 +1318,10 @@ export default function App() {
           setClients([])
           setAppointments([])
           setDailyClosings([])
+          setAuditLogs([])
+          ownerUnlockedThisSessionRef.current = false
+          setIsCashierMode(false)
+          setActiveOperator(null)
           setBusinessProfile({
             ...INITIAL_BUSINESS_PROFILE,
             businessName: tenant.businessName,
@@ -1188,6 +1341,7 @@ export default function App() {
         setClients([])
         setAppointments([])
         setDailyClosings([])
+        setAuditLogs([])
         fetchTenantWorkspace(tenant.id)
       }
     }
@@ -1258,6 +1412,10 @@ export default function App() {
     setClients([])
     setAppointments([])
     setDailyClosings([])
+    setAuditLogs([])
+    ownerUnlockedThisSessionRef.current = false
+    setIsCashierMode(false)
+    setActiveOperator(null)
     setBusinessProfile(freshWorkspace.businessProfile)
     if (newTenant.niche && NICHES[newTenant.niche]) {
       setCurrentNiche(newTenant.niche)
@@ -1629,7 +1787,27 @@ export default function App() {
   }
 
   const handleRegisterExpense = async (newExpense) => {
-    setTransactions(prev => [newExpense, ...prev])
+    const taggedExpense = {
+      ...newExpense,
+      registered_by_role: isCashierMode ? 'cajero' : 'dueno',
+      registered_by_name: activeOperator?.name || (isCashierMode ? 'Cajero' : 'Dueño'),
+      registered_by_id: activeOperator?.id || null
+    }
+    setTransactions(prev => [taggedExpense, ...prev])
+
+    if (taggedExpense.type === 'vale' || taggedExpense.category === 'Vale Empleado') {
+      addAuditLog({
+        type: 'VALE_CREATED',
+        summary: `Vale entregado a ${taggedExpense.staff_name || 'personal'}: ${taggedExpense.motivo || 'Adelanto'}`,
+        amountUsd: Math.abs(Number(taggedExpense.monto_usd) || 0)
+      })
+    } else if (taggedExpense.category !== 'Comisiones') {
+      addAuditLog({
+        type: 'EXPENSE_CREATED',
+        summary: `Gasto registrado: ${taggedExpense.item_name}`,
+        amountUsd: Math.abs(Number(taggedExpense.monto_usd) || 0)
+      })
+    }
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setOfflineToast(`📉 Gasto de $${Math.abs(newExpense.monto_usd)} guardado en el teléfono (Modo Local).`)
@@ -1660,21 +1838,61 @@ export default function App() {
     setTransactions(prev => prev.filter(t => t.id !== txId))
   }
 
+  const handleConfirmVoidTransaction = (tx, reason, authorizedBy = null) => {
+    if (!tx) return
+    addAuditLog({
+      type: 'TX_VOIDED',
+      summary: `${Number(tx.monto_usd) < 0 ? 'Gasto/Vale anulado' : 'Venta anulada'}: ${tx.item_name}`,
+      reason,
+      amountUsd: Math.abs(Number(tx.monto_usd) || 0),
+      details: {
+        authorizedBy,
+        snapshot: {
+          id: tx.id,
+          item_name: tx.item_name,
+          staff_name: tx.staff_name,
+          client_name: tx.client_name,
+          metodo_pago: tx.metodo_pago,
+          monto_usd: tx.monto_usd,
+          hora: tx.hora,
+          fecha: tx.fecha
+        }
+      }
+    })
+    handleDeleteTransaction(tx.id)
+    setOfflineToast('🛡️ Movimiento anulado y registrado en Bitácora de Auditoría')
+    setTimeout(() => setOfflineToast(null), 3500)
+  }
+
   const handleSaveDailyClose = (closingRecord) => {
     setDailyClosings(prev => {
       const filtered = prev.filter(c => c.id !== closingRecord.id)
       return [closingRecord, ...filtered]
     })
+    addAuditLog({
+      type: 'DAILY_CLOSE',
+      summary: `Cierre de caja (${closingRecord.periodLabel || 'Hoy'})`,
+      amountUsd: closingRecord.totalIncomeUSD,
+      details: {
+        cashInDrawerCounted: closingRecord.cashInDrawerCounted,
+        expectedCashInDrawer: closingRecord.expectedCashInDrawer,
+        differenceUSD: closingRecord.differenceUSD,
+        blindMode: Boolean(closingRecord.blindMode)
+      }
+    })
     setOfflineToast('🔒 Cierre de jornada guardado en el historial con éxito')
     setTimeout(() => setOfflineToast(null), 3500)
   }
 
-  const handleLiquidateStaff = (payoutTx, settledTxIds = [], settledValeIds = []) => {
+  const handleLiquidateStaff = (payoutTx, settledTxIds = [], settledValeIds = [], meta = {}) => {
     const nowIso = new Date().toISOString()
+    const isCashierSettle = Boolean(meta && meta.isCashier)
     setTransactions(prev => {
       const updated = prev.map(t => {
         if (settledTxIds.includes(t.id)) {
-          return { ...t, comision_pagada: true, liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
+          return isCashierSettle
+            ? { ...t, cajero_comision_pagada: true, cajero_liquidado_at: nowIso, cajero_liquidado_pago_id: payoutTx.id }
+            : { ...t, comision_pagada: true, liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
         }
         if (settledValeIds.includes(t.id)) {
           return { ...t, status: 'liquidado', liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
@@ -1682,6 +1900,11 @@ export default function App() {
         return t
       })
       return [payoutTx, ...updated]
+    })
+    addAuditLog({
+      type: 'STAFF_LIQUIDATED',
+      summary: `Liquidación pagada a ${payoutTx.staff_name || 'personal'}${isCashierSettle ? ' (Caja)' : ''}`,
+      amountUsd: Math.abs(Number(payoutTx.monto_usd) || 0)
     })
   }
 
@@ -1841,6 +2064,16 @@ export default function App() {
         syncStatus={syncStatus}
         overdueClientsCount={overdueClientsCount}
         showReconnectedBanner={showReconnectedBanner}
+        securityConfig={securityConfig}
+        isCashierMode={isCashierMode}
+        activeOperator={activeOperator}
+        onOpenRoleModal={() => setIsRoleModalOpen(true)}
+        onQuickLockCashier={() => {
+          ownerUnlockedThisSessionRef.current = false
+          setIsCashierMode(true)
+          setIsRoleModalOpen(true)
+        }}
+        todayAuditAlertCount={todayAuditAlertCount}
       />
 
       {/* Top Banner: Período de Prueba de 24 Horas Activo */}
@@ -1884,10 +2117,11 @@ export default function App() {
             { id: 'catalogo', label: 'Mi Link & Catálogo', icon: Globe, badge: 'WEB' },
             { id: 'retargeting', label: 'Radar Clientes (Retoque)', icon: BellRing, alertCount: overdueClientsCount },
             { id: 'appointments', label: 'Turnos y Citas', icon: Calendar },
-            { id: 'commissions', label: `Equipo y Comisiones`, icon: Users },
+            ...(!isCashierMode ? [{ id: 'commissions', label: `Equipo y Comisiones`, icon: Users }] : []),
             { id: 'debts', label: 'Clientes, Fiados & VIP', icon: AlertCircle },
             { id: 'inventory', label: 'Pomadas & Insumos', icon: Package },
-            { id: 'monthly', label: 'Cuentas Mes a Mes', icon: BarChart3 },
+            ...(!isCashierMode ? [{ id: 'monthly', label: 'Cuentas Mes a Mes', icon: BarChart3 }] : []),
+            ...(!isCashierMode && (securityConfig.enabled || auditLogs.length > 0) ? [{ id: 'audit', label: 'Auditoría (Caja Negra)', icon: ShieldCheck, alertCount: todayAuditAlertCount }] : []),
           ].map((item) => {
             const Icon = item.icon
             const isActive = activeTab === item.id
@@ -1930,45 +2164,51 @@ export default function App() {
               <span>Cuadre Diario (Arqueo)</span>
             </button>
 
-            <button
-              onClick={() => handleOpenDailyCloseModal('this_week')}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25 text-xs font-bold transition-all text-left shadow-sm"
-              title="Realizar el Cuadre y Cierre Semanal de Caja"
-            >
-              <Calendar className="w-4 h-4 shrink-0 text-indigo-400" />
-              <span>Cuadre Semanal</span>
-            </button>
+            {!isCashierMode && (
+              <>
+                <button
+                  onClick={() => handleOpenDailyCloseModal('this_week')}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25 text-xs font-bold transition-all text-left shadow-sm"
+                  title="Realizar el Cuadre y Cierre Semanal de Caja"
+                >
+                  <Calendar className="w-4 h-4 shrink-0 text-indigo-400" />
+                  <span>Cuadre Semanal</span>
+                </button>
 
-            <button
-              onClick={() => setIsSettingsModalOpen(true)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-white border border-dark-750 text-xs font-semibold transition-all text-left"
-              title="Subir Logo, cambiar nombre, WhatsApp y redes"
-            >
-              <Settings className="w-4 h-4 shrink-0 text-gold-400" />
-              <span>Configurar Mi Logo</span>
-            </button>
+                <button
+                  onClick={() => setIsSettingsModalOpen(true)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-white border border-dark-750 text-xs font-semibold transition-all text-left"
+                  title="Subir Logo, cambiar nombre, WhatsApp, seguridad y roles"
+                >
+                  <Settings className="w-4 h-4 shrink-0 text-gold-400" />
+                  <span>Configuración & PIN</span>
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Clean Workspace Button for Barber */}
-          <div className="pt-2 mt-auto">
-            <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800 space-y-1.5">
-              <div className="text-[10px] font-bold text-slate-400 uppercase px-1">
-                Limpieza de Datos:
+          {/* Clean Workspace Button for Owner Only */}
+          {!isCashierMode && (
+            <div className="pt-2 mt-auto">
+              <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800 space-y-1.5">
+                <div className="text-[10px] font-bold text-slate-400 uppercase px-1">
+                  Limpieza de Datos:
+                </div>
+                <button
+                  onClick={() => {
+                    if (confirm('¿Quieres dejar Caja, Clientes y Turnos en CERO?')) {
+                      handleClearAllWorkspaceData()
+                    }
+                  }}
+                  className="w-full py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-red-500/20 text-[10px] font-bold text-slate-300 hover:text-red-400 border border-dark-750 flex items-center justify-center gap-1"
+                  title="Reiniciar caja y turnos a cero"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Reiniciar Caja a 0</span>
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  if (confirm('¿Quieres dejar Caja, Clientes y Turnos en CERO?')) {
-                    handleClearAllWorkspaceData()
-                  }
-                }}
-                className="w-full py-1.5 px-2 rounded-lg bg-dark-850 hover:bg-red-500/20 text-[10px] font-bold text-slate-300 hover:text-red-400 border border-dark-750 flex items-center justify-center gap-1"
-                title="Reiniciar caja y turnos a cero"
-              >
-                <Trash2 className="w-3 h-3" />
-                <span>Reiniciar Caja a 0</span>
-              </button>
             </div>
-          </div>
+          )}
         </aside>
 
         {/* Dynamic View Body */}
@@ -1983,7 +2223,10 @@ export default function App() {
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
               onOpenDailyCloseModal={handleOpenDailyCloseModal}
               onDeleteTransaction={handleDeleteTransaction}
+              onRequestVoidTransaction={(tx) => setVoidingTx(tx)}
               nicheData={nicheData}
+              isCashierMode={isCashierMode}
+              securityConfig={securityConfig}
             />
           )}
 
@@ -1997,6 +2240,7 @@ export default function App() {
               onDeleteService={handleDeleteService}
               exchangeRate={exchangeRate}
               onOpenPublicPreview={() => setIsPublicPreview(true)}
+              isCashierMode={isCashierMode}
             />
           )}
 
@@ -2004,14 +2248,14 @@ export default function App() {
             <RetargetingView
               clients={clients}
               onUpdateClient={handleUpdateClient}
-              onDeleteClient={handleDeleteClient}
+              onDeleteClient={isCashierMode ? null : handleDeleteClient}
               retargetingConfig={retargetingConfig}
               onSaveRetargetingConfig={setRetargetingConfig}
               businessProfile={businessProfile}
             />
           )}
 
-          {activeTab === 'commissions' && (
+          {activeTab === 'commissions' && !isCashierMode && (
             <CommissionsView
               staffList={currentStaff}
               servicesList={nicheData.services || []}
@@ -2035,10 +2279,10 @@ export default function App() {
               nicheData={nicheData}
               onAddAppointment={handleAddAppointment}
               onToggleAppointmentStatus={handleToggleAppointmentStatus}
-              onDeleteAppointment={handleDeleteAppointment}
+              onDeleteAppointment={isCashierMode ? null : handleDeleteAppointment}
               clients={clients}
               businessProfile={businessProfile}
-              onOpenSettings={() => setIsSettingsModalOpen(true)}
+              onOpenSettings={isCashierMode ? null : () => setIsSettingsModalOpen(true)}
               onChargeAppointment={handleChargeAppointment}
             />
           )}
@@ -2049,7 +2293,7 @@ export default function App() {
               exchangeRate={exchangeRate}
               onAddClient={handleAddClient}
               onUpdateClient={handleUpdateClient}
-              onDeleteClient={handleDeleteClient}
+              onDeleteClient={isCashierMode ? null : handleDeleteClient}
               onRegisterTransaction={handleRegisterTransaction}
             />
           )}
@@ -2061,10 +2305,11 @@ export default function App() {
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
+              isCashierMode={isCashierMode}
             />
           )}
 
-          {activeTab === 'monthly' && (
+          {activeTab === 'monthly' && !isCashierMode && (
             <MonthlyReportView
               transactions={transactions}
               exchangeRate={exchangeRate}
@@ -2072,6 +2317,15 @@ export default function App() {
               businessProfile={businessProfile}
               staffList={currentStaff}
               onDeleteTransaction={handleDeleteTransaction}
+              onRequestVoidTransaction={(tx) => setVoidingTx(tx)}
+            />
+          )}
+
+          {activeTab === 'audit' && !isCashierMode && (
+            <AuditLogView
+              auditLogs={auditLogs}
+              businessProfile={businessProfile}
+              onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
             />
           )}
         </main>
@@ -2090,6 +2344,9 @@ export default function App() {
         onRegisterTransaction={handleRegisterTransaction}
         clients={clients}
         prefillData={cashModalPrefill}
+        isCashierMode={isCashierMode}
+        securityConfig={securityConfig}
+        activeOperator={activeOperator}
       />
 
       <QuickExpenseModal
@@ -2136,6 +2393,63 @@ export default function App() {
         onSaveDailyClose={handleSaveDailyClose}
         onResetDay={handleSaveDailyClose}
         initialPeriod={dailyClosePeriod}
+        isCashierMode={isCashierMode}
+        securityConfig={securityConfig}
+        auditLogs={auditLogs}
+        activeOperator={activeOperator}
+      />
+
+      <RolePinModal
+        isOpen={isRoleModalOpen}
+        onClose={() => setIsRoleModalOpen(false)}
+        securityConfig={securityConfig}
+        staffList={currentStaff}
+        isCashierMode={isCashierMode}
+        activeOperator={activeOperator}
+        onSwitchToOwner={() => {
+          ownerUnlockedThisSessionRef.current = true
+          setIsCashierMode(false)
+          setActiveOperator(null)
+          addAuditLog({
+            type: 'ROLE_SWITCH',
+            actorName: 'Dueño',
+            actorRole: 'dueno',
+            summary: 'Sesión desbloqueada en Modo Dueño'
+          })
+        }}
+        onSwitchToCashier={(op) => {
+          ownerUnlockedThisSessionRef.current = false
+          setIsCashierMode(true)
+          setActiveOperator(op)
+          addAuditLog({
+            type: 'ROLE_SWITCH',
+            actorName: op?.name || 'Cajero',
+            actorRole: 'cajero',
+            summary: `Turno iniciado en Modo Cajero (${op?.name || 'Recepción'})`
+          })
+        }}
+        onLogPinFailed={(detailSummary) => {
+          addAuditLog({
+            type: 'PIN_FAILED',
+            summary: detailSummary
+          })
+        }}
+      />
+
+      <VoidTransactionModal
+        isOpen={Boolean(voidingTx)}
+        transaction={voidingTx}
+        onClose={() => setVoidingTx(null)}
+        onConfirmVoid={handleConfirmVoidTransaction}
+        onLogPinFailed={(detailSummary) => {
+          addAuditLog({
+            type: 'PIN_FAILED',
+            summary: detailSummary
+          })
+        }}
+        isCashierMode={isCashierMode}
+        securityConfig={securityConfig}
+        businessProfile={businessProfile}
       />
 
       {/* Payment / Subscription Modal (When in 24h trial and clicking "Activar mes completo") */}

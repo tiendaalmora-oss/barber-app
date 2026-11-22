@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { X, Store, Upload, Image as ImageIcon, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck, Copy } from 'lucide-react'
+import { X, Store, Upload, Image as ImageIcon, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck, Copy, Lock } from 'lucide-react'
 import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN, DEFAULT_WEEKLY_SCHEDULE } from '../lib/mockData'
 import { DAYS_OF_WEEK } from '../lib/dateUtils'
 import { getActiveBrand } from '../lib/brandConfig'
+import { getSecurityConfig, getDeviceForceCashier, setDeviceForceCashier } from '../lib/securityUtils'
 import PhoneCountryInput from './PhoneCountryInput'
 
 const LOGO_PRESETS = [
@@ -25,7 +26,8 @@ export default function BusinessSettingsModal({
 
   // ALL hooks declared at top level before any conditional return
   const [form, setForm] = useState(businessProfile || {})
-  const [activeTab, setActiveTab] = useState('perfil') // 'perfil' | 'logo' | 'pagos'
+  const [activeTab, setActiveTab] = useState('perfil') // 'perfil' | 'logo' | 'pagos' | 'seguridad'
+  const [deviceForceCashier, setDeviceForceCashierState] = useState(() => getDeviceForceCashier(activeTenant?.id))
   const [savedToast, setSavedToast] = useState(false)
   const [selectedDay, setSelectedDay] = useState('lunes')
   const fileInputRef = useRef(null)
@@ -35,9 +37,21 @@ export default function BusinessSettingsModal({
     if (businessProfile) {
       setForm(businessProfile)
     }
-  }, [businessProfile, isOpen])
+    setDeviceForceCashierState(getDeviceForceCashier(activeTenant?.id))
+  }, [businessProfile, isOpen, activeTenant?.id])
 
   if (!isOpen) return null
+
+  const secForm = getSecurityConfig(form)
+  const updateSecForm = (patch) => {
+    setForm(prev => ({
+      ...prev,
+      securityConfig: {
+        ...getSecurityConfig(prev),
+        ...patch
+      }
+    }))
+  }
 
   // Handle local image upload with automatic Canvas downscaling (prevents LocalStorage QuotaExceededError)
   const handleImageUpload = (e) => {
@@ -184,6 +198,12 @@ export default function BusinessSettingsModal({
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (secForm.enabled && (!String(secForm.ownerPin || '').trim() || String(secForm.ownerPin).trim().length < 4)) {
+      setActiveTab('seguridad')
+      alert('Ingresa un PIN de Dueño de al menos 4 dígitos para activar el control de roles.')
+      return
+    }
+    setDeviceForceCashier(activeTenant?.id, deviceForceCashier)
     onSaveProfile(form)
     setSavedToast(true)
     setTimeout(() => {
@@ -220,7 +240,7 @@ export default function BusinessSettingsModal({
         </div>
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-3 gap-1.5 bg-dark-950 p-1.5 rounded-2xl border border-dark-800">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 bg-dark-950 p-1.5 rounded-2xl border border-dark-800">
           <button
             type="button"
             onClick={() => setActiveTab('perfil')}
@@ -253,6 +273,18 @@ export default function BusinessSettingsModal({
             }`}
           >
             Pagos & Promos
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('seguridad')}
+            className={`py-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 ${
+              activeTab === 'seguridad' 
+                ? 'bg-purple-500 text-white shadow-md' 
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Seguridad & PIN</span>
           </button>
         </div>
 
@@ -712,6 +744,157 @@ export default function BusinessSettingsModal({
                       </button>
                     )
                   })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'seguridad' && (
+            <div className="space-y-3.5 max-h-[58vh] overflow-y-auto pr-1">
+              {/* Toggle maestro */}
+              <div className="p-3.5 rounded-2xl bg-dark-950 border border-purple-500/35 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black text-white flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-purple-400" />
+                    <span>Activar Modo Dueño vs. Modo Cajero</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Protege tus reportes, precios, liquidaciones y evita que borren ventas sin dejar registro.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateSecForm({ enabled: !secForm.enabled })}
+                  className={`w-12 h-6 rounded-full p-0.5 transition-colors shrink-0 ${
+                    secForm.enabled ? 'bg-emerald-500' : 'bg-dark-700'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full bg-white transition-transform ${secForm.enabled ? 'translate-x-6' : 'translate-x-0'}`} />
+                </button>
+              </div>
+
+              {/* PIN de Dueño y Modo de Dispositivo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750 space-y-1.5">
+                  <label className="block text-xs font-bold text-gold-400">
+                    👑 PIN Maestro de Dueño (4+ dígitos)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={8}
+                    value={secForm.ownerPin || '1234'}
+                    onChange={(e) => updateSecForm({ ownerPin: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-dark-950 border border-gold-500/35 text-sm font-mono font-black text-white tracking-widest text-center focus:outline-none focus:border-gold-400"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Necesario para entrar a Reportes, Equipo, Precios y Auditoría desde Modo Cajero.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-dark-850 border border-dark-750 space-y-1.5">
+                  <label className="block text-xs font-bold text-sky-400">
+                    🖥️ Esta PC / Tablet del Mostrador
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setDeviceForceCashierState(prev => !prev)}
+                    className={`w-full py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all ${
+                      deviceForceCashier
+                        ? 'bg-sky-500/15 border-sky-500 text-sky-300'
+                        : 'bg-dark-900 border-dark-700 text-slate-400'
+                    }`}
+                  >
+                    <span>Iniciar siempre en Modo Cajero</span>
+                    <span>{deviceForceCashier ? '✓ SÍ' : 'NO'}</span>
+                  </button>
+                  <p className="text-[10px] text-slate-500">
+                    Actívalo en la PC del local (solo afecta a este navegador, no a tu teléfono).
+                  </p>
+                </div>
+              </div>
+
+              {/* Reglas Anti-Robo para Cajero */}
+              <div className="p-3.5 rounded-2xl bg-dark-850 border border-dark-750 space-y-2.5">
+                <div className="text-xs font-black text-white">Reglas de Control para la Caja:</div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                    Al intentar Anular una Venta o Gasto en Modo Cajero:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSecForm({ allowCashierVoid: 'pin_required' })}
+                      className={`p-2 rounded-xl border text-left text-[11px] transition-all ${
+                        (secForm.allowCashierVoid || 'pin_required') === 'pin_required'
+                          ? 'bg-red-500/15 border-red-500/50 text-white font-bold'
+                          : 'bg-dark-900 border-dark-700 text-slate-400'
+                      }`}
+                    >
+                      🔒 Exigir PIN del Dueño + Motivo (Máxima seguridad)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateSecForm({ allowCashierVoid: 'reason_required' })}
+                      className={`p-2 rounded-xl border text-left text-[11px] transition-all ${
+                        secForm.allowCashierVoid === 'reason_required'
+                          ? 'bg-amber-500/15 border-amber-500/50 text-white font-bold'
+                          : 'bg-dark-900 border-dark-700 text-slate-400'
+                      }`}
+                    >
+                      📝 Permitir con Motivo obligatorio + Alerta en Auditoría
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => updateSecForm({ hideOwnerProfits: !secForm.hideOwnerProfits })}
+                    className={`p-2.5 rounded-xl border text-left text-xs flex items-center justify-between ${
+                      secForm.hideOwnerProfits ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-300' : 'bg-dark-900 border-dark-700 text-slate-400'
+                    }`}
+                  >
+                    <span className="font-bold">👁️ Ocultar Ganancia Limpia y Costos</span>
+                    <span className="font-black">{secForm.hideOwnerProfits ? 'SÍ' : 'NO'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => updateSecForm({ blindCashCount: !secForm.blindCashCount })}
+                    className={`p-2.5 rounded-xl border text-left text-xs flex items-center justify-between ${
+                      secForm.blindCashCount ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-300' : 'bg-dark-900 border-dark-700 text-slate-400'
+                    }`}
+                  >
+                    <span className="font-bold">🧮 Arqueo Ciego al Cerrar Turno</span>
+                    <span className="font-black">{secForm.blindCashCount ? 'SÍ' : 'NO'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => updateSecForm({ allowCashierExpenses: !secForm.allowCashierExpenses })}
+                    className={`p-2.5 rounded-xl border text-left text-xs flex items-center justify-between ${
+                      secForm.allowCashierExpenses ? 'bg-emerald-500/10 border-emerald-500/35 text-emerald-300' : 'bg-dark-900 border-dark-700 text-slate-400'
+                    }`}
+                  >
+                    <span className="font-bold">💸 Cajero puede anotar Gastos/Vales</span>
+                    <span className="font-black">{secForm.allowCashierExpenses ? 'SÍ' : 'NO'}</span>
+                  </button>
+
+                  <div className="p-2 rounded-xl bg-dark-900 border border-dark-700 flex items-center justify-between gap-2 text-xs">
+                    <span className="font-bold text-slate-300">⏱️ Auto-bloqueo en PC:</span>
+                    <select
+                      value={secForm.autoLockMinutes ?? 5}
+                      onChange={(e) => updateSecForm({ autoLockMinutes: Number(e.target.value) })}
+                      className="px-2 py-1 rounded-lg bg-dark-950 border border-dark-700 text-xs text-white font-bold"
+                    >
+                      <option value={0}>Nunca</option>
+                      <option value={5}>5 min</option>
+                      <option value={10}>10 min</option>
+                      <option value={15}>15 min</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,0 +1,135 @@
+// Security, Role Management, Cashier Payroll & Audit Trail helpers
+import { getLocalDateIso } from './dateUtils'
+
+export const DEFAULT_SECURITY_CONFIG = {
+  enabled: false,
+  ownerPin: '1234',
+  allowCashierExpenses: true,
+  allowCashierVoid: 'pin_required', // 'pin_required' | 'reason_required'
+  hideOwnerProfits: true,
+  blindCashCount: true,
+  autoLockMinutes: 5
+}
+
+export function getSecurityConfig(businessProfile = {}) {
+  return {
+    ...DEFAULT_SECURITY_CONFIG,
+    ...(businessProfile?.securityConfig || {})
+  }
+}
+
+export function isCashierStaff(staff) {
+  return Boolean(staff && staff.staff_role === 'cajero')
+}
+
+export function getOperativeStaff(staffList = []) {
+  return (Array.isArray(staffList) ? staffList : []).filter(s => s && !isCashierStaff(s))
+}
+
+export function getCashierStaff(staffList = []) {
+  return (Array.isArray(staffList) ? staffList : []).filter(s => s && isCashierStaff(s))
+}
+
+export function getSalaryPeriodLabel(period) {
+  switch (period) {
+    case 'diario': return 'Diario'
+    case 'quincenal': return 'Quincenal'
+    case 'mensual': return 'Mensual'
+    case 'semanal':
+    default: return 'Semanal'
+  }
+}
+
+export function getCommissionScopeLabel(scope) {
+  switch (scope) {
+    case 'productos': return 'Solo Productos'
+    case 'ambos': return 'Servicios + Productos'
+    case 'servicios':
+    default: return 'Ventas de Barberos / Servicios'
+  }
+}
+
+/**
+ * Calculates the additional percentage bonus earned by a Cashier/Receptionist
+ * on a sale (cart items array or saved transaction object).
+ * Strictly does NOT reduce the barber's commission.
+ */
+export function calculateCashierCommissionForTx(txOrItems, cashierStaff) {
+  if (!cashierStaff) return 0
+  const pct = Number(cashierStaff.commission_pct) || 0
+  if (pct <= 0) return 0
+
+  const scope = cashierStaff.commission_scope || 'servicios'
+  let eligibleBase = 0
+
+  if (Array.isArray(txOrItems)) {
+    eligibleBase = txOrItems.reduce((sum, item) => {
+      const lineTotal = (Number(item.price_usd) || 0) * (Number(item.qty) || 1)
+      if (scope === 'servicios') return item.isProduct ? sum : sum + lineTotal
+      if (scope === 'productos') return item.isProduct ? sum + lineTotal : sum
+      return sum + lineTotal
+    }, 0)
+  } else if (txOrItems && typeof txOrItems === 'object') {
+    const tx = txOrItems
+    if (Number(tx.monto_usd) <= 0) return 0
+    if (Array.isArray(tx.items) && tx.items.length > 0) {
+      eligibleBase = tx.items.reduce((sum, item) => {
+        const lineTotal = (Number(item.price_usd) || 0) * (Number(item.qty) || 1)
+        if (scope === 'servicios') return item.isProduct ? sum : sum + lineTotal
+        if (scope === 'productos') return item.isProduct ? sum + lineTotal : sum
+        return sum + lineTotal
+      }, 0)
+    } else {
+      const isPureProduct = tx.category === 'Venta Productos'
+      if (scope === 'servicios') eligibleBase = isPureProduct ? 0 : (Number(tx.monto_usd) || 0)
+      else if (scope === 'productos') eligibleBase = isPureProduct ? (Number(tx.monto_usd) || 0) : 0
+      else eligibleBase = Number(tx.monto_usd) || 0
+    }
+  }
+
+  return Math.round(eligibleBase * (pct / 100) * 100) / 100
+}
+
+export function createAuditEntry({
+  type = 'INFO',
+  actorName = 'Dueño',
+  actorRole = 'dueno',
+  summary = '',
+  reason = '',
+  amountUsd = null,
+  details = {}
+}) {
+  return {
+    id: `aud_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    type,
+    timestamp: new Date().toISOString(),
+    fecha: getLocalDateIso(),
+    hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    actorName,
+    actorRole,
+    summary,
+    reason: reason || '',
+    amountUsd: amountUsd !== undefined && amountUsd !== null ? Number(amountUsd) : null,
+    details: details || {}
+  }
+}
+
+export function getDeviceForceCashier(tenantId) {
+  if (typeof window === 'undefined' || !tenantId) return false
+  try {
+    return localStorage.getItem(`barber_device_cashier_mode_${tenantId}`) === '1'
+  } catch (e) {
+    return false
+  }
+}
+
+export function setDeviceForceCashier(tenantId, enabled) {
+  if (typeof window === 'undefined' || !tenantId) return
+  try {
+    if (enabled) {
+      localStorage.setItem(`barber_device_cashier_mode_${tenantId}`, '1')
+    } else {
+      localStorage.removeItem(`barber_device_cashier_mode_${tenantId}`)
+    }
+  } catch (e) {}
+}

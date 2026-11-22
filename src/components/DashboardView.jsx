@@ -12,11 +12,16 @@ export default function DashboardView({
   onOpenWhatsAppModal,
   onOpenDailyCloseModal,
   onDeleteTransaction,
+  onRequestVoidTransaction,
   nicheData = {},
-  businessProfile = {}
+  businessProfile = {},
+  isCashierMode = false,
+  securityConfig = {}
 }) {
   const isAr = isArgentina(null, businessProfile)
   const fmt = (val) => formatCurrency(val, isAr)
+  const hideProfits = Boolean(isCashierMode && securityConfig?.enabled && securityConfig?.hideOwnerProfits)
+  const allowCashierExpenses = !isCashierMode || !securityConfig?.enabled || securityConfig?.allowCashierExpenses !== false
   const safeTransactions = Array.isArray(transactions) ? transactions : []
   const todayIso = getLocalDateIso()
   const yesterdayDate = new Date()
@@ -59,8 +64,8 @@ export default function DashboardView({
     .reduce((sum, t) => sum + t.monto_usd, 0))
 
   const totalCommissionsUSD = dateTransactions
-    .filter(t => t.comision_usd > 0)
-    .reduce((sum, t) => sum + t.comision_usd, 0)
+    .filter(t => (t.comision_usd || 0) > 0 || (t.comision_cajero_usd || 0) > 0)
+    .reduce((sum, t) => sum + (Number(t.comision_usd) || 0) + (Number(t.comision_cajero_usd) || 0), 0)
 
   // Net profit = Income - Expenses - Commissions
   const totalBusinessNetUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
@@ -85,7 +90,7 @@ export default function DashboardView({
 
     const dayIncome = dayTx.filter(t => t.monto_usd > 0).reduce((sum, t) => sum + t.monto_usd, 0)
     const dayExpenses = Math.abs(dayTx.filter(t => t.monto_usd < 0).reduce((sum, t) => sum + t.monto_usd, 0))
-    const dayCommissions = dayTx.filter(t => t.comision_usd > 0).reduce((sum, t) => sum + t.comision_usd, 0)
+    const dayCommissions = dayTx.filter(t => (t.comision_usd || 0) > 0 || (t.comision_cajero_usd || 0) > 0).reduce((sum, t) => sum + (Number(t.comision_usd) || 0) + (Number(t.comision_cajero_usd) || 0), 0)
     const dayProfit = Math.max(0, dayIncome - dayExpenses - dayCommissions)
 
     return {
@@ -215,21 +220,25 @@ export default function DashboardView({
               <Lock className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden sm:inline">Diario</span>
             </button>
-            <button
-              onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all active:scale-95 shadow-sm"
-              title="Cuadre y cierre semanal de caja (Lunes a Domingo)"
-            >
-              <CalendarIcon className="w-3.5 h-3.5 text-purple-400" />
-              <span className="hidden sm:inline">Semanal</span>
-            </button>
-            <button
-              onClick={onOpenExpenseModal}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all active:scale-95"
-            >
-              <Minus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>Gasto</span>
-            </button>
+            {!isCashierMode && (
+              <button
+                onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all active:scale-95 shadow-sm"
+                title="Cuadre y cierre semanal de caja (Lunes a Domingo)"
+              >
+                <CalendarIcon className="w-3.5 h-3.5 text-purple-400" />
+                <span className="hidden sm:inline">Semanal</span>
+              </button>
+            )}
+            {allowCashierExpenses && (
+              <button
+                onClick={onOpenExpenseModal}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all active:scale-95"
+              >
+                <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>Gasto</span>
+              </button>
+            )}
             <button
               onClick={onOpenCashModal}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black text-xs font-black shadow-md shadow-gold-500/20 active:scale-95 transition-all"
@@ -245,11 +254,11 @@ export default function DashboardView({
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                Tu Ganancia Limpia (En Bolsillo)
+                {hideProfits ? 'Entradas en Caja (Mostrador)' : 'Tu Ganancia Limpia (En Bolsillo)'}
               </span>
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
-                  ${fmt(totalBusinessNetUSD)}
+                  ${fmt(hideProfits ? totalIncomeUSD : totalBusinessNetUSD)}
                 </span>
                 <span className="text-base sm:text-lg font-bold text-emerald-400">
                   {isAr ? 'ARS' : 'USD'}
@@ -259,14 +268,14 @@ export default function DashboardView({
                 {!isAr && (
                   <>
                     <span className="font-mono font-bold text-slate-300">
-                      ≈ Bs. {(totalBusinessNetUSD * exchangeRate).toFixed(2)}
+                      ≈ Bs. {((hideProfits ? totalIncomeUSD : totalBusinessNetUSD) * exchangeRate).toFixed(2)}
                     </span>
                     <span className="text-slate-600">•</span>
                   </>
                 )}
                 <span className="text-emerald-400/90 text-xs font-medium flex items-center gap-1">
                   <TrendingUp className="w-3.5 h-3.5 inline" />
-                  Libre de comisiones y gastos
+                  {hideProfits ? `${totalServicesCount} atenciones registradas` : 'Libre de comisiones y gastos'}
                 </span>
               </div>
             </div>
@@ -291,52 +300,54 @@ export default function DashboardView({
           </div>
 
           {/* Financial Distribution Bar (Proportional Revenue Flow) */}
-          <div className="mt-6 space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
-              <span className="text-slate-400">Distribución de Ingresos de Hoy</span>
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1 text-emerald-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span> Local {profitPct}%
-                </span>
-                <span className="flex items-center gap-1 text-amber-400">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Equipo {commissionsPct}%
-                </span>
-                {expensesPct > 0 && (
-                  <span className="flex items-center gap-1 text-red-400">
-                    <span className="w-2 h-2 rounded-full bg-red-400 inline-block"></span> Gastos {expensesPct}%
+          {!hideProfits && (
+            <div className="mt-6 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                <span className="text-slate-400">Distribución de Ingresos de Hoy</span>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span> Local {profitPct}%
                   </span>
+                  <span className="flex items-center gap-1 text-amber-400">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span> Equipo {commissionsPct}%
+                  </span>
+                  {expensesPct > 0 && (
+                    <span className="flex items-center gap-1 text-red-400">
+                      <span className="w-2 h-2 rounded-full bg-red-400 inline-block"></span> Gastos {expensesPct}%
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="h-2.5 w-full bg-dark-950 rounded-full overflow-hidden flex border border-dark-800">
+                {totalIncomeUSD === 0 ? (
+                  <div className="w-full h-full bg-dark-800" />
+                ) : (
+                  <>
+                    <div 
+                      style={{ width: `${Math.max(0, profitPct)}%` }} 
+                      className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500" 
+                      title={`Ganancia Local: ${profitPct}%`}
+                    />
+                    <div 
+                      style={{ width: `${Math.max(0, commissionsPct)}%` }} 
+                      className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-500" 
+                      title={`Comisiones Equipo: ${commissionsPct}%`}
+                    />
+                    <div 
+                      style={{ width: `${Math.max(0, expensesPct)}%` }} 
+                      className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-500" 
+                      title={`Gastos: ${expensesPct}%`}
+                    />
+                  </>
                 )}
               </div>
             </div>
-
-            <div className="h-2.5 w-full bg-dark-950 rounded-full overflow-hidden flex border border-dark-800">
-              {totalIncomeUSD === 0 ? (
-                <div className="w-full h-full bg-dark-800" />
-              ) : (
-                <>
-                  <div 
-                    style={{ width: `${Math.max(0, profitPct)}%` }} 
-                    className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500" 
-                    title={`Ganancia Local: ${profitPct}%`}
-                  />
-                  <div 
-                    style={{ width: `${Math.max(0, commissionsPct)}%` }} 
-                    className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-500" 
-                    title={`Comisiones Equipo: ${commissionsPct}%`}
-                  />
-                  <div 
-                    style={{ width: `${Math.max(0, expensesPct)}%` }} 
-                    className="h-full bg-gradient-to-r from-red-600 to-red-500 transition-all duration-500" 
-                    title={`Gastos: ${expensesPct}%`}
-                  />
-                </>
-              )}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Integrated 3-Column Glass Micro-KPIs */}
-        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-dark-800/80">
+        <div className={`relative z-10 grid grid-cols-1 ${hideProfits ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-3 pt-4 border-t border-dark-800/80`}>
           
           {/* Micro 1: Total Facturado */}
           <div className="p-3.5 rounded-2xl bg-dark-900/70 border border-dark-800/80 flex items-center justify-between">
@@ -358,25 +369,27 @@ export default function DashboardView({
             </div>
           </div>
 
-          {/* Micro 2: Comisiones a Pagar */}
-          <div className="p-3.5 rounded-2xl bg-dark-900/70 border border-dark-800/80 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                A Pagar ({nicheData?.rolePlural || 'Personal'})
-              </span>
-              <div className="text-xl font-black text-amber-400 mt-0.5">
-                ${fmt(totalCommissionsUSD)}
-              </div>
-              {!isAr && (
-                <div className="text-[11px] font-mono text-slate-400 mt-0.5">
-                  Bs. {(totalCommissionsUSD * exchangeRate).toFixed(1)}
+          {/* Micro 2: Comisiones a Pagar (Solo Dueño) */}
+          {!hideProfits && (
+            <div className="p-3.5 rounded-2xl bg-dark-900/70 border border-dark-800/80 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  A Pagar ({nicheData?.rolePlural || 'Personal'})
+                </span>
+                <div className="text-xl font-black text-amber-400 mt-0.5">
+                  ${fmt(totalCommissionsUSD)}
                 </div>
-              )}
+                {!isAr && (
+                  <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                    Bs. {(totalCommissionsUSD * exchangeRate).toFixed(1)}
+                  </div>
+                )}
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4" />
+              </div>
             </div>
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
-              <Users className="w-4 h-4" />
-            </div>
-          </div>
+          )}
 
           {/* Micro 3: Gastos del Local */}
           <div className="p-3.5 rounded-2xl bg-dark-900/70 border border-dark-800/80 flex items-center justify-between">
@@ -406,6 +419,7 @@ export default function DashboardView({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         
         {/* Performance Chart */}
+        {!hideProfits && (
         <div className="lg:col-span-2 bg-dark-900 border border-dark-800/80 p-5 sm:p-6 rounded-3xl shadow-xl flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -479,9 +493,10 @@ export default function DashboardView({
             <span className="text-emerald-400 font-medium">{totalServicesCount} atenciones hoy</span>
           </div>
         </div>
+        )}
 
         {/* Payments breakdown (100% Real Data) */}
-        <div className="bg-dark-900 border border-dark-800/80 p-5 sm:p-6 rounded-3xl shadow-xl flex flex-col justify-between">
+        <div className={`${hideProfits ? 'lg:col-span-3' : ''} bg-dark-900 border border-dark-800/80 p-5 sm:p-6 rounded-3xl shadow-xl flex flex-col justify-between`}>
           <div>
             <h3 className="font-bold text-white text-base mb-1">Métodos de Pago • Hoy</h3>
             <p className="text-xs text-slate-400 mb-4">{isAr ? 'Efectivo vs. Mercado Pago y Tarjeta' : 'Efectivo vs. Pago Móvil y Digital'}</p>
@@ -684,15 +699,17 @@ export default function DashboardView({
                           </button>
                         )}
 
-                        {onDeleteTransaction && (
+                        {(onRequestVoidTransaction || onDeleteTransaction) && (
                           <button
                             onClick={() => {
-                              if (confirm(`¿Seguro que deseas borrar este movimiento (${tx.item_name}) de la caja?`)) {
+                              if (onRequestVoidTransaction) {
+                                onRequestVoidTransaction(tx)
+                              } else if (confirm(`¿Seguro que deseas borrar este movimiento (${tx.item_name}) de la caja?`)) {
                                 onDeleteTransaction(tx.id)
                               }
                             }}
                             className="p-1.5 rounded-xl hover:bg-red-500/15 text-slate-500 hover:text-red-400 transition-colors"
-                            title="Eliminar movimiento por error"
+                            title="Anular movimiento (con registro de auditoría)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

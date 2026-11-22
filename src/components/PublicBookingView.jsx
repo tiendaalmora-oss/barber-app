@@ -31,6 +31,7 @@ import {
 } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
+import { getOperativeStaff } from '../lib/securityUtils'
 import PhoneCountryInput from './PhoneCountryInput'
 
 const SHORT_DAY_NAMES = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
@@ -70,7 +71,7 @@ export default function PublicBookingView({
   const [catalogTab, setCatalogTab] = useState('servicios')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [selectedService, setSelectedService] = useState(allServices[0]?.name || '')
-  const [selectedStaff, setSelectedStaff] = useState(nicheData?.staff?.[0]?.id || 'any')
+  const [selectedStaff, setSelectedStaff] = useState(getOperativeStaff(nicheData?.staff)[0]?.id || 'any')
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
 
   // Keep selectedService valid when allServices changes (e.g. when tenant workspace finishes loading)
@@ -127,7 +128,7 @@ export default function PublicBookingView({
   const [bookedTicket, setBookedTicket] = useState(null)
   const [timePeriodFilter, setTimePeriodFilter] = useState('all')
 
-  const staffList = nicheData?.staff || []
+  const staffList = getOperativeStaff(nicheData?.staff)
   const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
 
   const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, Settings, DollarSign, Sparkles, AlertCircle, Clock3 } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes } from '../lib/dateUtils'
+import { getOperativeStaff } from '../lib/securityUtils'
 
 export default function AppointmentsView({ 
   appointments = [], 
@@ -21,10 +22,11 @@ export default function AppointmentsView({
   const [statusFilter, setStatusFilter] = useState('all') // 'all' | 'pendiente' | 'en_atencion' | 'completada'
   
   // Form fields
+  const operativeStaff = getOperativeStaff(nicheData?.staff)
   const [newClient, setNewClient] = useState('')
   const [newDate, setNewDate] = useState(getTodayStr())
   const [newTime, setNewTime] = useState('03:00 PM')
-  const [newStaff, setNewStaff] = useState(nicheData?.staff?.[0]?.id || '')
+  const [newStaff, setNewStaff] = useState(operativeStaff[0]?.id || '')
   const [newService, setNewService] = useState(nicheData?.services?.[0]?.name || '')
 
   // Filter list by selected date and optional status filter
@@ -59,7 +61,7 @@ export default function AppointmentsView({
     // Check collision with existing appointments
     const reqStart = timeToMinutes(canonicalTime)
     const reqEnd = reqStart + dur
-    const staffList = nicheData?.staff || []
+    const staffList = operativeStaff
     const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
 
     const collidingApt = (appointments || []).find(apt => {
@@ -586,7 +588,7 @@ export default function AppointmentsView({
                     const slotsList = (sched.enabled && sched.slots.length > 0)
                       ? sched.slots
                       : (businessProfile?.bookingSlots || ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM'])
-                    const staffList = nicheData?.staff || []
+                    const staffList = operativeStaff
                     const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
                     const matchedService = (nicheData?.services || []).find(s => s.name === newService)
                     const curDur = matchedService?.duration_min || inferServiceDuration(newService) || 30
@@ -646,7 +648,7 @@ export default function AppointmentsView({
                   onChange={(e) => setNewStaff(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-2xl bg-dark-850 border border-dark-750 text-xs text-white focus:outline-none"
                 >
-                  {(nicheData?.staff || []).map(s => (
+                  {operativeStaff.map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>

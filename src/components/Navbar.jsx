@@ -3,7 +3,7 @@ import {
   Scissors, Sparkles, Store, Plus, Minus, Calendar, TrendingUp, Users, Package, 
   AlertCircle, BarChart3, MessageSquare, Globe, BellRing, LogOut, Fingerprint, 
   Check, Settings, Calculator, Wifi, WifiOff, Zap, Menu, X, MoreHorizontal, 
-  ChevronRight, ShieldCheck, DollarSign
+  ChevronRight, ShieldCheck, DollarSign, Lock
 } from 'lucide-react'
 import { isBiometricSupported, registerBiometricCredential } from '../lib/biometrics'
 import { isArgentina } from '../lib/brandConfig'
@@ -28,10 +28,17 @@ export default function Navbar({
   isOnline = true,
   syncStatus,
   overdueClientsCount = 0,
-  showReconnectedBanner = false
+  showReconnectedBanner = false,
+  securityConfig = {},
+  isCashierMode = false,
+  activeOperator = null,
+  onOpenRoleModal,
+  onQuickLockCashier,
+  todayAuditAlertCount = 0
 }) {
   const [bioSupported, setBioSupported] = useState(false)
   const isAr = isArgentina(activeTenant, businessProfile)
+  const allowCashierExpenses = !isCashierMode || !securityConfig?.enabled || securityConfig?.allowCashierExpenses !== false
   const [bioLinked, setBioLinked] = useState(Boolean(activeTenant?.biometricEnabled))
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
@@ -93,9 +100,9 @@ export default function Navbar({
           {/* Brand Logo & Name */}
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-              onClick={onOpenSettingsModal}
+              onClick={() => { if (!isCashierMode) onOpenSettingsModal() }}
               className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-dark-800/80 border border-dark-700/70 hover:border-gold-500/50 shadow-inner flex items-center justify-center overflow-hidden shrink-0 transition-all group"
-              title="Cambiar Logo y datos del negocio"
+              title={isCashierMode ? 'Modo Cajero activo' : 'Cambiar Logo y datos del negocio'}
             >
               {businessProfile?.logoUrl ? (
                 <img src={businessProfile.logoUrl} alt="Logo" className="w-full h-full object-cover rounded-2xl group-hover:scale-105 transition-transform" />
@@ -106,7 +113,7 @@ export default function Navbar({
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={onOpenSettingsModal}
+                  onClick={() => { if (!isCashierMode) onOpenSettingsModal() }}
                   className="font-black text-sm sm:text-base text-white hover:text-gold-400 tracking-tight truncate text-left transition-colors"
                 >
                   {businessProfile?.businessName || nicheNames[currentNiche] || 'Mi Negocio'}
@@ -129,7 +136,8 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Center: Desktop Niche Switcher (Only visible on tablet/desktop) */}
+          {/* Center: Desktop Niche Switcher (Hidden in Cashier Mode) */}
+          {!isCashierMode && (
           <div className="hidden md:flex items-center gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750">
             {[
               { id: 'barberia', icon: Scissors, label: 'Barbería' },
@@ -154,9 +162,38 @@ export default function Navbar({
               )
             })}
           </div>
+          )}
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Owner / Cashier Role Switch Pill */}
+            {securityConfig?.enabled && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={onOpenRoleModal}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black transition-all ${
+                    isCashierMode
+                      ? 'bg-sky-500/15 hover:bg-sky-500/25 border-sky-500/40 text-sky-300'
+                      : 'bg-gold-500/15 hover:bg-gold-500/25 border-gold-500/40 text-gold-300'
+                  }`}
+                  title={isCashierMode ? 'Toca para desbloquear Modo Dueño con PIN' : 'Modo Dueño activo • Toca para cambiar'}
+                >
+                  <span>{isCashierMode ? `🧾 ${(activeOperator?.name || 'Cajero').split(' ')[0]}` : '👑 Dueño'}</span>
+                </button>
+                {!isCashierMode && onQuickLockCashier && (
+                  <button
+                    type="button"
+                    onClick={onQuickLockCashier}
+                    className="p-1.5 rounded-xl bg-dark-800 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-dark-700 transition-colors"
+                    title="Bloquear y pasar rápido a Modo Cajero"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Currency / Tasa BCV Pill */}
             {isAr ? (
               <div
@@ -191,14 +228,16 @@ export default function Navbar({
                 <span>Cuadre</span>
               </button>
 
-              <button
-                onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
-                className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
-                title="Cuadre y Cierre Semanal de Caja (Lunes a Domingo)"
-              >
-                <Calendar className="w-3.5 h-3.5 text-purple-400" />
-                <span>Semanal</span>
-              </button>
+              {!isCashierMode && (
+                <button
+                  onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
+                  className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                  title="Cuadre y Cierre Semanal de Caja (Lunes a Domingo)"
+                >
+                  <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Semanal</span>
+                </button>
+              )}
 
               <button
                 onClick={onOpenWhatsAppModal}
@@ -209,14 +248,16 @@ export default function Navbar({
                 <span>Cierre WA</span>
               </button>
 
-              <button
-                onClick={onOpenExpenseModal}
-                className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all flex items-center gap-1"
-                title="Anotar gasto de caja"
-              >
-                <Minus className="w-3.5 h-3.5 stroke-[3]" />
-                <span>Gasto</span>
-              </button>
+              {allowCashierExpenses && (
+                <button
+                  onClick={onOpenExpenseModal}
+                  className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all flex items-center gap-1"
+                  title="Anotar gasto de caja"
+                >
+                  <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                  <span>Gasto</span>
+                </button>
+              )}
             </div>
 
             {/* Principal CTA: ANOTAR COBRO (El rey de la interfaz) */}
@@ -240,13 +281,15 @@ export default function Navbar({
 
             {/* Desktop Settings & Logout */}
             <div className="hidden md:flex items-center gap-1 border-l border-dark-800 pl-2">
-              <button
-                onClick={onOpenSettingsModal}
-                className="p-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-700 transition-colors"
-                title="Configuración"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
+              {!isCashierMode && (
+                <button
+                  onClick={onOpenSettingsModal}
+                  className="p-2 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-700 transition-colors"
+                  title="Configuración"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
               <button
                 onClick={onLogout}
                 className="p-2 rounded-xl bg-dark-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-dark-700 transition-colors"
@@ -265,7 +308,9 @@ export default function Navbar({
         {[
           { id: 'dashboard', label: 'Caja', icon: TrendingUp },
           { id: 'appointments', label: 'Turnos', icon: Calendar },
-          { id: 'commissions', label: 'Equipo', icon: Users },
+          isCashierMode
+            ? { id: 'catalogo', label: 'Catálogo', icon: Globe }
+            : { id: 'commissions', label: 'Equipo', icon: Users },
           { id: 'debts', label: 'Fiados', icon: AlertCircle, badgeCount: overdueClientsCount },
           { id: 'more', label: 'Más', icon: MoreHorizontal, isAction: true },
         ].map(tab => {
@@ -322,10 +367,15 @@ export default function Navbar({
 
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                { id: 'catalogo', label: 'Mi Link Web', desc: 'Catálogo de servicios', icon: Globe, color: 'text-blue-400' },
+                { id: 'catalogo', label: 'Mi Link Web', desc: 'Catálogo y agenda', icon: Globe, color: 'text-blue-400' },
                 { id: 'retargeting', label: 'Radar Clientes', desc: 'Retención y avisos', icon: BellRing, color: 'text-amber-400' },
-                { id: 'inventory', label: 'Pomadas & Stock', desc: 'Productos de reventa', icon: Package, color: 'text-emerald-400' },
-                { id: 'monthly', label: 'Mes a Mes', desc: 'Balance mensual', icon: BarChart3, color: 'text-purple-400' },
+                { id: 'inventory', label: 'Pomadas & Stock', desc: 'Productos y precios', icon: Package, color: 'text-emerald-400' },
+                ...(!isCashierMode ? [
+                  { id: 'monthly', label: 'Mes a Mes', desc: 'Balance mensual', icon: BarChart3, color: 'text-purple-400' },
+                  ...(securityConfig?.enabled || todayAuditAlertCount > 0 ? [
+                    { id: 'audit', label: 'Auditoría', desc: todayAuditAlertCount > 0 ? `${todayAuditAlertCount} alertas hoy` : 'Caja Negra Dueño', icon: ShieldCheck, color: 'text-red-400' }
+                  ] : [])
+                ] : [])
               ].map(m => {
                 const MIcon = m.icon
                 return (
@@ -367,16 +417,18 @@ export default function Navbar({
                 <span>Cuadre Diario</span>
               </button>
 
-              <button
-                onClick={() => {
-                  setIsMoreSheetOpen(false)
-                  onOpenExpenseModal()
-                }}
-                className="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-xs font-bold flex items-center justify-center gap-2"
-              >
-                <Minus className="w-4 h-4" />
-                <span>Anotar Gasto</span>
-              </button>
+              {allowCashierExpenses && (
+                <button
+                  onClick={() => {
+                    setIsMoreSheetOpen(false)
+                    onOpenExpenseModal()
+                  }}
+                  className="p-2.5 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 text-xs font-bold flex items-center justify-center gap-2"
+                >
+                  <Minus className="w-4 h-4" />
+                  <span>Anotar Gasto</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -413,7 +465,8 @@ export default function Navbar({
                 </button>
               </div>
 
-              {/* Selector de Nicho */}
+              {/* Selector de Nicho (Solo Dueño) */}
+              {!isCashierMode && (
               <div>
                 <label className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1.5">
                   Tipo de Negocio
@@ -442,22 +495,45 @@ export default function Navbar({
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Opciones del Local */}
               <div className="space-y-1.5 pt-2 border-t border-dark-800">
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false)
-                    onOpenSettingsModal()
-                  }}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Settings className="w-4 h-4 text-gold-400" />
-                    <span>Configuración del Negocio</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
-                </button>
+                {securityConfig?.enabled && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      onOpenRoleModal && onOpenRoleModal()
+                    }}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-colors ${
+                      isCashierMode
+                        ? 'bg-gold-500/15 border-gold-500/40 text-gold-300'
+                        : 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>{isCashierMode ? '👑 Desbloquear Modo Dueño' : '🧾 Cambiar a Modo Cajero'}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                )}
+
+                {!isCashierMode && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      onOpenSettingsModal()
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-200 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Settings className="w-4 h-4 text-gold-400" />
+                      <span>Configuración del Negocio</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -473,19 +549,21 @@ export default function Navbar({
                   <ChevronRight className="w-4 h-4 text-slate-500" />
                 </button>
 
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false)
-                    onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')
-                  }}
-                  className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-purple-300 transition-colors"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Calendar className="w-4 h-4 text-purple-400" />
-                    <span>Cuadre Semanal (Lunes a Domingo)</span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-500" />
-                </button>
+                {!isCashierMode && (
+                  <button
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')
+                    }}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-purple-300 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Calendar className="w-4 h-4 text-purple-400" />
+                      <span>Cuadre Semanal (Lunes a Domingo)</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-500" />
+                  </button>
+                )}
 
                 <button
                   onClick={() => {

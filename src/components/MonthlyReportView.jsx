@@ -24,7 +24,8 @@ export default function MonthlyReportView({
   dailyClosings = [],
   businessProfile = {},
   staffList = [],
-  onDeleteTransaction
+  onDeleteTransaction,
+  onRequestVoidTransaction
 }) {
   const isAr = isArgentina(null, businessProfile)
   const fmt = (val) => formatCurrency(val, isAr)
@@ -94,7 +95,7 @@ export default function MonthlyReportView({
 
   const periodTotalRevenueUSD = periodIncomeTx.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0)
   const periodTotalExpensesUSD = Math.abs(periodExpenseTx.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0))
-  const periodTotalCommissionsUSD = periodIncomeTx.reduce((sum, t) => sum + Number(t.comision_usd || 0), 0)
+  const periodTotalCommissionsUSD = periodIncomeTx.reduce((sum, t) => sum + Number(t.comision_usd || 0) + Number(t.comision_cajero_usd || 0), 0)
   const periodNetProfitUSD = Math.max(0, periodTotalRevenueUSD - periodTotalExpensesUSD - periodTotalCommissionsUSD)
 
   // Weekly breakdown calculation when periodFilter is 'this_week' or 'prev_week'
@@ -121,7 +122,7 @@ export default function MonthlyReportView({
       const expenseTxs = dayTxs.filter(t => (t.monto_usd || 0) < 0)
       const facturacion = incomeTxs.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0)
       const gastos = Math.abs(expenseTxs.reduce((sum, t) => sum + Number(t.monto_usd || 0), 0))
-      const comisiones = incomeTxs.reduce((sum, t) => sum + Number(t.comision_usd || 0), 0)
+      const comisiones = incomeTxs.reduce((sum, t) => sum + Number(t.comision_usd || 0) + Number(t.comision_cajero_usd || 0), 0)
       const lucro = Math.max(0, facturacion - gastos - comisiones)
       const count = incomeTxs.length
       const dayDateFmt = `${String(cur.getDate()).padStart(2, '0')}/${String(cur.getMonth() + 1).padStart(2, '0')}`
@@ -217,7 +218,7 @@ export default function MonthlyReportView({
 
     if ((t.monto_usd || 0) > 0) {
       monthlyMap[mKey].facturacion += Number(t.monto_usd || 0)
-      monthlyMap[mKey].comisiones += Number(t.comision_usd || 0)
+      monthlyMap[mKey].comisiones += Number(t.comision_usd || 0) + Number(t.comision_cajero_usd || 0)
       monthlyMap[mKey].count += 1
     } else {
       monthlyMap[mKey].gastos += Math.abs(Number(t.monto_usd || 0))
@@ -880,15 +881,17 @@ export default function MonthlyReportView({
                           </button>
                         )}
 
-                        {onDeleteTransaction && (
+                        {(onRequestVoidTransaction || onDeleteTransaction) && (
                           <button
                             onClick={() => {
-                              if (confirm(`¿Eliminar definitivamente este movimiento (${tx.item_name}) del historial?`)) {
+                              if (onRequestVoidTransaction) {
+                                onRequestVoidTransaction(tx)
+                              } else if (confirm(`¿Eliminar definitivamente este movimiento (${tx.item_name}) del historial?`)) {
                                 onDeleteTransaction(tx.id)
                               }
                             }}
                             className="p-1.5 rounded-xl text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Eliminar movimiento"
+                            title="Anular movimiento (con auditoría)"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

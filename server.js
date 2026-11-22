@@ -715,6 +715,16 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       const preservedClosings = existingClosings.filter(c => c && c.id && !incomingClosingIds.has(c.id))
       const finalDailyClosings = [...incomingClosings, ...preservedClosings]
 
+      // Merge auditLogs strictly as append-only (tamper-proof: never deleted even if localStorage clears)
+      const existingAuditLogs = Array.isArray(currentWs.auditLogs) ? currentWs.auditLogs : []
+      const incomingAuditLogs = Array.isArray(body.auditLogs) ? body.auditLogs : []
+      const auditMap = new Map()
+      existingAuditLogs.forEach(log => { if (log && log.id) auditMap.set(log.id, log) })
+      incomingAuditLogs.forEach(log => { if (log && log.id && !auditMap.has(log.id)) auditMap.set(log.id, log) })
+      const finalAuditLogs = Array.from(auditMap.values())
+        .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+        .slice(0, 2000)
+
       // Protect customized staff, services, profile, and exchangeRate against stale/empty browser tabs
       const isStaleEmptyPayload =
         (existingClients.length > 0 || existingTxs.length > 0) &&
@@ -766,6 +776,7 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         deletedTxIds: Array.from(deletedTxIds),
         appointments: finalAppointments,
         dailyClosings: finalDailyClosings,
+        auditLogs: finalAuditLogs,
         updatedAt: Date.now()
       })
 
