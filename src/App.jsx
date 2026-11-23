@@ -2482,6 +2482,8 @@ export default function App() {
         appointments={appointments}
         exchangeRate={exchangeRate}
         currentNiche={currentNiche}
+        isCashierMode={isCashierMode}
+        securityConfig={securityConfig}
       />
 
     </div>

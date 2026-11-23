@@ -13,7 +13,9 @@ export default function CopilotChatWidget({
   clients = [],
   appointments = [],
   exchangeRate = 889.26,
-  currentNiche = 'barberia'
+  currentNiche = 'barberia',
+  isCashierMode = false,
+  securityConfig = {}
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -31,6 +33,7 @@ export default function CopilotChatWidget({
   const isAr = isArgentina(activeTenant, businessProfile)
   const fmt = (val) => formatCurrency(val, isAr)
   const currTag = isAr ? 'ARS' : 'USD'
+  const hideProfitsInBot = Boolean(isCashierMode && securityConfig?.hideOwnerProfits !== false)
 
   // Initial welcome message
   const initialMessages = [
@@ -78,17 +81,24 @@ export default function CopilotChatWidget({
   const todayIso = getLocalDateIso()
   const todayApts = (appointments || []).filter(a => a.date === todayIso && a.status !== 'cancelada')
 
-  const quickPrompts = isGlamBrand ? [
-    '🔗 ¿Dónde saco el link de mi agenda web?',
-    '✨ Promo para llenar la tarde de hoy',
-    '💸 Mensaje para cobrar saldo pendiente',
-    '🌸 Mensaje para reactivar clientas'
-  ] : [
-    '🔗 ¿Dónde saco el link de mi agenda web?',
-    '✂️ Promo para llenar la tarde de hoy',
-    '💸 Mensaje para cobrar saldo pendiente',
-    '💈 Mensaje para reactivar clientes'
-  ]
+  const quickPrompts = hideProfitsInBot
+    ? [
+        '🔗 ¿Dónde saco el link de mi agenda web?',
+        isGlamBrand ? '✨ Promo para llenar la tarde de hoy' : '✂️ Promo para llenar la tarde de hoy',
+        '💸 Mensaje para cobrar saldo pendiente',
+        '🧮 ¿Cómo hacer el cierre diario?'
+      ]
+    : (isGlamBrand ? [
+        '🔗 ¿Dónde saco el link de mi agenda web?',
+        '✨ Promo para llenar la tarde de hoy',
+        '💸 Mensaje para cobrar saldo pendiente',
+        '🌸 Mensaje para reactivar clientas'
+      ] : [
+        '🔗 ¿Dónde saco el link de mi agenda web?',
+        '✂️ Promo para llenar la tarde de hoy',
+        '💸 Mensaje para cobrar saldo pendiente',
+        '💈 Mensaje para reactivar clientes'
+      ])
 
   const handleSendMessage = async (textToSend) => {
     const userText = (textToSend || input).trim()
@@ -115,7 +125,10 @@ export default function CopilotChatWidget({
     const thisWeekExpenseTxs = thisWeekTxs.filter(t => (t.monto_usd || 0) < 0)
     const thisWeekRevenueUSD = thisWeekIncomeTxs.reduce((sum, t) => sum + (t.monto_usd || 0), 0)
     const thisWeekExpensesUSD = Math.abs(thisWeekExpenseTxs.reduce((sum, t) => sum + (t.monto_usd || 0), 0))
-    const thisWeekCommissionsUSD = thisWeekIncomeTxs.reduce((sum, t) => sum + (t.comision_usd || 0), 0)
+    const thisWeekCommissionsUSD = thisWeekIncomeTxs.reduce(
+      (sum, t) => sum + (Number(t.comision_usd) || 0) + (Number(t.comision_cajero_usd) || 0),
+      0
+    )
     const thisWeekNetProfitUSD = Math.max(0, thisWeekRevenueUSD - thisWeekExpensesUSD - thisWeekCommissionsUSD)
     const thisWeekServicesCount = thisWeekIncomeTxs.length
 
@@ -124,19 +137,21 @@ export default function CopilotChatWidget({
       brandName: brand.name,
       isSalon: isGlamBrand,
       country: isAr ? 'AR' : 'VE',
+      isCashierMode: Boolean(isCashierMode),
+      hideOwnerProfits: hideProfitsInBot,
       publicBookingUrl,
       exchangeRate,
       todayServicesCount,
-      todayRevenueUSD,
+      todayRevenueUSD: hideProfitsInBot ? null : todayRevenueUSD,
       totalDebtUSD,
       debtorsCount: debtors.length,
       todayAppointmentsCount: todayApts.length,
       thisWeekRange: thisWeekBounds.rangeLabel,
       thisWeekServicesCount,
-      thisWeekRevenueUSD,
-      thisWeekExpensesUSD,
-      thisWeekCommissionsUSD,
-      thisWeekNetProfitUSD
+      thisWeekRevenueUSD: hideProfitsInBot ? null : thisWeekRevenueUSD,
+      thisWeekExpensesUSD: hideProfitsInBot ? null : thisWeekExpensesUSD,
+      thisWeekCommissionsUSD: hideProfitsInBot ? null : thisWeekCommissionsUSD,
+      thisWeekNetProfitUSD: hideProfitsInBot ? null : thisWeekNetProfitUSD
     }
 
     try {
@@ -167,21 +182,32 @@ export default function CopilotChatWidget({
       }
     } catch (err) {
       // Offline / fallback response
-      let fallbackText = 'Con gusto le asisto. Puede consultarme sobre cómo usar las funciones de la plataforma, redactar mensajes para sus clientes o revisar sus cifras de hoy.'
-      if (userText.toLowerCase().includes('link') || userText.toLowerCase().includes('agenda') || userText.toLowerCase().includes('reserva') || userText.toLowerCase().includes('catálogo') || userText.toLowerCase().includes('catalogo')) {
+      const q = userText.toLowerCase()
+      let fallbackText = 'Con gusto le asisto. Puede consultarme sobre cómo usar las funciones de la plataforma, redactar mensajes para sus clientes, configuración de cajera, Modo PIN, cierre diario o promociones.'
+      if (hideProfitsInBot && /semanal|semana|números|numeros|cómo voy|como voy|ganancia|utilidad|reporte|facturaci|ingresos/.test(q)) {
+        fallbackText = 'Las cifras financieras, reportes semanales y ganancias limpias están protegidas y solo son visibles en Modo Dueño.'
+      } else if (q.includes('cajera') || q.includes('recepcion') || q.includes('recepción') || q.includes('sueldo') || q.includes('bono fijo') || q.includes('fijo por corte')) {
+        fallbackText = `Para configurar una Cajera / Recepción en "Equipo":\n\n1. Ingrese a la pestaña "Equipo" y pulse "+ Nuevo Barbero/Personal".\n2. Seleccione el rol "💼 Cajera / Recepción" (no aparecerá en la agenda web pública).\n3. Indique su Sueldo Base Fijo (Diario, Semanal, Quincenal o Mensual).\n4. En "Bono Extra por Ventas" elija "$ Fijo por corte" (se suma 1 vez por cada cliente cobrado) o "% por venta" (o ponga 0 si solo cobra sueldo fijo).\n\nEse bono se suma aparte y NO descuenta nada a los barberos.`
+      } else if (q.includes('pin') || q.includes('modo cajero') || q.includes('modo dueño') || q.includes('seguridad') || q.includes('bloquear')) {
+        fallbackText = `Para configurar el Modo Dueño vs. Modo Cajero con PIN:\n\n1. Entre a "Configuración & PIN" en el menú y abra la pestaña "Seguridad & PIN".\n2. Active el control por PIN, defina su PIN de Dueño y elija si desea ocultar ganancias limpias, activar Arqueo Ciego y bloquear esta PC en Modo Cajero.\n3. Para alternar entre Modo Cajero y Modo Dueño, pulse la insignia de rol en la barra superior.`
+      } else if (q.includes('auditoría') || q.includes('auditoria') || q.includes('caja negra') || q.includes('anular') || q.includes('elimin')) {
+        fallbackText = `Sobre anulaciones y la Bitácora de Auditoría ("Caja Negra"):\n\n• Al anular un cobro, el sistema exige indicar un motivo obligatorio (y el PIN del Dueño si está activado en Seguridad & PIN).\n• En Modo Dueño, la pestaña "Auditoría" guarda un registro inmutable de anulaciones, cambios de precios, servicios eliminados, cierres de caja e intentos fallidos de PIN.`
+      } else if (q.includes('arqueo') || q.includes('ciego') || q.includes('gaveta') || (q.includes('cierre') && q.includes('diario'))) {
+        fallbackText = `Para realizar el Cierre Diario y Arqueo de Caja:\n\n1. Pulse "Cierre Diario" (o "Cuadre Diario (Arqueo)" en el menú).\n2. Cuente el efectivo físico real en gaveta e ingréselo en el campo correspondiente.\n3. En Modo Cajero con Arqueo Ciego activo, la cajera ingresa lo contado sin ver el monto esperado; el dueño verá la diferencia exacta (sobrante o faltante) en el acta del cierre y auditoría.`
+      } else if (q.includes('link') || q.includes('agenda') || q.includes('reserva') || q.includes('catálogo') || q.includes('catalogo')) {
         fallbackText = `Para obtener el link de su agenda web de reservas:\n\n1. Ingrese a la pestaña "Catálogo" en el menú.\n2. En la parte superior verá la sección "Link Público de Reservas".\n3. Pulse "Copiar Link" para colocarlo en su biografía de Instagram o estados, o pulse "Compartir en WhatsApp" para enviarlo directamente a sus clientes.\n\nSu enlace directo es:\n${publicBookingUrl || 'Disponible en el menú Catálogo'}`
-      } else if (userText.toLowerCase().includes('fiado') || userText.toLowerCase().includes('deuda') || userText.toLowerCase().includes('saldo') || userText.toLowerCase().includes('cobrar')) {
+      } else if (q.includes('fiado') || q.includes('deuda') || q.includes('saldo') || q.includes('cobrar')) {
         fallbackText = isAr
           ? `Para gestionar un saldo pendiente con educación y efectividad, puede utilizar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el comprobante por Mercado Pago o transferencia del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Buen día!"`
           : `Para gestionar un saldo pendiente con educación y efectividad, puede utilizar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"`
-      } else if (userText.toLowerCase().includes('promo') || userText.toLowerCase().includes('tarde')) {
+      } else if (q.includes('promo') || q.includes('tarde')) {
         fallbackText = `Para incentivar las citas de la tarde, puede publicar este mensaje en sus estados:\n\n"¡Buenas tardes! Disponemos de 2 turnos especiales para hoy a las 4:00 PM y 5:30 PM en ${bizName}. Reserve su espacio cómodamente en nuestro enlace web: ${publicBookingUrl || '[Su Enlace de Catálogo]'}"`
-      } else if (userText.toLowerCase().includes('reactivar') || userText.toLowerCase().includes('inactivo') || userText.toLowerCase().includes('semanas')) {
+      } else if (q.includes('reactivar') || q.includes('inactivo') || q.includes('semanas')) {
         fallbackText = `Para reactivar clientes que tienen tiempo sin visitarle, puede enviarles este mensaje:\n\n"¡Hola! 👋 Teníamos tiempo sin verle por ${bizName}. Esperamos que todo marche excelente. Si desea agendar su cita esta semana, avísenos con gusto para reservarle su espacio preferido. ¡Saludos!"`
-      } else if (userText.toLowerCase().includes('semanal') || userText.toLowerCase().includes('semana')) {
+      } else if (q.includes('semanal') || q.includes('semana')) {
         const wb = getWeekBoundsLocal(0)
         fallbackText = `Para consultar o realizar su Cierre Semanal:\n\n1. En la pantalla principal o menú superior cuenta con el botón morado "Cierre Semanal".\n2. También puede ingresar a la pestaña "Reportes", seleccionar "Esta Semana" y verá el balance día por día (de lunes a domingo) con botones para "Copiar Acta" o "Enviar WhatsApp".\n\nResumen de Esta Semana (${wb.rangeLabel}):\n• Facturación: $${fmt(thisWeekRevenueUSD)} ${currTag}\n• Gastos: -$${fmt(thisWeekExpensesUSD)} ${currTag}\n• Comisiones: -$${fmt(thisWeekCommissionsUSD)} ${currTag}\n• Ganancia Limpia: $${fmt(thisWeekNetProfitUSD)} ${currTag} (${thisWeekServicesCount} atenciones).`
-      } else if (userText.toLowerCase().includes('números') || userText.toLowerCase().includes('cómo voy')) {
+      } else if (q.includes('números') || q.includes('numeros') || q.includes('cómo voy') || q.includes('como voy')) {
         fallbackText = isAr
           ? `Hoy registra ${todayServicesCount} servicios con un total de $${fmt(todayRevenueUSD)} ARS. Mantiene ${debtors.length} clientes con saldo pendiente ($${fmt(totalDebtUSD)} ARS).`
           : `Hoy registra ${todayServicesCount} servicios con un total de ${todayRevenueUSD.toFixed(2)} USD (Tasa BCV: Bs. ${exchangeRate.toFixed(2)}). Mantiene ${debtors.length} clientes con saldo pendiente (${totalDebtUSD.toFixed(2)} USD).`

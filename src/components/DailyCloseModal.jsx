@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
-import { isCashierStaff, calculateCashierCommissionForTx } from '../lib/securityUtils'
+import { isCashierStaff, calculateCashierCommissionForTx, getCashierCommissionType } from '../lib/securityUtils'
 
 export default function DailyCloseModal({
   isOpen,
@@ -134,6 +134,8 @@ export default function DailyCloseModal({
       id: staff.id,
       name: isCashier ? `${staff.name} (Caja)` : staff.name,
       isCashier,
+      commissionType: isCashier ? getCashierCommissionType(staff) : 'percent',
+      commissionFixedUSD: isCashier ? (Number(staff.commission_fixed_usd) || 0) : 0,
       percentage: staff.commission_pct ?? staff.commission_percentage ?? (isCashier ? 0 : 50),
       count,
       generatedUSD,
@@ -467,7 +469,7 @@ export default function DailyCloseModal({
                   <div>
                     <span className="font-bold text-white block">{st.name}</span>
                     <span className="text-[10px] text-slate-400">
-                      {st.count} {st.count === 1 ? 'servicio' : 'servicios'} • Facturó ${fmt(st.generatedUSD)} ({st.percentage}%)
+                      {st.count} {st.count === 1 ? 'servicio' : 'servicios'} • Facturó ${fmt(st.generatedUSD)} ({st.isCashier && st.commissionType === 'fixed' ? `$${fmt(st.commissionFixedUSD)}/corte` : `${st.percentage}%`})
                     </span>
                     {st.valesUSD > 0 && (
                       <span className="inline-block mt-0.5 text-[10px] text-amber-400 font-bold">

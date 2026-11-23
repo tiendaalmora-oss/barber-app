@@ -344,6 +344,7 @@ export default function QuickCashModal({
       cajero_staff_id: activeCashierObj?.id || null,
       cajero_staff_name: activeCashierObj?.name || null,
       cajero_pct: activeCashierObj ? (Number(activeCashierObj.commission_pct) || 0) : 0,
+      cajero_bonus_type: activeCashierObj ? (activeCashierObj.commission_type || 'percent') : null,
       registered_by_role: isCashierMode ? 'cajero' : 'dueno',
       registered_by_name: activeOperator?.name || (isCashierMode ? 'Cajero' : 'Dueño'),
       registered_by_id: activeOperator?.id || null,

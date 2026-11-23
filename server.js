@@ -828,6 +828,8 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
 
     const isSalon = Boolean(context.isSalon)
     const isAr = context.country === 'AR'
+    const isCashierMode = Boolean(context.isCashierMode)
+    const hideOwnerProfits = Boolean(isCashierMode && context.hideOwnerProfits !== false)
     const roleCopilot = isSalon ? 'Socia GlamOS' : 'Socio BarberOS'
     const currLabel = isAr ? 'ARS' : 'USD'
 
@@ -846,13 +848,20 @@ Tú eres el asistente oficial DE ESTA PLATAFORMA. NUNCA recomiendes aplicaciones
 - REGISTRO DE COBROS Y CAJA DIARIA:
   * Botón dorado "+ Cobro" en la barra superior.
   * ${isAr ? 'Permite cobrar en Pesos Argentinos ($ ARS) vía Efectivo, Mercado Pago / Transferencia por Alias/CVU, Tarjeta / Point o pagos mixtos. Emite recibo digital listo para enviar por WhatsApp.' : 'Permite cobrar en Efectivo ($ USD o Bs), Pago Móvil exacto a tasa oficial BCV, Zelle o pagos mixtos (parte efectivo y parte Pago Móvil). Emite recibo digital listo para enviar por WhatsApp.'}
-- CUADRE Y CIERRE DIARIO Y SEMANAL:
-  * Botón "Cierre Diario" en el panel principal para el arqueo de gaveta de hoy.
-  * Botón "Cierre Semanal" en el panel principal y menú superior para liquidación y balance semanal consolidado.
-  * Pestaña "Reportes": al seleccionar "Esta Semana" o "Semana Pasada", muestra la tabla con el balance día por día (lunes a domingo) y botones para copiar o enviar el acta completa por WhatsApp.
-  * Datos de Esta Semana (${context.thisWeekRange || 'Actual'}): ${context.thisWeekServicesCount || 0} atenciones, Facturado: ${context.thisWeekRevenueUSD || 0} ${currLabel}, Gastos: -${context.thisWeekExpensesUSD || 0} ${currLabel}, Comisiones: -${context.thisWeekCommissionsUSD || 0} ${currLabel}, Ganancia Limpia: ${context.thisWeekNetProfitUSD || 0} ${currLabel}.
-- COMISIONES Y VALES DEL PERSONAL:
-  * Pestaña "Equipo": permite configurar el porcentaje de comisión de cada especialista y registrar vales/adelantos que se descuentan automáticamente en la liquidación.
+- CUADRE, ARQUEO CIEGO Y CIERRE DIARIO Y SEMANAL:
+  * Botón "Cierre Diario" / "Cuadre Diario (Arqueo)" para el cuadre y arqueo de gaveta del día. Cuando está activo el Arqueo Ciego en Modo Cajero, la cajera ingresa el efectivo contado sin ver el monto esperado por el sistema; al guardar el cierre, el dueño ve la diferencia exacta (sobrante o faltante).
+  * Botón "Cierre Semanal" (solo Modo Dueño) en el panel principal y menú superior para liquidación y balance semanal consolidado.
+  * Pestaña "Reportes" (solo Modo Dueño): al seleccionar "Esta Semana" o "Semana Pasada", muestra el balance día por día (lunes a domingo) con botones para copiar o enviar el acta completa por WhatsApp.
+${hideOwnerProfits ? '' : `  * Datos de Esta Semana (${context.thisWeekRange || 'Actual'}): ${context.thisWeekServicesCount || 0} atenciones, Facturado: ${context.thisWeekRevenueUSD || 0} ${currLabel}, Gastos: -${context.thisWeekExpensesUSD || 0} ${currLabel}, Comisiones: -${context.thisWeekCommissionsUSD || 0} ${currLabel}, Ganancia Limpia: ${context.thisWeekNetProfitUSD || 0} ${currLabel}.\n`}- EQUIPO, CAJERA / RECEPCIÓN, COMISIONES Y VALES:
+  * Pestaña "Equipo": permite configurar especialistas con su porcentaje de comisión y registrar vales/adelantos descontados automáticamente en la liquidación.
+  * También permite crear personal con rol "Cajera / Recepción" (no aparece en la agenda web pública ni como barbero en cobros), configurable con Sueldo Base Fijo (Diario, Semanal, Quincenal o Mensual) + Bono Extra por Ventas en dos modos: "$ Fijo por corte" (1 bono por cada cliente/ticket cobrado con servicio) o "% por venta" (o 0 si solo cobra sueldo fijo). Este bono se suma aparte SIN descontar nada a los barberos, con liquidación independiente y desglose por barbero.
+- MODO DUEÑO VS. MODO CAJERO CON PIN:
+  * Se configura en "Configuración & PIN" → pestaña "Seguridad & PIN" (disponible en Modo Dueño).
+  * Permite definir el PIN maestro del dueño, bloquear un equipo o mostrador en Modo Cajero, activar auto-bloqueo por inactividad, ocultar ganancias limpias, activar Arqueo Ciego y exigir motivo o PIN para anular cobros o registrar gastos.
+  * Para cambiar entre Modo Cajero y Modo Dueño se pulsa la insignia de rol en la barra superior y se ingresa el PIN del dueño.
+- ANULACIONES CONTROLADAS Y AUDITORÍA ("CAJA NEGRA"):
+  * Anular una venta/cobro exige obligatoriamente seleccionar o escribir un motivo (y PIN del dueño si está configurado).
+  * La pestaña "Auditoría" (solo visible en Modo Dueño) guarda un historial inmutable de anulaciones, cambios de precios de catálogo, eliminación de servicios, cierres e intentos fallidos de PIN.
 - CLIENTES Y RETARGETING:
   * Pestaña "Clientes": control de historial, clientes con saldos pendientes (deudas) y función de retargeting para escribir con 1 toque a quienes tienen semanas sin venir.
 ${isAr ? '- MONEDA Y MEDIOS DE PAGO EN ARGENTINA:\n  * Toda la operación está configurada en Pesos Argentinos ($ ARS). Nunca menciones Bolívares, Tasa BCV ni Pago Móvil; habla de Mercado Pago, Transferencia por Alias/CVU, Efectivo o Tarjeta / Point.' : `- TASA OFICIAL BCV:\n  * Se actualiza automáticamente con la tasa oficial del Banco Central de Venezuela (tasa actual: Bs. ${context.exchangeRate || 'N/A'}).`} 
@@ -865,20 +874,33 @@ Cuando el usuario te pida redactar un mensaje (para cobrar un saldo pendiente, l
 
 5. DATOS DEL NEGOCIO EN VIVO:
 - Negocio: ${context.businessName || 'Mi Negocio'} (${isSalon ? 'Salón de Belleza / Uñas' : 'Barbería'})
+- Rol activo: ${isCashierMode ? 'Modo Cajero' : 'Modo Dueño'}
 ${isAr ? '- Moneda: Pesos Argentinos ($ ARS)' : `- Tasa BCV: Bs. ${context.exchangeRate || 'N/A'}`}
-- Ventas de hoy: ${context.todayServicesCount || 0} servicios (${context.todayRevenueUSD || 0} ${currLabel})
+- Ventas de hoy: ${hideOwnerProfits ? `${context.todayServicesCount || 0} atenciones registradas (cifras monetarias ocultas en Modo Cajero)` : `${context.todayServicesCount || 0} servicios (${context.todayRevenueUSD || 0} ${currLabel})`}
 - Total en saldos pendientes: ${context.totalDebtUSD || 0} ${currLabel} (${context.debtorsCount || 0} clientes)
-- Citas hoy: ${context.todayAppointmentsCount || 0}`
+- Citas hoy: ${context.todayAppointmentsCount || 0}
+${hideOwnerProfits ? '\nRESTRICCIÓN MODO CAJERO: El usuario actual opera en Modo Cajero con ganancias ocultas. NO muestres, estimes ni inventes cifras de facturación total, gastos, comisiones, ganancia limpia ni reportes semanales; indica cortésmente que esa información es exclusiva del Modo Dueño.' : ''}`
 
     const apiKey = (process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || '').trim()
     const model = process.env.AI_MODEL || 'deepseek/deepseek-v4.1-flash'
 
     if (!apiKey) {
       console.warn('[Copilot AI] No OPENROUTER_API_KEY configured. Returning tactical fallback.')
-      let fallback = 'Con gusto le asisto en la gestión de su negocio. Puede consultarme cómo usar las opciones de la plataforma, cómo obtener su enlace de agenda web, redactar mensajes de cobro o promociones.'
-      if (message.toLowerCase().includes('link') || message.toLowerCase().includes('agenda') || message.toLowerCase().includes('reserva') || message.toLowerCase().includes('catálogo') || message.toLowerCase().includes('catalogo')) {
+      const q = message.toLowerCase()
+      let fallback = 'Con gusto le asisto en la gestión de su negocio. Puede consultarme cómo usar las opciones de la plataforma, configuración de cajera, Modo PIN, cierre diario, agenda web o mensajes de cobro.'
+      if (hideOwnerProfits && /semanal|semana|números|numeros|cómo voy|como voy|ganancia|utilidad|reporte|facturaci|ingresos/.test(q)) {
+        fallback = 'Las cifras financieras, reportes semanales y ganancias limpias están protegidas y solo son visibles en Modo Dueño.'
+      } else if (q.includes('cajera') || q.includes('recepcion') || q.includes('recepción') || q.includes('sueldo') || q.includes('bono fijo') || q.includes('fijo por corte')) {
+        fallback = 'Para configurar una Cajera / Recepción en "Equipo":\n\n1. Ingrese a "Equipo" y cree personal con el rol "💼 Cajera / Recepción".\n2. Defina su Sueldo Base Fijo (Diario, Semanal, Quincenal o Mensual).\n3. En "Bono Extra por Ventas" elija "$ Fijo por corte" (suma 1 vez por cada cliente cobrado) o "% por venta" (o 0 si solo cobra sueldo fijo).\n\nEse bono se liquida aparte y NO descuenta nada a los barberos.'
+      } else if (q.includes('pin') || q.includes('modo cajero') || q.includes('modo dueño') || q.includes('seguridad') || q.includes('bloquear')) {
+        fallback = 'Para configurar el Modo Dueño vs. Modo Cajero con PIN:\n\n1. Entre a "Configuración & PIN" → pestaña "Seguridad & PIN".\n2. Defina el PIN del Dueño, active Arqueo Ciego y bloquee si desea esa PC en Modo Cajero.\n3. Para alternar entre modos, pulse la insignia de rol en la barra superior.'
+      } else if (q.includes('auditoría') || q.includes('auditoria') || q.includes('caja negra') || q.includes('anular') || q.includes('elimin')) {
+        fallback = 'Al anular un cobro, el sistema exige un motivo obligatorio (y PIN del Dueño si está activado). En Modo Dueño, la pestaña "Auditoría" registra anulaciones, cambios de precio, eliminaciones de servicios, cierres e intentos fallidos de PIN.'
+      } else if (q.includes('arqueo') || q.includes('ciego') || q.includes('gaveta')) {
+        fallback = 'En "Cierre Diario", cuando el Arqueo Ciego está activo en Modo Cajero, la cajera ingresa el efectivo físico contado sin ver el monto esperado; el dueño verá la diferencia exacta (sobrante o faltante) al revisar el cierre o auditoría.'
+      } else if (q.includes('link') || q.includes('agenda') || q.includes('reserva') || q.includes('catálogo') || q.includes('catalogo')) {
         fallback = `Para obtener el enlace de su agenda web de reservas:\n\n1. Ingrese a la pestaña "Catálogo" en el menú.\n2. En la parte superior observará la sección "Link Público de Reservas".\n3. Pulse "Copiar Link" para pegarlo en sus redes o "Compartir en WhatsApp".\n\nSu enlace directo es:\n${context.publicBookingUrl || 'Disponible en menú Catálogo'}`
-      } else if (message.toLowerCase().includes('fiado') || message.toLowerCase().includes('deuda') || message.toLowerCase().includes('saldo') || message.toLowerCase().includes('cobrar')) {
+      } else if (q.includes('fiado') || q.includes('deuda') || q.includes('saldo') || q.includes('cobrar')) {
         fallback = isAr
           ? 'Para gestionar un saldo pendiente con educación, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el comprobante por Mercado Pago o transferencia del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Buen día!"'
           : 'Para gestionar un saldo pendiente con educación, puede usar este mensaje:\n\n"¡Hola! 👋 Espero que se encuentre muy bien. Le escribo para cuadrar la caja de la semana; cuando tenga oportunidad me comparte el Pago Móvil del saldo pendiente de su última visita para actualizar su cuenta en el sistema. ¡Feliz día!"'

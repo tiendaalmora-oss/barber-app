@@ -49,15 +49,27 @@ export function getCommissionScopeLabel(scope) {
   }
 }
 
+export function getCashierCommissionType(staff) {
+  return staff?.commission_type === 'fixed' ? 'fixed' : 'percent'
+}
+
+export function formatCashierBonusBadge(staff, fmtFn, currTag) {
+  if (getCashierCommissionType(staff) === 'fixed') {
+    const val = Number(staff?.commission_fixed_usd) || 0
+    return val > 0 ? `$${fmtFn ? fmtFn(val) : val.toFixed(2)}/corte` : 'Sin bono'
+  }
+  const pct = Number(staff?.commission_pct) || 0
+  return pct > 0 ? `${pct}% extra` : 'Sin bono'
+}
+
 /**
- * Calculates the additional percentage bonus earned by a Cashier/Receptionist
+ * Calculates the additional bonus earned by a Cashier/Receptionist
  * on a sale (cart items array or saved transaction object).
+ * Supports both fixed bonus per eligible ticket/client ('fixed') and percentage ('percent').
  * Strictly does NOT reduce the barber's commission.
  */
 export function calculateCashierCommissionForTx(txOrItems, cashierStaff) {
   if (!cashierStaff) return 0
-  const pct = Number(cashierStaff.commission_pct) || 0
-  if (pct <= 0) return 0
 
   const scope = cashierStaff.commission_scope || 'servicios'
   let eligibleBase = 0
@@ -87,6 +99,16 @@ export function calculateCashierCommissionForTx(txOrItems, cashierStaff) {
     }
   }
 
+  if (eligibleBase <= 0) return 0
+
+  if (getCashierCommissionType(cashierStaff) === 'fixed') {
+    const fixedAmt = Number(cashierStaff.commission_fixed_usd) || 0
+    if (fixedAmt <= 0) return 0
+    return Math.round(fixedAmt * 100) / 100
+  }
+
+  const pct = Number(cashierStaff.commission_pct) || 0
+  if (pct <= 0) return 0
   return Math.round(eligibleBase * (pct / 100) * 100) / 100
 }
 
