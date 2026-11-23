@@ -3,11 +3,55 @@
 @tailwind utilities;
 
 @layer base {
+  html, body {
+    background-color: #090a0d;
+  }
   body {
     background-color: #090a0d;
     color: #f1f5f9;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .pt-safe-header {
+    padding-top: calc(constant(safe-area-inset-top) + 0.625rem);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.625rem);
+  }
+  .pt-safe-header-lg {
+    padding-top: calc(constant(safe-area-inset-top) + 0.875rem);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 0.875rem);
+  }
+  .pt-safe-drawer {
+    padding-top: calc(constant(safe-area-inset-top) + 1.25rem);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 1.25rem);
+    padding-bottom: calc(constant(safe-area-inset-bottom) + 1.25rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+  }
+  .pb-safe-nav {
+    padding-bottom: calc(constant(safe-area-inset-bottom) + 0.375rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.375rem);
+  }
+  .pb-safe-sheet {
+    padding-bottom: calc(constant(safe-area-inset-bottom) + 1.25rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.25rem);
+  }
+  .pb-safe-main {
+    padding-bottom: calc(constant(safe-area-inset-bottom) + 6rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6rem);
+  }
+  .bottom-safe-fab {
+    bottom: calc(constant(safe-area-inset-bottom) + 4.75rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 4.75rem);
+  }
+  @media (min-width: 768px) {
+    .pb-safe-main {
+      padding-bottom: 1.5rem;
+    }
+    .bottom-safe-fab {
+      bottom: 1.5rem;
+    }
   }
 }
 

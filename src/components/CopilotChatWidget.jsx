@@ -241,7 +241,7 @@ export default function CopilotChatWidget({
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className={`fixed bottom-20 md:bottom-6 right-4 z-40 p-3 sm:px-4 sm:py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 transition-all duration-300 active:scale-95 border ${
+          className={`fixed bottom-safe-fab right-4 z-40 p-3 sm:px-4 sm:py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 transition-all duration-300 active:scale-95 border ${
             isGlamBrand
               ? 'bg-gradient-to-r from-pink-600 via-purple-600 to-rose-600 border-pink-400/40 text-white shadow-pink-600/30'
               : 'bg-gradient-to-r from-gold-500 via-amber-600 to-yellow-500 border-gold-300/40 text-black shadow-gold-500/30'

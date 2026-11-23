@@ -357,7 +357,7 @@ export default function PublicBookingView({
 
       {/* Owner Preview Floating Top Bar */}
       {isOwnerPreview && (
-        <div className="sticky top-0 z-50 bg-dark-900/95 backdrop-blur-xl border-b border-gold-500/30 text-white px-4 py-2.5 shadow-2xl">
+        <div className="sticky top-0 z-50 bg-dark-900/95 backdrop-blur-xl border-b border-gold-500/30 text-white px-4 pt-safe-header pb-2.5 shadow-2xl">
           <div className="max-w-xl mx-auto flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs font-bold">
               <span className="w-2 h-2 rounded-full bg-gold-400 animate-ping" />

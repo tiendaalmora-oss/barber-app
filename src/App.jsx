@@ -34,7 +34,7 @@ import {
   INITIAL_SAAS_TENANTS
 } from './lib/mockData'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
-import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck } from 'lucide-react'
+import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck, MessageSquare } from 'lucide-react'
 import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
 import { getActiveBrand, isArgentina } from './lib/brandConfig'
 import { getSecurityConfig, createAuditEntry, getDeviceForceCashier } from './lib/securityUtils'
@@ -2040,7 +2040,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col font-sans pb-24 md:pb-6">
+    <div className="min-h-screen bg-dark-950 text-slate-100 flex flex-col font-sans pb-safe-main overflow-x-clip">
       
       {/* Top Navigation */}
       <Navbar
@@ -2108,6 +2108,36 @@ export default function App() {
         
         {/* Desktop Sidebar Tabs */}
         <aside className="hidden md:flex flex-col w-56 shrink-0 space-y-1">
+          {/* Compact Niche Switcher on md-lg screens (moves out of top bar to prevent header overflow) */}
+          {!isCashierMode && (
+            <div className="xl:hidden pb-2 mb-1 border-b border-dark-800">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 px-1 pb-1.5">
+                Rubro del Local
+              </div>
+              <div className="grid grid-cols-3 gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750">
+                {[
+                  { id: 'barberia', icon: '💈', label: 'Barber' },
+                  { id: 'estetica', icon: '💅', label: 'Salón' },
+                  { id: 'mixto', icon: '🏬', label: 'Mixto' }
+                ].map(n => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => setCurrentNiche(n.id)}
+                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold flex flex-col items-center justify-center transition-all ${
+                      currentNiche === n.id
+                        ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span className="text-xs leading-none mb-0.5">{n.icon}</span>
+                    <span>{n.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 px-3 pb-1">
             Módulos de Tu Negocio
           </div>
@@ -2162,6 +2192,15 @@ export default function App() {
             >
               <Calculator className="w-4 h-4 shrink-0 text-purple-400" />
               <span>Cuadre Diario (Arqueo)</span>
+            </button>
+
+            <button
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="lg:hidden w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-xs font-bold transition-all text-left shadow-sm"
+              title="Enviar Cierre Diario por WhatsApp"
+            >
+              <MessageSquare className="w-4 h-4 shrink-0 text-emerald-400" />
+              <span>Cierre WhatsApp</span>
             </button>
 
             {!isCashierMode && (

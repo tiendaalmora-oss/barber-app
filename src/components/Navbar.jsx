@@ -93,12 +93,12 @@ export default function Navbar({
 
   return (
     <>
-      {/* HEADER SUPERIOR ÚNICO (Elegante y Limpio) */}
-      <header className="sticky top-0 z-30 bg-dark-900/90 backdrop-blur-xl border-b border-dark-800/80 px-3 sm:px-6 py-2.5 transition-all">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+      {/* HEADER SUPERIOR ÚNICO (Elegante, Responsive & Safe-Area iOS/Android) */}
+      <header className="sticky top-0 z-30 bg-dark-900/95 backdrop-blur-xl border-b border-dark-800/80 px-2.5 sm:px-4 lg:px-6 pt-safe-header pb-2.5 transition-all">
+        <div className="w-full max-w-7xl mx-auto flex items-center justify-between gap-2 lg:gap-3 min-w-0">
           
           {/* Brand Logo & Name */}
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1 xl:flex-none xl:max-w-[230px]">
             <button
               onClick={() => { if (!isCashierMode) onOpenSettingsModal() }}
               className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-dark-800/80 border border-dark-700/70 hover:border-gold-500/50 shadow-inner flex items-center justify-center overflow-hidden shrink-0 transition-all group"
@@ -110,35 +110,36 @@ export default function Navbar({
                 nicheIcons[currentNiche] || <Scissors className="w-4 h-4 text-gold-400" />
               )}
             </button>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
                 <button
                   onClick={() => { if (!isCashierMode) onOpenSettingsModal() }}
-                  className="font-black text-sm sm:text-base text-white hover:text-gold-400 tracking-tight truncate text-left transition-colors"
+                  className="font-black text-xs sm:text-sm lg:text-base text-white hover:text-gold-400 tracking-tight truncate text-left transition-colors min-w-0"
                 >
                   {businessProfile?.businessName || nicheNames[currentNiche] || 'Mi Negocio'}
                 </button>
                 {activeTenant?.isTrial24h ? (
                   <button
                     onClick={onOpenPaymentModal}
-                    className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-0.5 shrink-0"
+                    className="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold flex items-center gap-0.5 shrink-0 whitespace-nowrap"
                   >
                     <Zap className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                    <span>Prueba 24h</span>
+                    <span className="hidden sm:inline">Prueba 24h</span>
+                    <span className="sm:hidden">24h</span>
                   </button>
                 ) : (
                   <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" title="Cuenta Activa" />
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 truncate max-w-[160px] sm:max-w-xs">
+              <p className="text-[10px] sm:text-[11px] text-slate-400 truncate">
                 {businessProfile?.slogan || 'Control de Caja & Cuentas Claras'}
               </p>
             </div>
           </div>
 
-          {/* Center: Desktop Niche Switcher (Hidden in Cashier Mode) */}
+          {/* Center: Desktop Niche Switcher (xl+ in header; md-lg in left sidebar to prevent overflow) */}
           {!isCashierMode && (
-          <div className="hidden md:flex items-center gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750">
+          <div className="hidden xl:flex items-center gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750 shrink-0">
             {[
               { id: 'barberia', icon: Scissors, label: 'Barbería' },
               { id: 'estetica', icon: Sparkles, label: 'Salón & Uñas' },
@@ -150,13 +151,13 @@ export default function Navbar({
                 <button
                   key={n.id}
                   onClick={() => onSelectNiche(n.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all ${
                     isSel 
                       ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30 shadow-sm' 
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <NIcon className="w-3.5 h-3.5" />
+                  <NIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>{n.label}</span>
                 </button>
               )
@@ -165,27 +166,28 @@ export default function Navbar({
           )}
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 lg:gap-2 shrink-0">
             {/* Owner / Cashier Role Switch Pill */}
             {securityConfig?.enabled && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
                   onClick={onOpenRoleModal}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-black transition-all ${
+                  className={`flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl border text-xs font-black whitespace-nowrap shrink-0 transition-all ${
                     isCashierMode
                       ? 'bg-sky-500/15 hover:bg-sky-500/25 border-sky-500/40 text-sky-300'
                       : 'bg-gold-500/15 hover:bg-gold-500/25 border-gold-500/40 text-gold-300'
                   }`}
                   title={isCashierMode ? 'Toca para desbloquear Modo Dueño con PIN' : 'Modo Dueño activo • Toca para cambiar'}
                 >
-                  <span>{isCashierMode ? `🧾 ${(activeOperator?.name || 'Cajero').split(' ')[0]}` : '👑 Dueño'}</span>
+                  <span className="sm:hidden">{isCashierMode ? '🧾' : '👑'}</span>
+                  <span className="hidden sm:inline">{isCashierMode ? `🧾 ${(activeOperator?.name || 'Cajero').split(' ')[0]}` : '👑 Dueño'}</span>
                 </button>
                 {!isCashierMode && onQuickLockCashier && (
                   <button
                     type="button"
                     onClick={onQuickLockCashier}
-                    className="p-1.5 rounded-xl bg-dark-800 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-dark-700 transition-colors"
+                    className="hidden sm:inline-flex p-1.5 rounded-xl bg-dark-800 hover:bg-sky-500/20 text-slate-400 hover:text-sky-300 border border-dark-700 transition-colors shrink-0"
                     title="Bloquear y pasar rápido a Modo Cajero"
                   >
                     <Lock className="w-3.5 h-3.5" />
@@ -197,7 +199,7 @@ export default function Navbar({
             {/* Currency / Tasa BCV Pill */}
             {isAr ? (
               <div
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300 font-bold"
+                className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-xs text-sky-300 font-bold whitespace-nowrap shrink-0"
                 title="Modo Argentina: Precios y caja en Pesos Argentinos ($ ARS)"
               >
                 <span>🇦🇷</span>
@@ -206,11 +208,11 @@ export default function Navbar({
             ) : (
               <button 
                 onClick={onOpenRateModal}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 border border-dark-700/80 text-xs text-slate-300 transition-all group"
+                className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-dark-800/80 hover:bg-dark-750 border border-dark-700/80 text-xs text-slate-300 transition-all group whitespace-nowrap shrink-0"
                 title="Click para ajustar la Tasa BCV oficial"
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[11px] text-slate-400 hidden sm:inline">BCV:</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-[11px] text-slate-400 hidden lg:inline">BCV:</span>
                 <span className="text-white font-mono font-bold group-hover:text-gold-400 text-xs">
                   Bs. {exchangeRate.toFixed(2)}
                 </span>
@@ -218,43 +220,43 @@ export default function Navbar({
             )}
 
             {/* Desktop Only CTAs */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-1.5 shrink-0">
               <button
                 onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('today')}
-                className="px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all flex items-center gap-1.5"
+                className="hidden lg:flex px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all items-center gap-1.5 whitespace-nowrap"
                 title="Cuadre y Arqueo Diario de Caja"
               >
-                <Calculator className="w-3.5 h-3.5 text-purple-400" />
+                <Calculator className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                 <span>Cuadre</span>
               </button>
 
               {!isCashierMode && (
                 <button
                   onClick={() => onOpenDailyCloseModal && onOpenDailyCloseModal('this_week')}
-                  className="px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                  className="hidden 2xl:flex px-2.5 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 text-xs font-bold transition-all items-center gap-1.5 whitespace-nowrap"
                   title="Cuadre y Cierre Semanal de Caja (Lunes a Domingo)"
                 >
-                  <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                  <Calendar className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                   <span>Semanal</span>
                 </button>
               )}
 
               <button
                 onClick={onOpenWhatsAppModal}
-                className="px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-emerald-400 border border-dark-700 text-xs font-bold transition-all flex items-center gap-1.5"
+                className="hidden lg:flex px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-300 hover:text-emerald-400 border border-dark-700 text-xs font-bold transition-all items-center gap-1.5 whitespace-nowrap"
                 title="Cierre por WhatsApp"
               >
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>Cierre WA</span>
               </button>
 
               {allowCashierExpenses && (
                 <button
                   onClick={onOpenExpenseModal}
-                  className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all flex items-center gap-1"
+                  className="flex px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-xs font-bold transition-all items-center gap-1 whitespace-nowrap"
                   title="Anotar gasto de caja"
                 >
-                  <Minus className="w-3.5 h-3.5 stroke-[3]" />
+                  <Minus className="w-3.5 h-3.5 stroke-[3] shrink-0" />
                   <span>Gasto</span>
                 </button>
               )}
@@ -263,24 +265,24 @@ export default function Navbar({
             {/* Principal CTA: ANOTAR COBRO (El rey de la interfaz) */}
             <button
               onClick={onOpenCashModal}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black font-black text-xs shadow-lg shadow-gold-500/20 active:scale-95 transition-all whitespace-nowrap shrink-0"
             >
-              <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span className="hidden sm:inline">ANOTAR COBRO</span>
-              <span className="sm:hidden">Cobro</span>
+              <Plus className="w-3.5 h-3.5 stroke-[3] shrink-0" />
+              <span className="hidden 2xl:inline">ANOTAR COBRO</span>
+              <span className="2xl:hidden">Cobro</span>
             </button>
 
             {/* Mobile Hamburger Menu Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-slate-300 hover:text-white transition-colors"
+              className="md:hidden p-2 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700 text-slate-300 hover:text-white transition-colors shrink-0"
               title="Más opciones"
             >
               <Menu className="w-4 h-4" />
             </button>
 
             {/* Desktop Settings & Logout */}
-            <div className="hidden md:flex items-center gap-1 border-l border-dark-800 pl-2">
+            <div className="hidden md:flex items-center gap-1 border-l border-dark-800 pl-2 shrink-0">
               {!isCashierMode && (
                 <button
                   onClick={onOpenSettingsModal}
@@ -304,7 +306,7 @@ export default function Navbar({
       </header>
 
       {/* BARRA DE NAVEGACIÓN INFERIOR MÓVIL (Estilo iOS / Nubank / Linear) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-2xl border-t border-dark-800/90 px-2 py-1.5 flex items-center justify-around shadow-2xl">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-dark-900/95 backdrop-blur-2xl border-t border-dark-800/90 px-2 pt-1.5 pb-safe-nav flex items-center justify-around shadow-2xl">
         {[
           { id: 'dashboard', label: 'Caja', icon: TrendingUp },
           { id: 'appointments', label: 'Turnos', icon: Calendar },
@@ -351,7 +353,7 @@ export default function Navbar({
             className="flex-1"
             onClick={() => setIsMoreSheetOpen(false)} 
           />
-          <div className="bg-dark-900 border-t border-dark-750 rounded-t-3xl p-5 shadow-2xl space-y-4 animate-slideUp max-h-[80vh] overflow-y-auto">
+          <div className="bg-dark-900 border-t border-dark-750 rounded-t-3xl px-5 pt-5 pb-safe-sheet shadow-2xl space-y-4 animate-slideUp max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-dark-800">
               <div className="flex items-center gap-2">
                 <span className="w-8 h-1 bg-dark-700 rounded-full mx-auto block mb-1" />
@@ -438,7 +440,7 @@ export default function Navbar({
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/80 backdrop-blur-sm animate-fadeIn">
           <div className="flex-1" onClick={() => setIsMobileMenuOpen(false)} />
-          <div className="w-full max-w-xs bg-dark-900 border-l border-dark-800 h-full p-5 flex flex-col justify-between shadow-2xl animate-slideLeft overflow-y-auto">
+          <div className="w-full max-w-xs bg-dark-900 border-l border-dark-800 h-full px-5 pt-safe-drawer flex flex-col justify-between shadow-2xl animate-slideLeft overflow-y-auto">
             <div className="space-y-4">
               {/* Header Drawer */}
               <div className="flex items-center justify-between pb-3 border-b border-dark-800">

@@ -636,7 +636,7 @@ export default function SuperAdminView({
     <div className="min-h-screen bg-dark-950 text-slate-100 pb-16 font-sans">
       
       {/* Top Admin Header */}
-      <header className="sticky top-0 z-40 bg-dark-900/95 backdrop-blur-md border-b border-purple-500/30 px-4 py-3.5">
+      <header className="sticky top-0 z-40 bg-dark-900/95 backdrop-blur-md border-b border-purple-500/30 px-4 pt-safe-header-lg pb-3.5">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-xl bg-purple-500/15 border border-purple-500/40 text-purple-400">
