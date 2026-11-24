@@ -44,9 +44,18 @@ import {
   getCashierLoginSession,
   setCashierLoginSession,
   clearCashierLoginSession,
-  getAllCashiersFromStaffByNiche,
-  filterDeletedStaffByNiche
+  getAllCashiersFromStaffByNiche
 } from './lib/securityUtils'
+import {
+  createEmptyDeletedIds,
+  normalizeDeletedIds,
+  mergeDeletedIds,
+  addDeletedIds,
+  removeDeletedIds,
+  areDeletedIdsEqual,
+  mergeEntityList,
+  filterDeletedByNiche
+} from './lib/workspaceSync'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -243,6 +252,14 @@ export default function App() {
     return null
   }
   const initWs = getInitialWorkspace()
+  const initDeletedIds = normalizeDeletedIds(initWs)
+
+  // Unified tombstone map for all collections so deleted items never resurrect across sync/polling
+  const [deletedIds, setDeletedIds] = useState(initDeletedIds)
+  const deletedIdsRef = useRef(deletedIds)
+  useEffect(() => { deletedIdsRef.current = deletedIds }, [deletedIds])
+
+  const configUpdatedAtRef = useRef(Number(initWs?.configUpdatedAt) || 0)
 
   // Local-first persistent state (reads from scoped tenant workspace if present)
   const [exchangeRate, setExchangeRate] = useState(() => {
@@ -256,7 +273,7 @@ export default function App() {
   // Editable Staff, Services, and Products per Niche
   const [staffByNiche, setStaffByNiche] = useState(() => {
     if (initWs && initWs.staffByNiche) {
-      return filterDeletedStaffByNiche(initWs.staffByNiche, initWs.deletedStaffIds || [])
+      return filterDeletedByNiche(initWs.staffByNiche, initDeletedIds.staff)
     }
     const saved = localStorage.getItem('barber_staff_by_niche')
     return saved ? JSON.parse(saved) : {
@@ -267,7 +284,9 @@ export default function App() {
   })
 
   const [servicesByNiche, setServicesByNiche] = useState(() => {
-    if (initWs && initWs.servicesByNiche) return initWs.servicesByNiche
+    if (initWs && initWs.servicesByNiche) {
+      return filterDeletedByNiche(initWs.servicesByNiche, initDeletedIds.services)
+    }
     const saved = localStorage.getItem('barber_services_by_niche')
     return saved ? JSON.parse(saved) : {
       barberia: NICHES.barberia.services,
@@ -277,7 +296,9 @@ export default function App() {
   })
 
   const [productsByNiche, setProductsByNiche] = useState(() => {
-    if (initWs && initWs.productsByNiche) return initWs.productsByNiche
+    if (initWs && initWs.productsByNiche) {
+      return filterDeletedByNiche(initWs.productsByNiche, initDeletedIds.products)
+    }
     const saved = localStorage.getItem('barber_products_by_niche')
     return saved ? JSON.parse(saved) : {
       barberia: NICHES.barberia.products,
@@ -285,30 +306,6 @@ export default function App() {
       mixto: NICHES.mixto.products
     }
   })
-
-  // Track explicitly deleted IDs (transactions, appointments, staff) so server merge/polling never resurrects them
-  const [deletedTxIds, setDeletedTxIds] = useState(() => {
-    if (initWs && Array.isArray(initWs.deletedTxIds)) return initWs.deletedTxIds
-    return []
-  })
-  const deletedTxIdsRef = useRef(deletedTxIds)
-  useEffect(() => { deletedTxIdsRef.current = deletedTxIds }, [deletedTxIds])
-
-  const [deletedAppointmentIds, setDeletedAppointmentIds] = useState(() => {
-    if (initWs && Array.isArray(initWs.deletedAppointmentIds)) return initWs.deletedAppointmentIds
-    return []
-  })
-  const deletedAppointmentIdsRef = useRef(deletedAppointmentIds)
-  useEffect(() => { deletedAppointmentIdsRef.current = deletedAppointmentIds }, [deletedAppointmentIds])
-
-  const [deletedStaffIds, setDeletedStaffIds] = useState(() => {
-    if (initWs && Array.isArray(initWs.deletedStaffIds)) return initWs.deletedStaffIds
-    return []
-  })
-  const deletedStaffIdsRef = useRef(deletedStaffIds)
-  useEffect(() => { deletedStaffIdsRef.current = deletedStaffIds }, [deletedStaffIds])
-
-  const configUpdatedAtRef = useRef(Number(initWs?.configUpdatedAt) || 0)
 
   // Guard: never POST workspace to server until initial GET /api/workspace/:id has completed for the active tenant
   const serverSyncReadyRef = useRef(false)
@@ -320,7 +317,10 @@ export default function App() {
     if (isDemo && (!initWs || !Array.isArray(initWs.transactions) || initWs.transactions.length < 15)) {
       return INITIAL_TRANSACTIONS
     }
-    if (initWs && Array.isArray(initWs.transactions)) return initWs.transactions
+    if (initWs && Array.isArray(initWs.transactions)) {
+      const delSet = new Set(initDeletedIds.transactions)
+      return initWs.transactions.filter(t => t && !delSet.has(t.id))
+    }
     const saved = localStorage.getItem('barber_transactions')
     return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS
   })
@@ -331,7 +331,10 @@ export default function App() {
     if (isDemo && (!initWs || !Array.isArray(initWs.clients) || initWs.clients.length === 0)) {
       return INITIAL_CLIENTS
     }
-    if (initWs && Array.isArray(initWs.clients)) return initWs.clients
+    if (initWs && Array.isArray(initWs.clients)) {
+      const delSet = new Set(initDeletedIds.clients)
+      return initWs.clients.filter(c => c && !delSet.has(c.id))
+    }
     const saved = localStorage.getItem('barber_clients_v2')
     return saved ? JSON.parse(saved) : INITIAL_CLIENTS
   })
@@ -343,8 +346,8 @@ export default function App() {
       return INITIAL_APPOINTMENTS
     }
     if (initWs && Array.isArray(initWs.appointments)) {
-      const initDelApts = new Set(Array.isArray(initWs.deletedAppointmentIds) ? initWs.deletedAppointmentIds : [])
-      return initWs.appointments.filter(a => a && !initDelApts.has(a.id))
+      const delSet = new Set(initDeletedIds.appointments)
+      return initWs.appointments.filter(a => a && !delSet.has(a.id))
     }
     const saved = localStorage.getItem('barber_appointments')
     return saved ? JSON.parse(saved) : INITIAL_APPOINTMENTS
@@ -581,9 +584,10 @@ export default function App() {
     const ws = {
       currentNiche,
       transactions,
-      deletedTxIds,
-      deletedAppointmentIds,
-      deletedStaffIds,
+      deletedIds,
+      deletedTxIds: deletedIds.transactions,
+      deletedAppointmentIds: deletedIds.appointments,
+      deletedStaffIds: deletedIds.staff,
       configUpdatedAt: configUpdatedAtRef.current,
       clients,
       appointments,
@@ -627,13 +631,14 @@ export default function App() {
     }, 500)
 
     return () => clearTimeout(timeout)
-  }, [activeTenantId, currentNiche, transactions, deletedTxIds, deletedAppointmentIds, deletedStaffIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings, auditLogs])
+  }, [activeTenantId, currentNiche, transactions, deletedIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings, auditLogs])
 
   // Auto-reconstruct historical transactions from client visit history if wiped by legacy reset button
   useEffect(() => {
     if (!activeTenantId || activeTenantId === 'ten_1' || !Array.isArray(clients) || clients.length === 0) return
 
-    const delSet = new Set(Array.isArray(deletedTxIds) ? deletedTxIds : [])
+    const delSet = new Set(Array.isArray(deletedIds?.transactions) ? deletedIds.transactions : [])
+    const delClientSet = new Set(Array.isArray(deletedIds?.clients) ? deletedIds.clients : [])
     const rate = Number(exchangeRate) || 889.26
     const allServices = [
       ...((servicesByNiche && servicesByNiche.barberia) || []),
@@ -651,7 +656,7 @@ export default function App() {
       const recoveredTxs = []
 
       for (const c of clients) {
-        if (!c || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
+        if (!c || delClientSet.has(c.id) || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
         if (activeTenantId === 'ten_1793499033884' && c.last_staff === 'Agenda Web') continue
 
         const recId = 'rec_' + c.id
@@ -740,9 +745,14 @@ export default function App() {
       if (recoveredTxs.length === 0) return prev
       return [...existingTxs, ...recoveredTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
     })
-  }, [activeTenantId, clients, deletedTxIds, servicesByNiche, staffByNiche, exchangeRate])
+  }, [activeTenantId, clients, deletedIds, servicesByNiche, staffByNiche, exchangeRate])
 
-  // Real-time auto-sync for active barber: polls for new web bookings and restored server transactions without overwriting local changes
+  const isSameRefList = (merged, prevList) =>
+    Array.isArray(prevList) &&
+    merged.length === prevList.length &&
+    merged.every((item, idx) => item === prevList[idx])
+
+  // Real-time auto-sync for active barber: unified timestamp + tombstone merge without overwriting local changes
   useEffect(() => {
     if (!activeTenantId || isPublicPreview) return
 
@@ -753,80 +763,48 @@ export default function App() {
           const data = await res.json()
           if (data && data.workspace) {
             const ws = data.workspace
-            const serverDelIds = Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : []
-            const allDelTxIds = Array.from(new Set([...(deletedTxIdsRef.current || []), ...serverDelIds]))
-            if (allDelTxIds.length > (deletedTxIdsRef.current || []).length) {
-              deletedTxIdsRef.current = allDelTxIds
-              setDeletedTxIds(allDelTxIds)
-            }
-
-            const serverDelAptIds = Array.isArray(ws.deletedAppointmentIds) ? ws.deletedAppointmentIds : []
-            const allDelAptIds = Array.from(new Set([...(deletedAppointmentIdsRef.current || []), ...serverDelAptIds]))
-            if (allDelAptIds.length > (deletedAppointmentIdsRef.current || []).length) {
-              deletedAppointmentIdsRef.current = allDelAptIds
-              setDeletedAppointmentIds(allDelAptIds)
-            }
-            const delAptSet = new Set(allDelAptIds)
-
-            const serverDelStaffIds = Array.isArray(ws.deletedStaffIds) ? ws.deletedStaffIds : []
-            const allDelStaffIds = Array.from(new Set([...(deletedStaffIdsRef.current || []), ...serverDelStaffIds]))
-            if (allDelStaffIds.length > (deletedStaffIdsRef.current || []).length) {
-              deletedStaffIdsRef.current = allDelStaffIds
-              setDeletedStaffIds(allDelStaffIds)
+            const serverDeleted = normalizeDeletedIds(ws)
+            const mergedDel = mergeDeletedIds(deletedIdsRef.current, serverDeleted)
+            if (!areDeletedIdsEqual(deletedIdsRef.current, mergedDel)) {
+              deletedIdsRef.current = mergedDel
+              setDeletedIds(mergedDel)
             }
 
             if (Array.isArray(ws.appointments)) {
-              const serverApts = ws.appointments.filter(a => a && a.id && !delAptSet.has(a.id))
               setAppointments(prev => {
-                const cleanPrev = (prev || []).filter(a => a && !delAptSet.has(a.id))
-                const prevIds = new Set(cleanPrev.map(a => a.id))
-                const newIncoming = serverApts.filter(a => !prevIds.has(a.id))
-                if (newIncoming.length > 0 || cleanPrev.length !== (prev || []).length) {
-                  return [...newIncoming, ...cleanPrev]
-                }
-                return prev
+                const base = prev || []
+                const merged = mergeEntityList(ws.appointments, base, mergedDel.appointments, { preferIncomingOnTie: false })
+                return isSameRefList(merged, base) ? prev : merged
               })
             }
             if (Array.isArray(ws.clients)) {
-              const serverClients = ws.clients
               setClients(prev => {
-                const prevIds = new Set((prev || []).map(c => c.id))
-                const newIncomingClients = serverClients.filter(c => c && c.id && !prevIds.has(c.id))
-                if (newIncomingClients.length > 0) {
-                  return [...prev, ...newIncomingClients]
-                }
-                return prev
+                const base = prev || []
+                const merged = mergeEntityList(ws.clients, base, mergedDel.clients, { preferIncomingOnTie: false })
+                return isSameRefList(merged, base) ? prev : merged
               })
             }
             if (Array.isArray(ws.transactions)) {
-              const serverTxs = ws.transactions
-              const delTxSet = new Set(allDelTxIds)
               setTransactions(prev => {
-                const cleanPrev = (prev || []).filter(t => t && !delTxSet.has(t.id))
-                const prevIds = new Set(cleanPrev.map(t => t.id))
-                const newIncomingTxs = serverTxs.filter(t => t && t.id && !prevIds.has(t.id) && !delTxSet.has(t.id))
-                if (newIncomingTxs.length > 0 || cleanPrev.length !== (prev || []).length) {
-                  return [...cleanPrev, ...newIncomingTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
-                }
-                return prev
+                const base = prev || []
+                const merged = mergeEntityList(ws.transactions, base, mergedDel.transactions, {
+                  preferIncomingOnTie: false,
+                  sortFn: (a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)
+                })
+                return isSameRefList(merged, base) ? prev : merged
               })
             }
             if (Array.isArray(ws.dailyClosings)) {
-              const serverClosings = ws.dailyClosings
               setDailyClosings(prev => {
-                const prevIds = new Set((prev || []).map(c => c.id))
-                const newIncoming = serverClosings.filter(c => c && c.id && !prevIds.has(c.id))
-                if (newIncoming.length > 0) {
-                  return [...newIncoming, ...prev]
-                }
-                return prev
+                const base = prev || []
+                const merged = mergeEntityList(ws.dailyClosings, base, [], { preferIncomingOnTie: false })
+                return isSameRefList(merged, base) ? prev : merged
               })
             }
             if (Array.isArray(ws.auditLogs)) {
-              const serverAudits = ws.auditLogs
               setAuditLogs(prev => {
                 const prevIds = new Set((prev || []).map(l => l.id))
-                const newIncoming = serverAudits.filter(l => l && l.id && !prevIds.has(l.id))
+                const newIncoming = ws.auditLogs.filter(l => l && l.id && !prevIds.has(l.id))
                 if (newIncoming.length > 0) {
                   return [...newIncoming, ...(prev || [])].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
                 }
@@ -834,16 +812,16 @@ export default function App() {
               })
             }
 
-            // Hydrate config on initial load OR when another device pushed newer settings/staff (via configUpdatedAt)
+            // Hydrate config on initial load OR when another device pushed newer settings/staff/catalog (via configUpdatedAt)
             const serverConfigTs = Number(ws.configUpdatedAt) || 0
             const localConfigTs = Number(configUpdatedAtRef.current) || 0
             const shouldHydrateConfig = syncedTenantIdRef.current !== activeTenantId || serverConfigTs > localConfigTs
 
             if (shouldHydrateConfig) {
               if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
-              if (ws.staffByNiche) setStaffByNiche(filterDeletedStaffByNiche(ws.staffByNiche, allDelStaffIds))
-              if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
-              if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
+              if (ws.staffByNiche) setStaffByNiche(filterDeletedByNiche(ws.staffByNiche, mergedDel.staff))
+              if (ws.servicesByNiche) setServicesByNiche(filterDeletedByNiche(ws.servicesByNiche, mergedDel.services))
+              if (ws.productsByNiche) setProductsByNiche(filterDeletedByNiche(ws.productsByNiche, mergedDel.products))
               if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
                 setExchangeRate(Number(ws.exchangeRate))
               }
@@ -853,8 +831,16 @@ export default function App() {
               if (serverConfigTs > localConfigTs) {
                 configUpdatedAtRef.current = serverConfigTs
               }
-            } else if (allDelStaffIds.length > 0) {
-              setStaffByNiche(prev => filterDeletedStaffByNiche(prev, allDelStaffIds))
+            } else {
+              if (mergedDel.staff.length > 0) {
+                setStaffByNiche(prev => filterDeletedByNiche(prev, mergedDel.staff))
+              }
+              if (mergedDel.services.length > 0) {
+                setServicesByNiche(prev => filterDeletedByNiche(prev, mergedDel.services))
+              }
+              if (mergedDel.products.length > 0) {
+                setProductsByNiche(prev => filterDeletedByNiche(prev, mergedDel.products))
+              }
             }
           }
           syncedTenantIdRef.current = activeTenantId
@@ -1100,11 +1086,70 @@ export default function App() {
     }
   }
 
+  const LEGACY_DELETE_KEY_MAP = {
+    transactions: 'deletedTxIds',
+    appointments: 'deletedAppointmentIds',
+    staff: 'deletedStaffIds'
+  }
+
+  // Atomic tombstone deletion across all 6 collections + immediate VPS sync
+  const recordWorkspaceDeletion = (collection, ids, extraBody = {}) => {
+    const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean)
+    if (idList.length === 0) return
+    const nextDeleted = addDeletedIds(deletedIdsRef.current, collection, idList)
+    deletedIdsRef.current = nextDeleted
+    setDeletedIds(nextDeleted)
+    if (activeTenantId) {
+      const payload = {
+        deletedIds: { [collection]: idList },
+        ...extraBody
+      }
+      const legacyKey = LEGACY_DELETE_KEY_MAP[collection]
+      if (legacyKey) payload[legacyKey] = idList
+      fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {})
+    }
+  }
+
   // Clean workspace vs Load Demo workspace
   const handleClearAllWorkspaceData = () => {
+    const wipeAt = Date.now()
+    const curTxIds = (transactions || []).map(t => t && t.id).filter(Boolean)
+    const curAptIds = (appointments || []).map(a => a && a.id).filter(Boolean)
+    const curClientIds = (clients || []).map(c => c && c.id).filter(Boolean)
+
+    let nextDel = addDeletedIds(deletedIdsRef.current, 'transactions', curTxIds)
+    nextDel = addDeletedIds(nextDel, 'appointments', curAptIds)
+    nextDel = addDeletedIds(nextDel, 'clients', curClientIds)
+    deletedIdsRef.current = nextDel
+    setDeletedIds(nextDel)
+
     setTransactions([])
     setClients([])
     setAppointments([])
+
+    addAuditLog({
+      type: 'WORKSPACE_RESET',
+      summary: 'Caja, clientes y turnos reiniciados a cero (Modo Dueño)',
+      amountUsd: 0
+    })
+
+    if (activeTenantId) {
+      fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          explicitReset: true,
+          resetAt: wipeAt,
+          deletedIds: nextDel,
+          deletedTxIds: nextDel.transactions,
+          deletedAppointmentIds: nextDel.appointments
+        })
+      }).catch(() => {})
+    }
   }
 
   const handleLoadDemoWorkspaceData = () => {
@@ -1162,57 +1207,55 @@ export default function App() {
     setBusinessProfile(updater)
   }
 
-  // Staff CRUD (uses deletedStaffIds tombstones + configUpdatedAt so deleted staff never resurrects across devices)
+  // Staff CRUD
   const handleAddStaff = (newSt) => {
-    configUpdatedAtRef.current = Date.now()
-    if (newSt?.id && (deletedStaffIdsRef.current || []).includes(newSt.id)) {
-      const nextDel = (deletedStaffIdsRef.current || []).filter(d => d !== newSt.id)
-      deletedStaffIdsRef.current = nextDel
-      setDeletedStaffIds(nextDel)
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
+    if (newSt?.id && (deletedIdsRef.current?.staff || []).includes(newSt.id)) {
+      const nextDel = removeDeletedIds(deletedIdsRef.current, 'staff', [newSt.id])
+      deletedIdsRef.current = nextDel
+      setDeletedIds(nextDel)
     }
     setStaffByNiche(prev => ({
       ...prev,
-      [currentNiche]: [...(prev[currentNiche] || []), newSt]
+      [currentNiche]: [...(prev[currentNiche] || []), { ...newSt, updatedAt: nowTs }]
     }))
   }
 
   const handleUpdateStaff = (updatedSt) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
     setStaffByNiche(prev => ({
       ...prev,
-      [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSt.id ? updatedSt : s)
+      [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSt.id ? { ...updatedSt, updatedAt: nowTs } : s)
     }))
   }
 
   const handleDeleteStaff = (id) => {
     const nowTs = Date.now()
     configUpdatedAtRef.current = nowTs
-    if (id) {
-      const nextDel = Array.from(new Set([...(deletedStaffIdsRef.current || []), id]))
-      deletedStaffIdsRef.current = nextDel
-      setDeletedStaffIds(nextDel)
-      if (activeTenantId) {
-        fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deletedStaffIds: [id], configUpdatedAt: nowTs })
-        }).catch(() => {})
-      }
-    }
-    setStaffByNiche(prev => filterDeletedStaffByNiche(prev, [id]))
+    recordWorkspaceDeletion('staff', [id], { configUpdatedAt: nowTs })
+    setStaffByNiche(prev => filterDeletedByNiche(prev, [id]))
   }
 
   // Services CRUD
   const handleAddService = (newSvc) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
+    if (newSvc?.id && (deletedIdsRef.current?.services || []).includes(newSvc.id)) {
+      const nextDel = removeDeletedIds(deletedIdsRef.current, 'services', [newSvc.id])
+      deletedIdsRef.current = nextDel
+      setDeletedIds(nextDel)
+    }
     setServicesByNiche(prev => ({
       ...prev,
-      [currentNiche]: [newSvc, ...(prev[currentNiche] || [])]
+      [currentNiche]: [{ ...newSvc, updatedAt: nowTs }, ...(prev[currentNiche] || [])]
     }))
   }
 
   const handleUpdateService = (updatedSvc) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
     const existing = (servicesByNiche[currentNiche] || []).find(s => s.id === updatedSvc.id)
     if (existing && Number(existing.price_usd) !== Number(updatedSvc.price_usd)) {
       addAuditLog({
@@ -1224,12 +1267,13 @@ export default function App() {
     }
     setServicesByNiche(prev => ({
       ...prev,
-      [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSvc.id ? updatedSvc : s)
+      [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSvc.id ? { ...updatedSvc, updatedAt: nowTs } : s)
     }))
   }
 
   const handleDeleteService = (id) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
     const existing = (servicesByNiche[currentNiche] || []).find(s => s.id === id)
     if (existing) {
       addAuditLog({
@@ -1238,23 +1282,28 @@ export default function App() {
         amountUsd: existing.price_usd
       })
     }
-    setServicesByNiche(prev => ({
-      ...prev,
-      [currentNiche]: (prev[currentNiche] || []).filter(s => s.id !== id)
-    }))
+    recordWorkspaceDeletion('services', [id], { configUpdatedAt: nowTs })
+    setServicesByNiche(prev => filterDeletedByNiche(prev, [id]))
   }
 
   // Products CRUD
   const handleAddProduct = (newProd) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
+    if (newProd?.id && (deletedIdsRef.current?.products || []).includes(newProd.id)) {
+      const nextDel = removeDeletedIds(deletedIdsRef.current, 'products', [newProd.id])
+      deletedIdsRef.current = nextDel
+      setDeletedIds(nextDel)
+    }
     setProductsByNiche(prev => ({
       ...prev,
-      [currentNiche]: [newProd, ...(prev[currentNiche] || [])]
+      [currentNiche]: [{ ...newProd, updatedAt: nowTs }, ...(prev[currentNiche] || [])]
     }))
   }
 
   const handleUpdateProduct = (updatedProd) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
     const existing = (productsByNiche[currentNiche] || []).find(p => p.id === updatedProd.id)
     if (existing && Number(existing.price_usd) !== Number(updatedProd.price_usd)) {
       addAuditLog({
@@ -1266,12 +1315,13 @@ export default function App() {
     }
     setProductsByNiche(prev => ({
       ...prev,
-      [currentNiche]: (prev[currentNiche] || []).map(p => p.id === updatedProd.id ? updatedProd : p)
+      [currentNiche]: (prev[currentNiche] || []).map(p => p.id === updatedProd.id ? { ...updatedProd, updatedAt: nowTs } : p)
     }))
   }
 
   const handleDeleteProduct = (id) => {
-    configUpdatedAtRef.current = Date.now()
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
     const existing = (productsByNiche[currentNiche] || []).find(p => p.id === id)
     if (existing) {
       addAuditLog({
@@ -1280,10 +1330,8 @@ export default function App() {
         amountUsd: existing.price_usd
       })
     }
-    setProductsByNiche(prev => ({
-      ...prev,
-      [currentNiche]: (prev[currentNiche] || []).filter(p => p.id !== id)
-    }))
+    recordWorkspaceDeletion('products', [id], { configUpdatedAt: nowTs })
+    setProductsByNiche(prev => filterDeletedByNiche(prev, [id]))
   }
 
   const fetchTenantWorkspace = async (tid) => {
@@ -1294,62 +1342,33 @@ export default function App() {
         const data = await res.json()
         if (data.workspace) {
           const ws = data.workspace
-          const serverDelIds = Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : []
-          const allDelTxIds = Array.from(new Set([...(deletedTxIdsRef.current || []), ...serverDelIds]))
-          if (allDelTxIds.length > (deletedTxIdsRef.current || []).length) {
-            deletedTxIdsRef.current = allDelTxIds
-            setDeletedTxIds(allDelTxIds)
-          }
-
-          const serverDelAptIds = Array.isArray(ws.deletedAppointmentIds) ? ws.deletedAppointmentIds : []
-          const allDelAptIds = Array.from(new Set([...(deletedAppointmentIdsRef.current || []), ...serverDelAptIds]))
-          if (allDelAptIds.length > (deletedAppointmentIdsRef.current || []).length) {
-            deletedAppointmentIdsRef.current = allDelAptIds
-            setDeletedAppointmentIds(allDelAptIds)
-          }
-          const delAptSet = new Set(allDelAptIds)
-
-          const serverDelStaffIds = Array.isArray(ws.deletedStaffIds) ? ws.deletedStaffIds : []
-          const allDelStaffIds = Array.from(new Set([...(deletedStaffIdsRef.current || []), ...serverDelStaffIds]))
-          if (allDelStaffIds.length > (deletedStaffIdsRef.current || []).length) {
-            deletedStaffIdsRef.current = allDelStaffIds
-            setDeletedStaffIds(allDelStaffIds)
+          const serverDeleted = normalizeDeletedIds(ws)
+          const mergedDel = mergeDeletedIds(deletedIdsRef.current, serverDeleted)
+          if (!areDeletedIdsEqual(deletedIdsRef.current, mergedDel)) {
+            deletedIdsRef.current = mergedDel
+            setDeletedIds(mergedDel)
           }
 
           if (Array.isArray(ws.transactions)) {
-            const delTxSet = new Set(allDelTxIds)
-            setTransactions(prev => {
-              const localList = Array.isArray(prev) ? prev : []
-              const serverIds = new Set(ws.transactions.map(t => t && t.id).filter(Boolean))
-              const localOnly = localList.filter(t => t && t.id && !serverIds.has(t.id) && !delTxSet.has(t.id))
-              return [...ws.transactions, ...localOnly]
-                .filter(t => t && !delTxSet.has(t.id))
-                .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
-            })
+            setTransactions(prev => mergeEntityList(ws.transactions, prev || [], mergedDel.transactions, {
+              preferIncomingOnTie: false,
+              sortFn: (a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)
+            }))
           }
           if (Array.isArray(ws.clients)) {
-            setClients(prev => {
-              const localList = Array.isArray(prev) ? prev : []
-              const serverIds = new Set(ws.clients.map(c => c && c.id).filter(Boolean))
-              const localOnly = localList.filter(c => c && c.id && !serverIds.has(c.id))
-              return [...ws.clients, ...localOnly]
-            })
+            setClients(prev => mergeEntityList(ws.clients, prev || [], mergedDel.clients, {
+              preferIncomingOnTie: false
+            }))
           }
           if (Array.isArray(ws.appointments)) {
-            setAppointments(prev => {
-              const localList = Array.isArray(prev) ? prev : []
-              const serverIds = new Set(ws.appointments.map(a => a && a.id).filter(Boolean))
-              const localOnly = localList.filter(a => a && a.id && !serverIds.has(a.id) && !delAptSet.has(a.id))
-              return [...ws.appointments, ...localOnly].filter(a => a && !delAptSet.has(a.id))
-            })
+            setAppointments(prev => mergeEntityList(ws.appointments, prev || [], mergedDel.appointments, {
+              preferIncomingOnTie: false
+            }))
           }
           if (Array.isArray(ws.dailyClosings)) {
-            setDailyClosings(prev => {
-              const localList = Array.isArray(prev) ? prev : []
-              const serverIds = new Set(ws.dailyClosings.map(c => c && c.id).filter(Boolean))
-              const localOnly = localList.filter(c => c && c.id && !serverIds.has(c.id))
-              return [...ws.dailyClosings, ...localOnly]
-            })
+            setDailyClosings(prev => mergeEntityList(ws.dailyClosings, prev || [], [], {
+              preferIncomingOnTie: false
+            }))
           }
           if (Array.isArray(ws.auditLogs)) {
             setAuditLogs(prev => {
@@ -1360,9 +1379,9 @@ export default function App() {
             })
           }
           if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
-          if (ws.staffByNiche) setStaffByNiche(filterDeletedStaffByNiche(ws.staffByNiche, allDelStaffIds))
-          if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
-          if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
+          if (ws.staffByNiche) setStaffByNiche(filterDeletedByNiche(ws.staffByNiche, mergedDel.staff))
+          if (ws.servicesByNiche) setServicesByNiche(filterDeletedByNiche(ws.servicesByNiche, mergedDel.services))
+          if (ws.productsByNiche) setProductsByNiche(filterDeletedByNiche(ws.productsByNiche, mergedDel.products))
           if (ws.currentNiche && NICHES[ws.currentNiche] && !getCashierLoginSession(tid)) setCurrentNiche(ws.currentNiche)
           if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
             setExchangeRate(Number(ws.exchangeRate))
@@ -1430,21 +1449,17 @@ export default function App() {
           syncedTenantIdRef.current = tenant.id
           serverSyncReadyRef.current = true
         } else {
-          const localDelTx = Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds : []
-          const localDelApts = Array.isArray(parsed.deletedAppointmentIds) ? parsed.deletedAppointmentIds : []
-          const localDelStaff = Array.isArray(parsed.deletedStaffIds) ? parsed.deletedStaffIds : []
-          const delAptSet = new Set(localDelApts)
+          const localDeleted = normalizeDeletedIds(parsed)
+          const delTxSet = new Set(localDeleted.transactions)
+          const delClientSet = new Set(localDeleted.clients)
+          const delAptSet = new Set(localDeleted.appointments)
 
-          deletedTxIdsRef.current = localDelTx
-          deletedAppointmentIdsRef.current = localDelApts
-          deletedStaffIdsRef.current = localDelStaff
+          deletedIdsRef.current = localDeleted
           configUpdatedAtRef.current = Number(parsed.configUpdatedAt) || 0
 
-          setTransactions(Array.isArray(parsed.transactions) ? parsed.transactions : [])
-          setDeletedTxIds(localDelTx)
-          setDeletedAppointmentIds(localDelApts)
-          setDeletedStaffIds(localDelStaff)
-          setClients(Array.isArray(parsed.clients) ? parsed.clients : [])
+          setDeletedIds(localDeleted)
+          setTransactions(Array.isArray(parsed.transactions) ? parsed.transactions.filter(t => t && !delTxSet.has(t.id)) : [])
+          setClients(Array.isArray(parsed.clients) ? parsed.clients.filter(c => c && !delClientSet.has(c.id)) : [])
           setAppointments(Array.isArray(parsed.appointments) ? parsed.appointments.filter(a => a && !delAptSet.has(a.id)) : [])
           setDailyClosings(Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [])
           setAuditLogs(Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [])
@@ -1458,9 +1473,9 @@ export default function App() {
             setIsCashierMode(Boolean(parsedSec.enabled && getDeviceForceCashier(tenant.id)))
             setActiveOperator(null)
           }
-          if (parsed.staffByNiche) setStaffByNiche(filterDeletedStaffByNiche(parsed.staffByNiche, localDelStaff))
-          if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
-          if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
+          if (parsed.staffByNiche) setStaffByNiche(filterDeletedByNiche(parsed.staffByNiche, localDeleted.staff))
+          if (parsed.servicesByNiche) setServicesByNiche(filterDeletedByNiche(parsed.servicesByNiche, localDeleted.services))
+          if (parsed.productsByNiche) setProductsByNiche(filterDeletedByNiche(parsed.productsByNiche, localDeleted.products))
           if (parsed.exchangeRate && !isNaN(Number(parsed.exchangeRate))) {
             setExchangeRate(Number(parsed.exchangeRate))
           }
@@ -1479,14 +1494,11 @@ export default function App() {
           serverSyncReadyRef.current = true
         } else {
           // Clear previous tenant's in-memory arrays before pulling target tenant from server
-          deletedTxIdsRef.current = []
-          deletedAppointmentIdsRef.current = []
-          deletedStaffIdsRef.current = []
+          const emptyDel = createEmptyDeletedIds()
+          deletedIdsRef.current = emptyDel
           configUpdatedAtRef.current = 0
+          setDeletedIds(emptyDel)
           setTransactions([])
-          setDeletedTxIds([])
-          setDeletedAppointmentIds([])
-          setDeletedStaffIds([])
           setClients([])
           setAppointments([])
           setDailyClosings([])
@@ -1508,14 +1520,11 @@ export default function App() {
         syncedTenantIdRef.current = tenant.id
         serverSyncReadyRef.current = true
       } else {
-        deletedTxIdsRef.current = []
-        deletedAppointmentIdsRef.current = []
-        deletedStaffIdsRef.current = []
+        const emptyDel = createEmptyDeletedIds()
+        deletedIdsRef.current = emptyDel
         configUpdatedAtRef.current = 0
+        setDeletedIds(emptyDel)
         setTransactions([])
-        setDeletedTxIds([])
-        setDeletedAppointmentIds([])
-        setDeletedStaffIds([])
         setClients([])
         setAppointments([])
         setDailyClosings([])
@@ -1561,6 +1570,7 @@ export default function App() {
     const freshConfigTs = Date.now()
     const freshWorkspace = {
       transactions: [],
+      deletedIds: createEmptyDeletedIds(),
       deletedTxIds: [],
       deletedAppointmentIds: [],
       deletedStaffIds: [],
@@ -1595,14 +1605,11 @@ export default function App() {
     try {
       localStorage.setItem(`barber_ws_${newTenant.id}`, JSON.stringify(freshWorkspace))
     } catch (e) {}
-    deletedTxIdsRef.current = []
-    deletedAppointmentIdsRef.current = []
-    deletedStaffIdsRef.current = []
+    const emptyDel = createEmptyDeletedIds()
+    deletedIdsRef.current = emptyDel
     configUpdatedAtRef.current = freshConfigTs
+    setDeletedIds(emptyDel)
     setTransactions([])
-    setDeletedTxIds([])
-    setDeletedAppointmentIds([])
-    setDeletedStaffIds([])
     setClients([])
     setAppointments([])
     setDailyClosings([])
@@ -1807,22 +1814,31 @@ export default function App() {
     return days >= cycle
   }).length
 
-  // Clients CRUD
+  // Clients CRUD (timestamps + unified deletedIds.clients tombstones)
   const handleAddClient = (newClient) => {
-    setClients(prev => [newClient, ...prev])
+    const nowTs = Date.now()
+    if (newClient?.id && (deletedIdsRef.current?.clients || []).includes(newClient.id)) {
+      const nextDel = removeDeletedIds(deletedIdsRef.current, 'clients', [newClient.id])
+      deletedIdsRef.current = nextDel
+      setDeletedIds(nextDel)
+    }
+    setClients(prev => [{ ...newClient, updatedAt: nowTs }, ...prev])
   }
 
   const handleUpdateClient = (updatedClient) => {
-    setClients(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c))
+    const nowTs = Date.now()
+    setClients(prev => prev.map(c => c.id === updatedClient.id ? { ...updatedClient, updatedAt: nowTs } : c))
   }
 
   const handleDeleteClient = (clientId) => {
+    recordWorkspaceDeletion('clients', [clientId])
     setClients(prev => prev.filter(c => c.id !== clientId))
   }
 
   // Appointments CRUD
   const handleAddAppointment = async (newApt) => {
-    setAppointments(prev => [newApt, ...prev])
+    const nowTs = Date.now()
+    setAppointments(prev => [{ ...newApt, updatedAt: nowTs }, ...prev])
 
     if (newApt.client_name && newApt.client_name !== 'Cliente Mostrador') {
       setClients(prev => {
@@ -1830,11 +1846,12 @@ export default function App() {
         if (found) {
           return prev.map(c => c.id === found.id ? {
             ...c,
-            phone: newApt.client_phone || c.phone
+            phone: newApt.client_phone || c.phone,
+            updatedAt: nowTs
           } : c)
         } else {
           return [{
-            id: 'c_' + Date.now(),
+            id: 'c_' + nowTs,
             name: newApt.client_name,
             phone: newApt.client_phone || '+584120000000',
             debt_usd: 0,
@@ -1843,7 +1860,8 @@ export default function App() {
             last_service: newApt.service,
             last_staff: 'Agenda Web',
             cycle_days: retargetingConfig.defaultCycleDays || 15,
-            visits_count: 1
+            visits_count: 1,
+            updatedAt: nowTs
           }, ...prev]
         }
       })
@@ -1864,10 +1882,11 @@ export default function App() {
   }
 
   const handleToggleAppointmentStatus = (id, forcedStatus = null) => {
+    const nowTs = Date.now()
     setAppointments(prev => prev.map(a => {
       if (a.id === id) {
         const nextStatus = forcedStatus || (a.status === 'pendiente' ? 'en_atencion' : a.status === 'en_atencion' ? 'completada' : 'pendiente')
-        return { ...a, status: nextStatus }
+        return { ...a, status: nextStatus, updatedAt: nowTs }
       }
       return a
     }))
@@ -1885,24 +1904,15 @@ export default function App() {
   }
 
   const handleDeleteAppointment = (id) => {
-    if (id) {
-      const nextDel = Array.from(new Set([...(deletedAppointmentIdsRef.current || []), id]))
-      deletedAppointmentIdsRef.current = nextDel
-      setDeletedAppointmentIds(nextDel)
-      if (activeTenantId) {
-        fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deletedAppointmentIds: [id] })
-        }).catch(() => {})
-      }
-    }
+    recordWorkspaceDeletion('appointments', [id])
     setAppointments(prev => prev.filter(a => a.id !== id))
   }
 
   // Transactions CRUD
   const handleRegisterTransaction = async (newTx) => {
-    setTransactions(prev => [newTx, ...prev])
+    const nowTs = Date.now()
+    const stampedTx = { ...newTx, updatedAt: nowTs }
+    setTransactions(prev => [stampedTx, ...prev])
 
     // If this transaction came directly from an appointment, mark that appointment completed!
     if (newTx.appointment_id) {
@@ -1946,11 +1956,12 @@ export default function App() {
             last_visit: todayStr,
             last_service: newTx.item_name,
             last_staff: newTx.staff_name,
-            visits_count: (c.visits_count || 0) + 1
+            visits_count: (c.visits_count || 0) + 1,
+            updatedAt: nowTs
           } : c)
         } else {
           return [{
-            id: 'c_' + Date.now(),
+            id: 'c_' + nowTs,
             name: newTx.client_name,
             phone: newTx.client_phone || '+584120000000',
             debt_usd: addedDebt,
@@ -1959,7 +1970,8 @@ export default function App() {
             last_service: newTx.item_name,
             last_staff: newTx.staff_name,
             cycle_days: retargetingConfig.defaultCycleDays || 15,
-            visits_count: 1
+            visits_count: 1,
+            updatedAt: nowTs
           }, ...prev]
         }
       })
@@ -1997,7 +2009,8 @@ export default function App() {
       ...newExpense,
       registered_by_role: isCashierMode ? 'cajero' : 'dueno',
       registered_by_name: activeOperator?.name || (isCashierMode ? 'Cajero' : 'Dueño'),
-      registered_by_id: activeOperator?.id || null
+      registered_by_id: activeOperator?.id || null,
+      updatedAt: Date.now()
     }
     setTransactions(prev => [taggedExpense, ...prev])
 
@@ -2038,18 +2051,18 @@ export default function App() {
   }
 
   const handleDeleteTransaction = (txId) => {
-    if (txId) {
-      const nextDel = Array.from(new Set([...(deletedTxIdsRef.current || []), txId]))
-      deletedTxIdsRef.current = nextDel
-      setDeletedTxIds(nextDel)
-      if (activeTenantId) {
-        fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deletedTxIds: [txId] })
-        }).catch(() => {})
-      }
+    const idsToDelete = []
+    if (txId) idsToDelete.push(txId)
+    const targetTx = (transactions || []).find(t => t && t.id === txId)
+    if (targetTx && targetTx.client_name) {
+      const txDateIso = getLocalDateIso(targetTx.fecha)
+      ;(clients || []).forEach(c => {
+        if (c && c.id && c.name === targetTx.client_name && txDateIso && c.last_visit === txDateIso) {
+          idsToDelete.push('rec_' + c.id)
+        }
+      })
     }
+    recordWorkspaceDeletion('transactions', idsToDelete)
     setTransactions(prev => prev.filter(t => t.id !== txId))
   }
 
@@ -2100,21 +2113,23 @@ export default function App() {
   }
 
   const handleLiquidateStaff = (payoutTx, settledTxIds = [], settledValeIds = [], meta = {}) => {
-    const nowIso = new Date().toISOString()
+    const nowTs = Date.now()
+    const nowIso = new Date(nowTs).toISOString()
     const isCashierSettle = Boolean(meta && meta.isCashier)
+    const stampedPayout = { ...payoutTx, updatedAt: nowTs }
     setTransactions(prev => {
       const updated = prev.map(t => {
         if (settledTxIds.includes(t.id)) {
           return isCashierSettle
-            ? { ...t, cajero_comision_pagada: true, cajero_liquidado_at: nowIso, cajero_liquidado_pago_id: payoutTx.id }
-            : { ...t, comision_pagada: true, liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
+            ? { ...t, cajero_comision_pagada: true, cajero_liquidado_at: nowIso, cajero_liquidado_pago_id: payoutTx.id, updatedAt: nowTs }
+            : { ...t, comision_pagada: true, liquidado_at: nowIso, liquidado_pago_id: payoutTx.id, updatedAt: nowTs }
         }
         if (settledValeIds.includes(t.id)) {
-          return { ...t, status: 'liquidado', liquidado_at: nowIso, liquidado_pago_id: payoutTx.id }
+          return { ...t, status: 'liquidado', liquidado_at: nowIso, liquidado_pago_id: payoutTx.id, updatedAt: nowTs }
         }
         return t
       })
-      return [payoutTx, ...updated]
+      return [stampedPayout, ...updated]
     })
     addAuditLog({
       type: 'STAFF_LIQUIDATED',

@@ -2,6 +2,12 @@ import http from 'http'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import {
+  normalizeDeletedIds,
+  mergeDeletedIds,
+  mergeEntityList,
+  filterDeletedByNiche
+} from './src/lib/workspaceSync.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -543,11 +549,16 @@ const server = http.createServer(async (req, res) => {
 
 function reconstructWorkspaceTransactions(tenantId, ws) {
   if (!ws || typeof ws !== 'object' || tenantId === 'ten_1') return ws
-  const existingTxs = Array.isArray(ws.transactions) ? ws.transactions : []
-  const clientsList = Array.isArray(ws.clients) ? ws.clients : []
+  const normDeleted = normalizeDeletedIds(ws)
+  const deletedTxIds = new Set(normDeleted.transactions)
+  const deletedClientIds = new Set(normDeleted.clients)
+  const existingTxs = (Array.isArray(ws.transactions) ? ws.transactions : []).filter(
+    t => t && t.id && !deletedTxIds.has(t.id)
+  )
+  const clientsList = (Array.isArray(ws.clients) ? ws.clients : []).filter(
+    c => c && c.id && !deletedClientIds.has(c.id)
+  )
   if (clientsList.length === 0) return ws
-
-  const deletedTxIds = new Set(Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : [])
   const rate = Number(ws.exchangeRate) || 889.26
   const allServices = [
     ...((ws.servicesByNiche && ws.servicesByNiche.barberia) || []),
@@ -562,7 +573,7 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
 
   const recoveredTxs = []
   for (const c of clientsList) {
-    if (!c || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
+    if (!c || deletedClientIds.has(c.id) || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
     if (tenantId === 'ten_1793499033884' && c.last_staff === 'Agenda Web') continue
 
     const recId = 'rec_' + c.id
@@ -680,7 +691,8 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
     }
 
     const ws = db.workspaces[tenant.id] || {}
-    const deletedStaffSet = new Set(Array.isArray(ws.deletedStaffIds) ? ws.deletedStaffIds : [])
+    const normCashierDel = normalizeDeletedIds(ws)
+    const deletedStaffSet = new Set(normCashierDel.staff)
     const sbn = ws.staffByNiche || {}
     const order = []
     ;[ws.currentNiche || tenant.niche, 'barberia', 'estetica', 'mixto', ...Object.keys(sbn)].forEach(k => {
@@ -735,58 +747,10 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       const body = await parseBody(req)
       const currentWs = db.workspaces[tenantId] || {}
 
-      // Tombstones for intentionally deleted appointments (guarantees deleted appointments never resurrect)
-      const existingApts = Array.isArray(currentWs.appointments) ? currentWs.appointments : []
-      const deletedAptIds = new Set([
-        ...(Array.isArray(currentWs.deletedAppointmentIds) ? currentWs.deletedAppointmentIds : []),
-        ...(Array.isArray(body.deletedAppointmentIds) ? body.deletedAppointmentIds : [])
-      ])
-      let incomingApts = (Array.isArray(body.appointments) ? body.appointments : existingApts)
-        .filter(a => a && a.id && !deletedAptIds.has(a.id))
+      // Unified deletedIds tombstones across all 6 collections + legacy flat keys backward-compatibility
+      const mergedDeleted = mergeDeletedIds(currentWs, body)
 
-      // If a single new appointment is provided (e.g. from public client booking)
-      if (body.newAppointment && body.newAppointment.id && !deletedAptIds.has(body.newAppointment.id)) {
-        const exists = incomingApts.some(a => a.id === body.newAppointment.id)
-        if (!exists) {
-          incomingApts = [body.newAppointment, ...incomingApts]
-        }
-      }
-
-      // Merge: preserve any appointments existing on server that were not in incomingApts unless cancelled or deleted
-      const incomingIds = new Set(incomingApts.map(a => a.id))
-      const preservedApts = existingApts.filter(
-        a => a && a.id && !incomingIds.has(a.id) && a.status !== 'cancelada' && !deletedAptIds.has(a.id)
-      )
-      const finalAppointments = [...incomingApts, ...preservedApts].filter(
-        a => a && a.id && !deletedAptIds.has(a.id)
-      )
-
-      // Merge clients: preserve existing server clients if incoming has fewer
-      const existingClients = Array.isArray(currentWs.clients) ? currentWs.clients : []
-      const incomingClients = Array.isArray(body.clients) ? body.clients : existingClients
-      const incomingClientIds = new Set(incomingClients.map(c => c && c.id).filter(Boolean))
-      const preservedClients = existingClients.filter(c => c && c.id && !incomingClientIds.has(c.id))
-      const finalClients = [...incomingClients, ...preservedClients]
-
-      // Merge: preserve historical/restored transactions existing on server unless explicitly deleted
-      const existingTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
-      const incomingTxs = Array.isArray(body.transactions) ? body.transactions : existingTxs
-      const deletedTxIds = new Set([
-        ...(Array.isArray(currentWs.deletedTxIds) ? currentWs.deletedTxIds : []),
-        ...(Array.isArray(body.deletedTxIds) ? body.deletedTxIds : [])
-      ])
-      const incomingTxIds = new Set(incomingTxs.map(t => t && t.id).filter(Boolean))
-      const preservedTxs = existingTxs.filter(t => t && t.id && !incomingTxIds.has(t.id) && !deletedTxIds.has(t.id))
-      const finalTransactions = [...incomingTxs, ...preservedTxs].filter(t => t && !deletedTxIds.has(t.id))
-
-      // Merge dailyClosings
-      const existingClosings = Array.isArray(currentWs.dailyClosings) ? currentWs.dailyClosings : []
-      const incomingClosings = Array.isArray(body.dailyClosings) ? body.dailyClosings : existingClosings
-      const incomingClosingIds = new Set(incomingClosings.map(c => c && c.id).filter(Boolean))
-      const preservedClosings = existingClosings.filter(c => c && c.id && !incomingClosingIds.has(c.id))
-      const finalDailyClosings = [...incomingClosings, ...preservedClosings]
-
-      // Merge auditLogs strictly as append-only (tamper-proof: never deleted even if localStorage clears)
+      // Merge auditLogs strictly as append-only (tamper-proof: never deleted even on reset or localStorage clear)
       const existingAuditLogs = Array.isArray(currentWs.auditLogs) ? currentWs.auditLogs : []
       const incomingAuditLogs = Array.isArray(body.auditLogs) ? body.auditLogs : []
       const auditMap = new Map()
@@ -796,29 +760,102 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
         .slice(0, 2000)
 
-      // Tombstones for intentionally deleted staff + configUpdatedAt protection across multiple devices
-      const deletedStaffIdSet = new Set([
-        ...(Array.isArray(currentWs.deletedStaffIds) ? currentWs.deletedStaffIds : []),
-        ...(Array.isArray(body.deletedStaffIds) ? body.deletedStaffIds : [])
-      ])
-
-      const stripDeletedStaff = (sbn) => {
-        if (!sbn || typeof sbn !== 'object' || deletedStaffIdSet.size === 0) return sbn
-        const cleaned = {}
-        for (const k of Object.keys(sbn)) {
-          cleaned[k] = Array.isArray(sbn[k])
-            ? sbn[k].filter(s => s && !deletedStaffIdSet.has(s.id))
-            : sbn[k]
+      // Explicit Owner Reset ("Reiniciar Caja a 0") — tombstones wiped items so stale tabs never resurrect them
+      if (body && body.explicitReset === true) {
+        const curTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
+        const curApts = Array.isArray(currentWs.appointments) ? currentWs.appointments : []
+        const curClients = Array.isArray(currentWs.clients) ? currentWs.clients : []
+        const resetDeleted = mergeDeletedIds(mergedDeleted, {
+          deletedIds: {
+            transactions: curTxs.map(t => t && t.id).filter(Boolean),
+            appointments: curApts.map(a => a && a.id).filter(Boolean),
+            clients: curClients.map(c => c && c.id).filter(Boolean)
+          }
+        })
+        const resetWs = {
+          ...currentWs,
+          transactions: [],
+          appointments: [],
+          clients: [],
+          deletedIds: resetDeleted,
+          deletedTxIds: resetDeleted.transactions,
+          deletedAppointmentIds: resetDeleted.appointments,
+          deletedStaffIds: resetDeleted.staff,
+          auditLogs: finalAuditLogs,
+          lastResetAt: Number(body.resetAt) || Date.now(),
+          updatedAt: Date.now()
         }
-        return cleaned
+        db.workspaces[tenantId] = resetWs
+        saveDb()
+        return sendJson(res, 200, {
+          ok: true,
+          workspace: db.workspaces[tenantId]
+        })
       }
 
+      // 1. Appointments: merge by updatedAt + strictly exclude deleted & unreturned cancelled appointments
+      const existingApts = Array.isArray(currentWs.appointments) ? currentWs.appointments : []
+      const delAptSet = new Set(mergedDeleted.appointments)
+      let incomingApts = (Array.isArray(body.appointments) ? body.appointments : existingApts)
+        .filter(a => a && a.id && !delAptSet.has(a.id))
+
+      if (body.newAppointment && body.newAppointment.id && !delAptSet.has(body.newAppointment.id)) {
+        const exists = incomingApts.some(a => a.id === body.newAppointment.id)
+        if (!exists) {
+          incomingApts = [body.newAppointment, ...incomingApts]
+        }
+      }
+
+      const incomingAptIds = new Set(incomingApts.map(a => a.id))
+      const eligibleExistingApts = existingApts.filter(
+        a => a && a.id && !delAptSet.has(a.id) && (a.status !== 'cancelada' || incomingAptIds.has(a.id))
+      )
+      const finalAppointments = mergeEntityList(
+        incomingApts,
+        eligibleExistingApts,
+        mergedDeleted.appointments,
+        { preferIncomingOnTie: true }
+      )
+
+      // 2. Clients / Fiados / VIP: merge by updatedAt + enforce deletedIds.clients tombstones
+      const existingClients = Array.isArray(currentWs.clients) ? currentWs.clients : []
+      const incomingClients = Array.isArray(body.clients) ? body.clients : existingClients
+      const finalClients = mergeEntityList(
+        incomingClients,
+        existingClients,
+        mergedDeleted.clients,
+        { preferIncomingOnTie: true }
+      )
+
+      // 3. Transactions: merge by updatedAt + enforce deletedIds.transactions tombstones
+      const existingTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
+      const incomingTxs = Array.isArray(body.transactions) ? body.transactions : existingTxs
+      const finalTransactions = mergeEntityList(
+        incomingTxs,
+        existingTxs,
+        mergedDeleted.transactions,
+        {
+          preferIncomingOnTie: true,
+          sortFn: (a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0)
+        }
+      )
+
+      // 4. Daily closings
+      const existingClosings = Array.isArray(currentWs.dailyClosings) ? currentWs.dailyClosings : []
+      const incomingClosings = Array.isArray(body.dailyClosings) ? body.dailyClosings : existingClosings
+      const finalDailyClosings = mergeEntityList(
+        incomingClosings,
+        existingClosings,
+        [],
+        { preferIncomingOnTie: true }
+      )
+
+      // 5. Config & By-Niche collections (staff, services, products) with stale-device & tombstone protection
       const existingConfigTs = Number(currentWs.configUpdatedAt) || 0
       const incomingConfigTs = Number(body.configUpdatedAt) || 0
       const isOlderConfigFromStaleDevice =
         existingConfigTs > 0 && (incomingConfigTs === 0 || incomingConfigTs < existingConfigTs)
 
-      // Protect customized staff, services, profile, and exchangeRate against stale/empty browser tabs
       const isStaleEmptyPayload =
         (existingClients.length > 0 || existingTxs.length > 0) &&
         Array.isArray(body.clients) && body.clients.length === 0 &&
@@ -838,21 +875,22 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         (currentWs.staffByNiche && !isDefaultMockStaff(currentWs.staffByNiche) && isDefaultMockStaff(body.staffByNiche))
           ? currentWs.staffByNiche
           : (body.staffByNiche || currentWs.staffByNiche)
+      const finalStaffByNiche = filterDeletedByNiche(rawStaffByNiche, mergedDeleted.staff)
 
-      const finalStaffByNiche = stripDeletedStaff(rawStaffByNiche)
-
-      const finalServicesByNiche =
+      const rawServicesByNiche =
         (isOlderConfigFromStaleDevice && currentWs.servicesByNiche) ||
         (isStaleEmptyPayload && currentWs.servicesByNiche) ||
         (currentWs.servicesByNiche && !isDefaultMockServices(currentWs.servicesByNiche) && isDefaultMockServices(body.servicesByNiche))
           ? currentWs.servicesByNiche
           : (body.servicesByNiche || currentWs.servicesByNiche)
+      const finalServicesByNiche = filterDeletedByNiche(rawServicesByNiche, mergedDeleted.services)
 
-      const finalProductsByNiche =
+      const rawProductsByNiche =
         (isOlderConfigFromStaleDevice && currentWs.productsByNiche) ||
         (isStaleEmptyPayload && currentWs.productsByNiche)
           ? currentWs.productsByNiche
           : (body.productsByNiche || currentWs.productsByNiche)
+      const finalProductsByNiche = filterDeletedByNiche(rawProductsByNiche, mergedDeleted.products)
 
       const finalBusinessProfile =
         (isOlderConfigFromStaleDevice && currentWs.businessProfile) ||
@@ -879,10 +917,11 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         exchangeRate: finalExchangeRate,
         clients: finalClients,
         transactions: finalTransactions,
-        deletedTxIds: Array.from(deletedTxIds),
         appointments: finalAppointments,
-        deletedAppointmentIds: Array.from(deletedAptIds),
-        deletedStaffIds: Array.from(deletedStaffIdSet),
+        deletedIds: mergedDeleted,
+        deletedTxIds: mergedDeleted.transactions,
+        deletedAppointmentIds: mergedDeleted.appointments,
+        deletedStaffIds: mergedDeleted.staff,
         configUpdatedAt: Math.max(existingConfigTs, incomingConfigTs),
         dailyClosings: finalDailyClosings,
         auditLogs: finalAuditLogs,

@@ -449,18 +449,20 @@ export default function DebtsClientsView({
                       <Pencil className="w-3.5 h-3.5" />
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (window.confirm(`¿Eliminar a ${c.name} de la lista de clientes?`)) {
-                          onDeleteClient(c.id)
-                        }
-                      }}
-                      className="p-2 rounded-2xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-all active:scale-95"
-                      title="Eliminar cliente"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {onDeleteClient && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`¿Eliminar a ${c.name} de la lista de clientes?`)) {
+                            onDeleteClient(c.id)
+                          }
+                        }}
+                        className="p-2 rounded-2xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-all active:scale-95"
+                        title="Eliminar cliente"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                 </div>
