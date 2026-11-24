@@ -217,7 +217,7 @@ export function normalizeTimeSlot(rawTime) {
   if (!rawTime || typeof rawTime !== 'string') return ''
   let clean = rawTime.trim().toUpperCase()
 
-  // Match 12-hour: H:MM or HH:MM followed optionally by AM/PM
+  // Match 12-hour or 24-hour: H:MM or HH:MM followed optionally by AM/PM
   const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/)
   if (match12) {
     let hours = parseInt(match12[1], 10)
@@ -226,13 +226,24 @@ export function normalizeTimeSlot(rawTime) {
 
     if (ampm) {
       return `${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`
-    } else {
-      // 24-hour format: e.g. 14:00 or 09:00 without AM/PM
-      const period = hours >= 12 ? 'PM' : 'AM'
-      if (hours > 12) hours -= 12
-      if (hours === 0) hours = 12
-      return `${hours.toString().padStart(2, '0')}:${minutes} ${period}`
     }
+    if (hours === 0) {
+      return `12:${minutes} AM`
+    }
+    // Business-hours heuristic when AM/PM is omitted: 1:00..6:59 means afternoon (PM)
+    if (hours >= 1 && hours <= 6) {
+      return `${hours.toString().padStart(2, '0')}:${minutes} PM`
+    }
+    if (hours >= 7 && hours <= 11) {
+      return `${hours.toString().padStart(2, '0')}:${minutes} AM`
+    }
+    if (hours === 12) {
+      return `12:${minutes} PM`
+    }
+    if (hours >= 13 && hours <= 23) {
+      return `${(hours - 12).toString().padStart(2, '0')}:${minutes} PM`
+    }
+    return `${hours.toString().padStart(2, '0')}:${minutes} AM`
   }
 
   return clean

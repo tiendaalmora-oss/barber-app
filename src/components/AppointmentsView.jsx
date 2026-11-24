@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, Settings, DollarSign, Sparkles, AlertCircle, Clock3 } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes } from '../lib/dateUtils'
 import { getOperativeStaff } from '../lib/securityUtils'
@@ -28,6 +28,35 @@ export default function AppointmentsView({
   const [newTime, setNewTime] = useState('03:00 PM')
   const [newStaff, setNewStaff] = useState(operativeStaff[0]?.id || '')
   const [newService, setNewService] = useState(nicheData?.services?.[0]?.name || '')
+
+  // Keep selected staff & service synced when team/catalog loads or changes
+  useEffect(() => {
+    if (operativeStaff.length > 0 && !operativeStaff.some(s => s.id === newStaff)) {
+      setNewStaff(operativeStaff[0].id)
+    }
+  }, [operativeStaff, newStaff])
+
+  useEffect(() => {
+    const services = nicheData?.services || []
+    if (services.length > 0 && !services.some(s => s.name === newService)) {
+      setNewService(services[0].name)
+    }
+  }, [nicheData?.services, newService])
+
+  const getEffectivePeriod = (rawTime) => {
+    const norm = normalizeTimeSlot(rawTime)
+    return /\bAM$/i.test(norm) ? 'AM' : 'PM'
+  }
+
+  const applyPeriodToTime = (rawTime, period) => {
+    const norm = normalizeTimeSlot(rawTime) || '03:00 PM'
+    const m = norm.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+    if (m) {
+      return `${m[1].padStart(2, '0')}:${m[2]} ${period}`
+    }
+    const cleanDigits = String(rawTime || '').replace(/\s*(AM|PM)\s*$/i, '').trim()
+    return cleanDigits ? `${cleanDigits} ${period}` : `03:00 ${period}`
+  }
 
   // Filter list by selected date and optional status filter
   const dateAppointments = appointments.filter(a => {
@@ -62,10 +91,12 @@ export default function AppointmentsView({
     const reqStart = timeToMinutes(canonicalTime)
     const reqEnd = reqStart + dur
     const staffList = operativeStaff
+    const effectiveStaffObj = staffList.find(s => s.id === newStaff) || staffList[0] || null
+    const effectiveStaffId = effectiveStaffObj?.id || newStaff || 'e1'
     const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
 
     const collidingApt = (appointments || []).find(apt => {
-      if (apt.date !== newDate || apt.status === 'cancelada') return false
+      if (apt.date !== newDate || apt.status === 'cancelada' || apt.status === 'completada') return false
       const aptStart = timeToMinutes(apt.time)
       const aptDur = apt.duration_min || inferServiceDuration(apt.service)
       const aptEnd = aptStart + aptDur
@@ -73,7 +104,7 @@ export default function AppointmentsView({
       if (!overlaps) return false
 
       if (isSingleChair) return true
-      return !apt.staff_id || apt.staff_id === newStaff
+      return !apt.staff_id || apt.staff_id === effectiveStaffId
     })
 
     if (collidingApt) {
@@ -90,7 +121,8 @@ export default function AppointmentsView({
       client_name: newClient.trim(),
       date: newDate,
       time: canonicalTime,
-      staff_id: isSingleChair ? (staffList[0]?.id || 'e1') : newStaff,
+      staff_id: effectiveStaffId,
+      staff_name: effectiveStaffObj?.name || '',
       service: newService,
       duration_min: dur,
       status: 'pendiente'
@@ -382,7 +414,8 @@ export default function AppointmentsView({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
           {filteredList.map((apt) => {
-            const staffObj = (nicheData?.staff || []).find(s => s.id === apt.staff_id)
+            const staffObj = (nicheData?.staff || []).find(s => s.id === apt.staff_id) ||
+              (apt.staff_name ? (nicheData?.staff || []).find(s => s.name === apt.staff_name) : null)
             const isCompleted = apt.status === 'completada'
             const isInChair = apt.status === 'en_atencion'
 
@@ -468,7 +501,7 @@ export default function AppointmentsView({
                     </span>
                     <span className="text-slate-400 flex items-center gap-1">
                       <span>{staffObj?.avatar || '👤'}</span>
-                      <span className="text-slate-300 font-medium">{staffObj?.name || 'Cualquier especialista'}</span>
+                      <span className="text-slate-300 font-medium">{staffObj?.name || apt.staff_name || 'Cualquier especialista'}</span>
                     </span>
                   </div>
                 </div>
@@ -581,7 +614,12 @@ export default function AppointmentsView({
 
               {/* Selector de HORA */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Hora Estimada</label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs font-bold text-slate-300">Hora Estimada</label>
+                  <span className="text-[10px] font-medium text-slate-400">
+                    <span className="text-red-400 font-bold">Rojo</span> = Ocupada · <span className="text-slate-500 font-bold">Gris</span> = Ya pasó
+                  </span>
+                </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-2 max-h-32 overflow-y-auto p-1.5 bg-dark-950 rounded-2xl border border-dark-800">
                   {(() => {
                     const sched = getScheduleForDate(businessProfile, newDate)
@@ -589,6 +627,7 @@ export default function AppointmentsView({
                       ? sched.slots
                       : (businessProfile?.bookingSlots || ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM'])
                     const staffList = operativeStaff
+                    const effectiveStaffId = staffList.some(s => s.id === newStaff) ? newStaff : (staffList[0]?.id || 'e1')
                     const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
                     const matchedService = (nicheData?.services || []).find(s => s.name === newService)
                     const curDur = matchedService?.duration_min || inferServiceDuration(newService) || 30
@@ -597,14 +636,14 @@ export default function AppointmentsView({
                       const hStart = timeToMinutes(h)
                       const hEnd = hStart + curDur
                       const isOccupied = (appointments || []).some(a => {
-                        if (a.date !== newDate || a.status === 'cancelada') return false
+                        if (a.date !== newDate || a.status === 'cancelada' || a.status === 'completada') return false
                         const aStart = timeToMinutes(a.time)
                         const aDur = a.duration_min || inferServiceDuration(a.service)
                         const aEnd = aStart + aDur
                         const overlaps = Math.max(hStart, aStart) < Math.min(hEnd, aEnd)
                         if (!overlaps) return false
                         if (isSingleChair) return true
-                        return !a.staff_id || a.staff_id === newStaff
+                        return !a.staff_id || a.staff_id === effectiveStaffId
                       })
                       const isPast = isTimeSlotInPast(h, newDate, 10)
                       const isSelected = newTime === h
@@ -619,7 +658,7 @@ export default function AppointmentsView({
                               : isOccupied
                               ? 'bg-red-950/30 text-red-400 border-red-900/40 line-through'
                               : isPast
-                              ? 'bg-dark-900 text-slate-500 border-dark-800 line-through opacity-50'
+                              ? 'bg-dark-900/70 text-slate-500 border-dark-800/80 opacity-60'
                               : 'bg-dark-850 text-slate-300 border-dark-750 hover:text-white'
                           }`}
                           title={isOccupied ? 'Horario ocupado por otra cita' : isPast ? 'Hora ya transcurrida' : 'Disponible'}
@@ -630,13 +669,34 @@ export default function AppointmentsView({
                     })
                   })()}
                 </div>
-                <input
-                  type="text"
-                  placeholder="O escribe la hora personalizada (ej. 05:00 PM)"
-                  value={newTime}
-                  onChange={(e) => setNewTime(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-dark-850 border border-dark-750 text-xs text-white font-mono focus:outline-none focus:border-purple-500 transition-colors"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Ej. 4:30 o 05:00 PM"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="flex-1 min-w-0 px-3.5 py-2.5 rounded-2xl bg-dark-850 border border-dark-750 text-xs text-white font-mono focus:outline-none focus:border-purple-500 transition-colors"
+                  />
+                  <div className="inline-flex bg-dark-950 p-1 rounded-2xl border border-dark-800 shrink-0">
+                    {['AM', 'PM'].map(per => {
+                      const active = getEffectivePeriod(newTime) === per
+                      return (
+                        <button
+                          key={per}
+                          type="button"
+                          onClick={() => setNewTime(applyPeriodToTime(newTime, per))}
+                          className={`px-2.5 py-1.5 rounded-xl text-[11px] font-black transition-all ${
+                            active
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {per}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -652,6 +712,25 @@ export default function AppointmentsView({
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
+                {operativeStaff.length > 1 && businessProfile?.singleChairMode !== false && (
+                  <div className="mt-1.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-2 text-[10px] text-amber-200 leading-snug">
+                    <span>
+                      <strong>Modo Silla Única activo:</strong> 1 cita bloquea todo el local. Si atienden varias a la vez, cambia a &quot;Equipo&quot;.
+                    </span>
+                    {onOpenSettings && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddModal(false)
+                          onOpenSettings()
+                        }}
+                        className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-black border border-amber-500/40 shrink-0"
+                      >
+                        Cambiar
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>

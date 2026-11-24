@@ -247,28 +247,32 @@ export default function PublicBookingView({
     }
 
     let assignedStaffId = selectedStaff
-    if (isSingleChair) {
+    if (selectedStaff === 'any' || !selectedStaff) {
+      if (isSingleChair) {
+        assignedStaffId = staffList[0]?.id || 'e1'
+      } else {
+        const reqStart = timeToMinutes(normTime)
+        const reqEnd = reqStart + (selectedDuration || 30)
+
+        const busyStaffIds = (appointments || [])
+          .filter(apt => {
+            if (!apt || apt.date !== selectedDate) return false
+            if (apt.status === 'cancelada' || apt.status === 'completada') return false
+            const aStart = timeToMinutes(apt.time)
+            const aDur = apt.duration_min || inferServiceDuration(apt.service)
+            const aEnd = aStart + aDur
+            return Math.max(reqStart, aStart) < Math.min(reqEnd, aEnd)
+          })
+          .map(apt => {
+            const directMatch = staffList.find(s => s.id === apt.staff_id || s.name === apt.staff_id || s.name === apt.staff_name)
+            return directMatch ? directMatch.id : apt.staff_id
+          })
+
+        const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
+        assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
+      }
+    } else if (!staffList.some(s => s.id === selectedStaff)) {
       assignedStaffId = staffList[0]?.id || 'e1'
-    } else if (selectedStaff === 'any') {
-      const reqStart = timeToMinutes(normTime)
-      const reqEnd = reqStart + (selectedDuration || 30)
-
-      const busyStaffIds = (appointments || [])
-        .filter(apt => {
-          if (!apt || apt.date !== selectedDate) return false
-          if (apt.status === 'cancelada' || apt.status === 'completada') return false
-          const aStart = timeToMinutes(apt.time)
-          const aDur = apt.duration_min || inferServiceDuration(apt.service)
-          const aEnd = aStart + aDur
-          return Math.max(reqStart, aStart) < Math.min(reqEnd, aEnd)
-        })
-        .map(apt => {
-          const directMatch = staffList.find(s => s.id === apt.staff_id || s.name === apt.staff_id || s.name === apt.staff_name)
-          return directMatch ? directMatch.id : apt.staff_id
-        })
-
-      const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
-      assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
     }
 
     const assignedStaffObj = staffList.find(s => s.id === assignedStaffId)
@@ -280,6 +284,7 @@ export default function PublicBookingView({
       date: selectedDate,
       time: normTime,
       staff_id: assignedStaffId,
+      staff_name: assignedStaffObj?.name || '',
       service: selectedService,
       duration_min: selectedDuration,
       status: 'pendiente',
