@@ -155,3 +155,82 @@ export function setDeviceForceCashier(tenantId, enabled) {
     }
   } catch (e) {}
 }
+
+export function getCashierLoginSession(tenantId) {
+  if (typeof window === 'undefined' || !tenantId) return null
+  try {
+    const raw = localStorage.getItem(`barber_cashier_login_session_${tenantId}`)
+    return raw ? JSON.parse(raw) : null
+  } catch (e) {
+    return null
+  }
+}
+
+export function setCashierLoginSession(tenantId, operator) {
+  if (typeof window === 'undefined' || !tenantId) return
+  try {
+    if (operator) {
+      localStorage.setItem(`barber_cashier_login_session_${tenantId}`, JSON.stringify(operator))
+    } else {
+      localStorage.removeItem(`barber_cashier_login_session_${tenantId}`)
+    }
+  } catch (e) {}
+}
+
+export function clearCashierLoginSession(tenantId) {
+  if (typeof window === 'undefined' || !tenantId) return
+  try {
+    localStorage.removeItem(`barber_cashier_login_session_${tenantId}`)
+  } catch (e) {}
+}
+
+export function getAllCashiersFromStaffByNiche(staffByNiche = {}, preferredNiche = 'barberia') {
+  if (!staffByNiche || typeof staffByNiche !== 'object') return []
+  const order = [preferredNiche, 'barberia', 'estetica', 'mixto']
+  const seenKeys = new Set()
+  const orderedKeys = []
+  order.forEach(k => {
+    if (k && !seenKeys.has(k)) {
+      seenKeys.add(k)
+      orderedKeys.push(k)
+    }
+  })
+  Object.keys(staffByNiche).forEach(k => {
+    if (!seenKeys.has(k)) {
+      seenKeys.add(k)
+      orderedKeys.push(k)
+    }
+  })
+
+  const seenIds = new Set()
+  const cashiers = []
+  orderedKeys.forEach(k => {
+    const list = Array.isArray(staffByNiche[k]) ? staffByNiche[k] : []
+    list.forEach(s => {
+      if (isCashierStaff(s) && s.id && !seenIds.has(s.id)) {
+        seenIds.add(s.id)
+        cashiers.push(s)
+      }
+    })
+  })
+  return cashiers
+}
+
+export function filterDeletedStaffByNiche(staffByNiche, deletedIds = []) {
+  if (!staffByNiche || typeof staffByNiche !== 'object') return staffByNiche
+  const delSet = new Set(Array.isArray(deletedIds) ? deletedIds : [])
+  if (delSet.size === 0) return staffByNiche
+  let changed = false
+  const next = {}
+  Object.keys(staffByNiche).forEach(k => {
+    const arr = staffByNiche[k]
+    if (Array.isArray(arr)) {
+      const filtered = arr.filter(s => s && !delSet.has(s.id))
+      if (filtered.length !== arr.length) changed = true
+      next[k] = filtered
+    } else {
+      next[k] = arr
+    }
+  })
+  return changed ? next : staffByNiche
+}

@@ -37,7 +37,16 @@ import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck, MessageSquare } from 'lucide-react'
 import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
 import { getActiveBrand, isArgentina } from './lib/brandConfig'
-import { getSecurityConfig, createAuditEntry, getDeviceForceCashier } from './lib/securityUtils'
+import {
+  getSecurityConfig,
+  createAuditEntry,
+  getDeviceForceCashier,
+  getCashierLoginSession,
+  setCashierLoginSession,
+  clearCashierLoginSession,
+  getAllCashiersFromStaffByNiche,
+  filterDeletedStaffByNiche
+} from './lib/securityUtils'
 
 export default function App() {
   // Check URL parameters (?reserva=1, ?registro=1, ?login=1) and Domain Isolation
@@ -246,7 +255,9 @@ export default function App() {
 
   // Editable Staff, Services, and Products per Niche
   const [staffByNiche, setStaffByNiche] = useState(() => {
-    if (initWs && initWs.staffByNiche) return initWs.staffByNiche
+    if (initWs && initWs.staffByNiche) {
+      return filterDeletedStaffByNiche(initWs.staffByNiche, initWs.deletedStaffIds || [])
+    }
     const saved = localStorage.getItem('barber_staff_by_niche')
     return saved ? JSON.parse(saved) : {
       barberia: NICHES.barberia.staff,
@@ -275,11 +286,29 @@ export default function App() {
     }
   })
 
-  // Track explicitly deleted transaction IDs so server merge does not resurrect intentionally deleted tickets
+  // Track explicitly deleted IDs (transactions, appointments, staff) so server merge/polling never resurrects them
   const [deletedTxIds, setDeletedTxIds] = useState(() => {
     if (initWs && Array.isArray(initWs.deletedTxIds)) return initWs.deletedTxIds
     return []
   })
+  const deletedTxIdsRef = useRef(deletedTxIds)
+  useEffect(() => { deletedTxIdsRef.current = deletedTxIds }, [deletedTxIds])
+
+  const [deletedAppointmentIds, setDeletedAppointmentIds] = useState(() => {
+    if (initWs && Array.isArray(initWs.deletedAppointmentIds)) return initWs.deletedAppointmentIds
+    return []
+  })
+  const deletedAppointmentIdsRef = useRef(deletedAppointmentIds)
+  useEffect(() => { deletedAppointmentIdsRef.current = deletedAppointmentIds }, [deletedAppointmentIds])
+
+  const [deletedStaffIds, setDeletedStaffIds] = useState(() => {
+    if (initWs && Array.isArray(initWs.deletedStaffIds)) return initWs.deletedStaffIds
+    return []
+  })
+  const deletedStaffIdsRef = useRef(deletedStaffIds)
+  useEffect(() => { deletedStaffIdsRef.current = deletedStaffIds }, [deletedStaffIds])
+
+  const configUpdatedAtRef = useRef(Number(initWs?.configUpdatedAt) || 0)
 
   // Guard: never POST workspace to server until initial GET /api/workspace/:id has completed for the active tenant
   const serverSyncReadyRef = useRef(false)
@@ -313,7 +342,10 @@ export default function App() {
     if (isDemo && (!initWs || !Array.isArray(initWs.appointments) || initWs.appointments.length === 0)) {
       return INITIAL_APPOINTMENTS
     }
-    if (initWs && Array.isArray(initWs.appointments)) return initWs.appointments
+    if (initWs && Array.isArray(initWs.appointments)) {
+      const initDelApts = new Set(Array.isArray(initWs.deletedAppointmentIds) ? initWs.deletedAppointmentIds : [])
+      return initWs.appointments.filter(a => a && !initDelApts.has(a.id))
+    }
     const saved = localStorage.getItem('barber_appointments')
     return saved ? JSON.parse(saved) : INITIAL_APPOINTMENTS
   })
@@ -357,18 +389,27 @@ export default function App() {
     }
   })
 
-  // Owner vs. Cashier security mode state
+  // Owner vs. Cashier security mode state (hydrates direct cashier PIN login session + device lock)
   const ownerUnlockedThisSessionRef = useRef(false)
   const [isCashierMode, setIsCashierMode] = useState(() => {
     try {
       const sec = getSecurityConfig(initWs?.businessProfile || {})
       const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
-      return Boolean(sec.enabled && loggedId && getDeviceForceCashier(loggedId))
+      if (!loggedId) return false
+      if (getCashierLoginSession(loggedId)) return true
+      return Boolean(sec.enabled && getDeviceForceCashier(loggedId))
     } catch (e) {
       return false
     }
   })
-  const [activeOperator, setActiveOperator] = useState(null)
+  const [activeOperator, setActiveOperator] = useState(() => {
+    try {
+      const loggedId = typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : null
+      return loggedId ? getCashierLoginSession(loggedId) : null
+    } catch (e) {
+      return null
+    }
+  })
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false)
   const [voidingTx, setVoidingTx] = useState(null)
 
@@ -436,7 +477,20 @@ export default function App() {
     products: currentProducts
   }
 
-  const securityConfig = getSecurityConfig(businessProfile)
+  const rawSecurityConfig = getSecurityConfig(businessProfile)
+  const hasCashierLoginLock = Boolean(activeTenantId && getCashierLoginSession(activeTenantId))
+  const securityConfig = hasCashierLoginLock
+    ? {
+        ...rawSecurityConfig,
+        enabled: true,
+        ownerPin: String(rawSecurityConfig.ownerPin || activeTenant?.securityPin || '1234').trim()
+      }
+    : rawSecurityConfig
+  const allCashiersAcrossNiches = getAllCashiersFromStaffByNiche(staffByNiche, currentNiche)
+  const allCashiersWithCurrentStaff = [
+    ...currentStaff,
+    ...allCashiersAcrossNiches.filter(c => !currentStaff.some(cs => cs.id === c.id))
+  ]
   const todayAuditAlertCount = (auditLogs || []).filter(l =>
     isDateToday(l.timestamp || l.fecha) && (l.type === 'TX_VOIDED' || l.type === 'PIN_FAILED')
   ).length
@@ -450,9 +504,15 @@ export default function App() {
     setAuditLogs(prev => [entry, ...(Array.isArray(prev) ? prev : [])].slice(0, 2000))
   }
 
-  // Enforce device cashier lock on startup if configured for this PC
+  // Enforce cashier login session or device cashier lock on startup
   useEffect(() => {
     if (!activeTenantId || ownerUnlockedThisSessionRef.current) return
+    const loginCashierSession = getCashierLoginSession(activeTenantId)
+    if (loginCashierSession) {
+      setIsCashierMode(true)
+      setActiveOperator(prev => prev || loginCashierSession)
+      return
+    }
     if (securityConfig.enabled && getDeviceForceCashier(activeTenantId)) {
       setIsCashierMode(true)
     } else if (!securityConfig.enabled) {
@@ -522,6 +582,9 @@ export default function App() {
       currentNiche,
       transactions,
       deletedTxIds,
+      deletedAppointmentIds,
+      deletedStaffIds,
+      configUpdatedAt: configUpdatedAtRef.current,
       clients,
       appointments,
       businessProfile,
@@ -561,10 +624,10 @@ export default function App() {
       } catch (err) {
         // Offline
       }
-    }, 1200)
+    }, 500)
 
     return () => clearTimeout(timeout)
-  }, [activeTenantId, currentNiche, transactions, deletedTxIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings, auditLogs])
+  }, [activeTenantId, currentNiche, transactions, deletedTxIds, deletedAppointmentIds, deletedStaffIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings, auditLogs])
 
   // Auto-reconstruct historical transactions from client visit history if wiped by legacy reset button
   useEffect(() => {
@@ -691,19 +754,35 @@ export default function App() {
           if (data && data.workspace) {
             const ws = data.workspace
             const serverDelIds = Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : []
-            if (serverDelIds.length > 0) {
-              setDeletedTxIds(prev => {
-                const merged = Array.from(new Set([...(prev || []), ...serverDelIds]))
-                return merged.length !== (prev || []).length ? merged : prev
-              })
+            const allDelTxIds = Array.from(new Set([...(deletedTxIdsRef.current || []), ...serverDelIds]))
+            if (allDelTxIds.length > (deletedTxIdsRef.current || []).length) {
+              deletedTxIdsRef.current = allDelTxIds
+              setDeletedTxIds(allDelTxIds)
             }
+
+            const serverDelAptIds = Array.isArray(ws.deletedAppointmentIds) ? ws.deletedAppointmentIds : []
+            const allDelAptIds = Array.from(new Set([...(deletedAppointmentIdsRef.current || []), ...serverDelAptIds]))
+            if (allDelAptIds.length > (deletedAppointmentIdsRef.current || []).length) {
+              deletedAppointmentIdsRef.current = allDelAptIds
+              setDeletedAppointmentIds(allDelAptIds)
+            }
+            const delAptSet = new Set(allDelAptIds)
+
+            const serverDelStaffIds = Array.isArray(ws.deletedStaffIds) ? ws.deletedStaffIds : []
+            const allDelStaffIds = Array.from(new Set([...(deletedStaffIdsRef.current || []), ...serverDelStaffIds]))
+            if (allDelStaffIds.length > (deletedStaffIdsRef.current || []).length) {
+              deletedStaffIdsRef.current = allDelStaffIds
+              setDeletedStaffIds(allDelStaffIds)
+            }
+
             if (Array.isArray(ws.appointments)) {
-              const serverApts = ws.appointments
+              const serverApts = ws.appointments.filter(a => a && a.id && !delAptSet.has(a.id))
               setAppointments(prev => {
-                const prevIds = new Set((prev || []).map(a => a.id))
-                const newIncoming = serverApts.filter(a => a && a.id && !prevIds.has(a.id))
-                if (newIncoming.length > 0) {
-                  return [...newIncoming, ...prev]
+                const cleanPrev = (prev || []).filter(a => a && !delAptSet.has(a.id))
+                const prevIds = new Set(cleanPrev.map(a => a.id))
+                const newIncoming = serverApts.filter(a => !prevIds.has(a.id))
+                if (newIncoming.length > 0 || cleanPrev.length !== (prev || []).length) {
+                  return [...newIncoming, ...cleanPrev]
                 }
                 return prev
               })
@@ -721,11 +800,13 @@ export default function App() {
             }
             if (Array.isArray(ws.transactions)) {
               const serverTxs = ws.transactions
+              const delTxSet = new Set(allDelTxIds)
               setTransactions(prev => {
-                const prevIds = new Set((prev || []).map(t => t.id))
-                const newIncomingTxs = serverTxs.filter(t => t && t.id && !prevIds.has(t.id) && !serverDelIds.includes(t.id))
-                if (newIncomingTxs.length > 0) {
-                  return [...prev, ...newIncomingTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
+                const cleanPrev = (prev || []).filter(t => t && !delTxSet.has(t.id))
+                const prevIds = new Set(cleanPrev.map(t => t.id))
+                const newIncomingTxs = serverTxs.filter(t => t && t.id && !prevIds.has(t.id) && !delTxSet.has(t.id))
+                if (newIncomingTxs.length > 0 || cleanPrev.length !== (prev || []).length) {
+                  return [...cleanPrev, ...newIncomingTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
                 }
                 return prev
               })
@@ -752,18 +833,28 @@ export default function App() {
                 return prev
               })
             }
-            // If local state hasn't synced yet for this tenant, also hydrate profile, staff, services, products, and rate from server
-            if (syncedTenantIdRef.current !== activeTenantId) {
+
+            // Hydrate config on initial load OR when another device pushed newer settings/staff (via configUpdatedAt)
+            const serverConfigTs = Number(ws.configUpdatedAt) || 0
+            const localConfigTs = Number(configUpdatedAtRef.current) || 0
+            const shouldHydrateConfig = syncedTenantIdRef.current !== activeTenantId || serverConfigTs > localConfigTs
+
+            if (shouldHydrateConfig) {
               if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
-              if (ws.staffByNiche) setStaffByNiche(ws.staffByNiche)
+              if (ws.staffByNiche) setStaffByNiche(filterDeletedStaffByNiche(ws.staffByNiche, allDelStaffIds))
               if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
               if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
               if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
                 setExchangeRate(Number(ws.exchangeRate))
               }
-              if (ws.currentNiche && NICHES[ws.currentNiche]) {
+              if (syncedTenantIdRef.current !== activeTenantId && ws.currentNiche && NICHES[ws.currentNiche] && !getCashierLoginSession(activeTenantId)) {
                 setCurrentNiche(ws.currentNiche)
               }
+              if (serverConfigTs > localConfigTs) {
+                configUpdatedAtRef.current = serverConfigTs
+              }
+            } else if (allDelStaffIds.length > 0) {
+              setStaffByNiche(prev => filterDeletedStaffByNiche(prev, allDelStaffIds))
             }
           }
           syncedTenantIdRef.current = activeTenantId
@@ -1066,8 +1157,19 @@ export default function App() {
     } catch (e) {}
   }
 
-  // Staff CRUD
+  const handleSaveBusinessProfile = (updater) => {
+    configUpdatedAtRef.current = Date.now()
+    setBusinessProfile(updater)
+  }
+
+  // Staff CRUD (uses deletedStaffIds tombstones + configUpdatedAt so deleted staff never resurrects across devices)
   const handleAddStaff = (newSt) => {
+    configUpdatedAtRef.current = Date.now()
+    if (newSt?.id && (deletedStaffIdsRef.current || []).includes(newSt.id)) {
+      const nextDel = (deletedStaffIdsRef.current || []).filter(d => d !== newSt.id)
+      deletedStaffIdsRef.current = nextDel
+      setDeletedStaffIds(nextDel)
+    }
     setStaffByNiche(prev => ({
       ...prev,
       [currentNiche]: [...(prev[currentNiche] || []), newSt]
@@ -1075,6 +1177,7 @@ export default function App() {
   }
 
   const handleUpdateStaff = (updatedSt) => {
+    configUpdatedAtRef.current = Date.now()
     setStaffByNiche(prev => ({
       ...prev,
       [currentNiche]: (prev[currentNiche] || []).map(s => s.id === updatedSt.id ? updatedSt : s)
@@ -1082,14 +1185,26 @@ export default function App() {
   }
 
   const handleDeleteStaff = (id) => {
-    setStaffByNiche(prev => ({
-      ...prev,
-      [currentNiche]: (prev[currentNiche] || []).filter(s => s.id !== id)
-    }))
+    const nowTs = Date.now()
+    configUpdatedAtRef.current = nowTs
+    if (id) {
+      const nextDel = Array.from(new Set([...(deletedStaffIdsRef.current || []), id]))
+      deletedStaffIdsRef.current = nextDel
+      setDeletedStaffIds(nextDel)
+      if (activeTenantId) {
+        fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deletedStaffIds: [id], configUpdatedAt: nowTs })
+        }).catch(() => {})
+      }
+    }
+    setStaffByNiche(prev => filterDeletedStaffByNiche(prev, [id]))
   }
 
   // Services CRUD
   const handleAddService = (newSvc) => {
+    configUpdatedAtRef.current = Date.now()
     setServicesByNiche(prev => ({
       ...prev,
       [currentNiche]: [newSvc, ...(prev[currentNiche] || [])]
@@ -1097,6 +1212,7 @@ export default function App() {
   }
 
   const handleUpdateService = (updatedSvc) => {
+    configUpdatedAtRef.current = Date.now()
     const existing = (servicesByNiche[currentNiche] || []).find(s => s.id === updatedSvc.id)
     if (existing && Number(existing.price_usd) !== Number(updatedSvc.price_usd)) {
       addAuditLog({
@@ -1113,6 +1229,7 @@ export default function App() {
   }
 
   const handleDeleteService = (id) => {
+    configUpdatedAtRef.current = Date.now()
     const existing = (servicesByNiche[currentNiche] || []).find(s => s.id === id)
     if (existing) {
       addAuditLog({
@@ -1129,6 +1246,7 @@ export default function App() {
 
   // Products CRUD
   const handleAddProduct = (newProd) => {
+    configUpdatedAtRef.current = Date.now()
     setProductsByNiche(prev => ({
       ...prev,
       [currentNiche]: [newProd, ...(prev[currentNiche] || [])]
@@ -1136,6 +1254,7 @@ export default function App() {
   }
 
   const handleUpdateProduct = (updatedProd) => {
+    configUpdatedAtRef.current = Date.now()
     const existing = (productsByNiche[currentNiche] || []).find(p => p.id === updatedProd.id)
     if (existing && Number(existing.price_usd) !== Number(updatedProd.price_usd)) {
       addAuditLog({
@@ -1152,6 +1271,7 @@ export default function App() {
   }
 
   const handleDeleteProduct = (id) => {
+    configUpdatedAtRef.current = Date.now()
     const existing = (productsByNiche[currentNiche] || []).find(p => p.id === id)
     if (existing) {
       addAuditLog({
@@ -1175,16 +1295,35 @@ export default function App() {
         if (data.workspace) {
           const ws = data.workspace
           const serverDelIds = Array.isArray(ws.deletedTxIds) ? ws.deletedTxIds : []
-          if (serverDelIds.length > 0) {
-            setDeletedTxIds(prev => Array.from(new Set([...(prev || []), ...serverDelIds])))
+          const allDelTxIds = Array.from(new Set([...(deletedTxIdsRef.current || []), ...serverDelIds]))
+          if (allDelTxIds.length > (deletedTxIdsRef.current || []).length) {
+            deletedTxIdsRef.current = allDelTxIds
+            setDeletedTxIds(allDelTxIds)
           }
+
+          const serverDelAptIds = Array.isArray(ws.deletedAppointmentIds) ? ws.deletedAppointmentIds : []
+          const allDelAptIds = Array.from(new Set([...(deletedAppointmentIdsRef.current || []), ...serverDelAptIds]))
+          if (allDelAptIds.length > (deletedAppointmentIdsRef.current || []).length) {
+            deletedAppointmentIdsRef.current = allDelAptIds
+            setDeletedAppointmentIds(allDelAptIds)
+          }
+          const delAptSet = new Set(allDelAptIds)
+
+          const serverDelStaffIds = Array.isArray(ws.deletedStaffIds) ? ws.deletedStaffIds : []
+          const allDelStaffIds = Array.from(new Set([...(deletedStaffIdsRef.current || []), ...serverDelStaffIds]))
+          if (allDelStaffIds.length > (deletedStaffIdsRef.current || []).length) {
+            deletedStaffIdsRef.current = allDelStaffIds
+            setDeletedStaffIds(allDelStaffIds)
+          }
+
           if (Array.isArray(ws.transactions)) {
+            const delTxSet = new Set(allDelTxIds)
             setTransactions(prev => {
               const localList = Array.isArray(prev) ? prev : []
               const serverIds = new Set(ws.transactions.map(t => t && t.id).filter(Boolean))
-              const localOnly = localList.filter(t => t && t.id && !serverIds.has(t.id) && !serverDelIds.includes(t.id))
+              const localOnly = localList.filter(t => t && t.id && !serverIds.has(t.id) && !delTxSet.has(t.id))
               return [...ws.transactions, ...localOnly]
-                .filter(t => t && !serverDelIds.includes(t.id))
+                .filter(t => t && !delTxSet.has(t.id))
                 .sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
             })
           }
@@ -1200,8 +1339,8 @@ export default function App() {
             setAppointments(prev => {
               const localList = Array.isArray(prev) ? prev : []
               const serverIds = new Set(ws.appointments.map(a => a && a.id).filter(Boolean))
-              const localOnly = localList.filter(a => a && a.id && !serverIds.has(a.id))
-              return [...ws.appointments, ...localOnly]
+              const localOnly = localList.filter(a => a && a.id && !serverIds.has(a.id) && !delAptSet.has(a.id))
+              return [...ws.appointments, ...localOnly].filter(a => a && !delAptSet.has(a.id))
             })
           }
           if (Array.isArray(ws.dailyClosings)) {
@@ -1221,15 +1360,18 @@ export default function App() {
             })
           }
           if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
-          if (ws.staffByNiche) setStaffByNiche(ws.staffByNiche)
+          if (ws.staffByNiche) setStaffByNiche(filterDeletedStaffByNiche(ws.staffByNiche, allDelStaffIds))
           if (ws.servicesByNiche) setServicesByNiche(ws.servicesByNiche)
           if (ws.productsByNiche) setProductsByNiche(ws.productsByNiche)
-          if (ws.currentNiche && NICHES[ws.currentNiche]) setCurrentNiche(ws.currentNiche)
+          if (ws.currentNiche && NICHES[ws.currentNiche] && !getCashierLoginSession(tid)) setCurrentNiche(ws.currentNiche)
           if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
             setExchangeRate(Number(ws.exchangeRate))
             localStorage.setItem('barber_rate', String(ws.exchangeRate))
           }
+          if (ws.configUpdatedAt) {
+            configUpdatedAtRef.current = Math.max(Number(configUpdatedAtRef.current) || 0, Number(ws.configUpdatedAt) || 0)
           }
+        }
         syncedTenantIdRef.current = tid
         serverSyncReadyRef.current = true
       } else {
@@ -1244,10 +1386,15 @@ export default function App() {
   }
 
   // Handlers for SaaS Tenants
-  const handleSelectTenant = (tenant) => {
+  const handleSelectTenant = (tenant, options = {}) => {
     // Lock auto-POST until server workspace is fetched and merged for this tenant
     serverSyncReadyRef.current = false
     syncedTenantIdRef.current = null
+
+    const cashierOp = options?.cashierOperator || null
+    if (cashierOp) {
+      setCashierLoginSession(tenant.id, cashierOp)
+    }
 
     setActiveTenantId(tenant.id)
     setCachedActiveTenant(tenant)
@@ -1265,7 +1412,9 @@ export default function App() {
         localStorage.setItem('barber_preferred_country', tenant.country === 'AR' ? 'AR' : 'VE')
       }
     } catch (e) {}
-    if (tenant.niche && NICHES[tenant.niche]) {
+    if (options?.niche && NICHES[options.niche]) {
+      setCurrentNiche(options.niche)
+    } else if (tenant.niche && NICHES[tenant.niche]) {
       setCurrentNiche(tenant.niche)
     }
 
@@ -1281,18 +1430,35 @@ export default function App() {
           syncedTenantIdRef.current = tenant.id
           serverSyncReadyRef.current = true
         } else {
+          const localDelTx = Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds : []
+          const localDelApts = Array.isArray(parsed.deletedAppointmentIds) ? parsed.deletedAppointmentIds : []
+          const localDelStaff = Array.isArray(parsed.deletedStaffIds) ? parsed.deletedStaffIds : []
+          const delAptSet = new Set(localDelApts)
+
+          deletedTxIdsRef.current = localDelTx
+          deletedAppointmentIdsRef.current = localDelApts
+          deletedStaffIdsRef.current = localDelStaff
+          configUpdatedAtRef.current = Number(parsed.configUpdatedAt) || 0
+
           setTransactions(Array.isArray(parsed.transactions) ? parsed.transactions : [])
-          setDeletedTxIds(Array.isArray(parsed.deletedTxIds) ? parsed.deletedTxIds : [])
+          setDeletedTxIds(localDelTx)
+          setDeletedAppointmentIds(localDelApts)
+          setDeletedStaffIds(localDelStaff)
           setClients(Array.isArray(parsed.clients) ? parsed.clients : [])
-          setAppointments(Array.isArray(parsed.appointments) ? parsed.appointments : [])
+          setAppointments(Array.isArray(parsed.appointments) ? parsed.appointments.filter(a => a && !delAptSet.has(a.id)) : [])
           setDailyClosings(Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [])
           setAuditLogs(Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [])
           if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
           ownerUnlockedThisSessionRef.current = false
           const parsedSec = getSecurityConfig(parsed.businessProfile || {})
-          setIsCashierMode(Boolean(parsedSec.enabled && getDeviceForceCashier(tenant.id)))
-          setActiveOperator(null)
-          if (parsed.staffByNiche) setStaffByNiche(parsed.staffByNiche)
+          if (cashierOp) {
+            setIsCashierMode(true)
+            setActiveOperator(cashierOp)
+          } else {
+            setIsCashierMode(Boolean(parsedSec.enabled && getDeviceForceCashier(tenant.id)))
+            setActiveOperator(null)
+          }
+          if (parsed.staffByNiche) setStaffByNiche(filterDeletedStaffByNiche(parsed.staffByNiche, localDelStaff))
           if (parsed.servicesByNiche) setServicesByNiche(parsed.servicesByNiche)
           if (parsed.productsByNiche) setProductsByNiche(parsed.productsByNiche)
           if (parsed.exchangeRate && !isNaN(Number(parsed.exchangeRate))) {
@@ -1313,15 +1479,21 @@ export default function App() {
           serverSyncReadyRef.current = true
         } else {
           // Clear previous tenant's in-memory arrays before pulling target tenant from server
+          deletedTxIdsRef.current = []
+          deletedAppointmentIdsRef.current = []
+          deletedStaffIdsRef.current = []
+          configUpdatedAtRef.current = 0
           setTransactions([])
           setDeletedTxIds([])
+          setDeletedAppointmentIds([])
+          setDeletedStaffIds([])
           setClients([])
           setAppointments([])
           setDailyClosings([])
           setAuditLogs([])
           ownerUnlockedThisSessionRef.current = false
-          setIsCashierMode(false)
-          setActiveOperator(null)
+          setIsCashierMode(Boolean(cashierOp))
+          setActiveOperator(cashierOp || null)
           setBusinessProfile({
             ...INITIAL_BUSINESS_PROFILE,
             businessName: tenant.businessName,
@@ -1336,20 +1508,31 @@ export default function App() {
         syncedTenantIdRef.current = tenant.id
         serverSyncReadyRef.current = true
       } else {
+        deletedTxIdsRef.current = []
+        deletedAppointmentIdsRef.current = []
+        deletedStaffIdsRef.current = []
+        configUpdatedAtRef.current = 0
         setTransactions([])
         setDeletedTxIds([])
+        setDeletedAppointmentIds([])
+        setDeletedStaffIds([])
         setClients([])
         setAppointments([])
         setDailyClosings([])
         setAuditLogs([])
+        setIsCashierMode(Boolean(cashierOp))
+        setActiveOperator(cashierOp || null)
         fetchTenantWorkspace(tenant.id)
       }
     }
   }
 
   const handleLogout = () => {
+    if (activeTenantId) clearCashierLoginSession(activeTenantId)
     serverSyncReadyRef.current = false
     syncedTenantIdRef.current = null
+    setIsCashierMode(false)
+    setActiveOperator(null)
     setActiveTenantId(null)
     setCachedActiveTenant(null)
     localStorage.removeItem('barber_logged_tenant_id')
@@ -1375,8 +1558,13 @@ export default function App() {
     const normalizedTenant = { ...newTenant, country: isArTenant ? 'AR' : 'VE' }
 
     // Brand new account starts clean for this tenantId
+    const freshConfigTs = Date.now()
     const freshWorkspace = {
       transactions: [],
+      deletedTxIds: [],
+      deletedAppointmentIds: [],
+      deletedStaffIds: [],
+      configUpdatedAt: freshConfigTs,
       clients: [],
       appointments: [],
       businessProfile: {
@@ -1407,8 +1595,14 @@ export default function App() {
     try {
       localStorage.setItem(`barber_ws_${newTenant.id}`, JSON.stringify(freshWorkspace))
     } catch (e) {}
+    deletedTxIdsRef.current = []
+    deletedAppointmentIdsRef.current = []
+    deletedStaffIdsRef.current = []
+    configUpdatedAtRef.current = freshConfigTs
     setTransactions([])
     setDeletedTxIds([])
+    setDeletedAppointmentIds([])
+    setDeletedStaffIds([])
     setClients([])
     setAppointments([])
     setDailyClosings([])
@@ -1691,6 +1885,18 @@ export default function App() {
   }
 
   const handleDeleteAppointment = (id) => {
+    if (id) {
+      const nextDel = Array.from(new Set([...(deletedAppointmentIdsRef.current || []), id]))
+      deletedAppointmentIdsRef.current = nextDel
+      setDeletedAppointmentIds(nextDel)
+      if (activeTenantId) {
+        fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deletedAppointmentIds: [id] })
+        }).catch(() => {})
+      }
+    }
     setAppointments(prev => prev.filter(a => a.id !== id))
   }
 
@@ -1833,7 +2039,16 @@ export default function App() {
 
   const handleDeleteTransaction = (txId) => {
     if (txId) {
-      setDeletedTxIds(prev => Array.from(new Set([...(prev || []), txId])))
+      const nextDel = Array.from(new Set([...(deletedTxIdsRef.current || []), txId]))
+      deletedTxIdsRef.current = nextDel
+      setDeletedTxIds(nextDel)
+      if (activeTenantId) {
+        fetch(`/api/workspace/${encodeURIComponent(activeTenantId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deletedTxIds: [txId] })
+        }).catch(() => {})
+      }
     }
     setTransactions(prev => prev.filter(t => t.id !== txId))
   }
@@ -2073,6 +2288,7 @@ export default function App() {
           setIsCashierMode(true)
           setIsRoleModalOpen(true)
         }}
+        hasCashierStaff={allCashiersAcrossNiches.length > 0}
         todayAuditAlertCount={todayAuditAlertCount}
       />
 
@@ -2272,7 +2488,7 @@ export default function App() {
           {activeTab === 'catalogo' && (
             <CatalogConfigView
               businessProfile={businessProfile}
-              onSaveProfile={setBusinessProfile}
+              onSaveProfile={handleSaveBusinessProfile}
               services={currentServices}
               onAddService={handleAddService}
               onUpdateService={handleUpdateService}
@@ -2417,7 +2633,7 @@ export default function App() {
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         businessProfile={businessProfile}
-        onSaveProfile={setBusinessProfile}
+        onSaveProfile={handleSaveBusinessProfile}
         activeTenant={activeTenant}
       />
 
@@ -2442,10 +2658,12 @@ export default function App() {
         isOpen={isRoleModalOpen}
         onClose={() => setIsRoleModalOpen(false)}
         securityConfig={securityConfig}
-        staffList={currentStaff}
+        staffList={allCashiersWithCurrentStaff}
         isCashierMode={isCashierMode}
         activeOperator={activeOperator}
+        isAr={isArgentina(activeTenant, businessProfile)}
         onSwitchToOwner={() => {
+          if (activeTenantId) clearCashierLoginSession(activeTenantId)
           ownerUnlockedThisSessionRef.current = true
           setIsCashierMode(false)
           setActiveOperator(null)
@@ -2457,6 +2675,7 @@ export default function App() {
           })
         }}
         onSwitchToCashier={(op) => {
+          if (activeTenantId && op) setCashierLoginSession(activeTenantId, op)
           ownerUnlockedThisSessionRef.current = false
           setIsCashierMode(true)
           setActiveOperator(op)

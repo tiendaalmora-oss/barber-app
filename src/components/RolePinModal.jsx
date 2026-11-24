@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { X, Lock, ShieldCheck, UserCheck, KeyRound, AlertTriangle, Unlock } from 'lucide-react'
-import { getCashierStaff } from '../lib/securityUtils'
+import { getCashierStaff, formatCashierBonusBadge } from '../lib/securityUtils'
 
 export default function RolePinModal({
   isOpen,
@@ -9,6 +9,7 @@ export default function RolePinModal({
   staffList = [],
   isCashierMode = false,
   activeOperator = null,
+  isAr = false,
   onSwitchToOwner,
   onSwitchToCashier,
   onLogPinFailed
@@ -22,29 +23,41 @@ export default function RolePinModal({
 
   useEffect(() => {
     if (isOpen) {
-      setTargetMode(isCashierMode ? 'owner' : 'cashier')
+      const matchedActive = cashiers.find(c => c.id === activeOperator?.id)
+      const nextCashierId = matchedActive ? matchedActive.id : (cashiers[0]?.id || 'generic_cashier')
+      const nextTarget = (isCashierMode && !matchedActive && cashiers.length > 0)
+        ? 'cashier'
+        : (isCashierMode ? 'owner' : 'cashier')
+      setTargetMode(nextTarget)
       setPinInput('')
       setError('')
-      setSelectedCashierId(activeOperator?.id || cashiers[0]?.id || 'generic_cashier')
+      setSelectedCashierId(nextCashierId)
     }
-  }, [isOpen, isCashierMode])
+  }, [isOpen, isCashierMode, activeOperator?.id])
 
   if (!isOpen) return null
 
-  const ownerPin = String(securityConfig?.ownerPin || '1234').trim()
+  const ownerPin = String(securityConfig?.ownerPin || '1234').replace(/\s+/g, '')
   const selectedCashierObj = cashiers.find(c => c.id === selectedCashierId) || null
-  const requiresCashierPin = targetMode === 'cashier' && Boolean(selectedCashierObj?.pin && String(selectedCashierObj.pin).trim())
+  const normalizedCashierPin = selectedCashierObj?.pin ? String(selectedCashierObj.pin).replace(/\s+/g, '') : ''
+  const requiresCashierPin = targetMode === 'cashier' && Boolean(normalizedCashierPin)
 
   const handleSubmit = (e) => {
     e.preventDefault()
     setError('')
+    const cleanInput = pinInput.replace(/\s+/g, '')
 
     if (targetMode === 'owner') {
-      if (pinInput.trim() === ownerPin) {
+      if (cleanInput === ownerPin) {
         onSwitchToOwner && onSwitchToOwner()
         onClose()
       } else {
-        setError('PIN de Dueño incorrecto. Intento registrado en auditoría.')
+        const matchedCashier = cashiers.find(c => c.pin && String(c.pin).replace(/\s+/g, '') === cleanInput)
+        if (matchedCashier) {
+          setError(`Ese es el PIN personal de ${matchedCashier.name} (Cajera). Toca "🧾 Modo Cajero" arriba para iniciar su turno, o ingresa el PIN de Dueño.`)
+        } else {
+          setError('PIN de Dueño incorrecto. Intento registrado en auditoría.')
+        }
         setPinInput('')
         if (onLogPinFailed) {
           onLogPinFailed('Intento fallido de ingresar a Modo Dueño (Admin)')
@@ -54,7 +67,7 @@ export default function RolePinModal({
     }
 
     if (requiresCashierPin) {
-      if (pinInput.trim() !== String(selectedCashierObj.pin).trim()) {
+      if (cleanInput !== normalizedCashierPin) {
         setError(`PIN incorrecto para ${selectedCashierObj.name}.`)
         setPinInput('')
         if (onLogPinFailed) {
@@ -198,9 +211,9 @@ export default function RolePinModal({
                             </div>
                           </div>
                         </div>
-                        {Number(c.commission_pct) > 0 && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono font-bold">
-                            +{c.commission_pct}%
+                        {(Number(c.commission_fixed_usd) > 0 || Number(c.commission_pct) > 0) && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 font-mono font-bold shrink-0">
+                            {formatCashierBonusBadge(c, (v) => (isAr ? Math.round(Number(v) || 0).toLocaleString('es-AR') : Number(v || 0).toFixed(2)))}
                           </span>
                         )}
                       </button>

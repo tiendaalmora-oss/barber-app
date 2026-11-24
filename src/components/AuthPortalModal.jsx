@@ -103,56 +103,112 @@ export default function AuthPortalModal({
     }
   }
 
-  // 2. Standard Login with Email + Password (+ optional Fingerprint enrollment)
+  // 2. Standard Login with Email + Password OR Cashier Personal PIN
   const handleLogin = async (e) => {
     e.preventDefault()
     setErrorMsg('')
     setSuccessMsg('')
     const cleanEmail = loginEmail.trim().toLowerCase()
     const cleanPass = loginPass.trim()
+    const cleanPin = cleanPass.replace(/\s+/g, '')
 
     const found = tenants.find(
       t => t.email.toLowerCase() === cleanEmail
     )
-    if (!found) {
-      setErrorMsg('No encontramos ese correo registrado. Si eres nuevo, toca la pestaña "Crear Cuenta Nueva".')
+
+    if (found && (found.password || '') === cleanPass) {
+      let updatedTenant = found
+
+      // If user checked "Vincular mi Huella en este teléfono", register WebAuthn credential now
+      if (enrollBiometricOnLogin && bioSupported) {
+        try {
+          const credId = await registerBiometricCredential({
+            userId: found.id,
+            email: found.email,
+            displayName: found.businessName
+          })
+          const binding = {
+            tenantId: found.id,
+            email: found.email,
+            businessName: found.businessName,
+            credentialId: credId
+          }
+          localStorage.setItem('barber_biometric_binding', JSON.stringify(binding))
+          setSavedBioBinding(binding)
+          updatedTenant = { ...found, biometricCredentialId: credId, biometricEnabled: true }
+          if (onUpdateTenant) {
+            await onUpdateTenant(updatedTenant)
+          }
+        } catch (bioErr) {
+          console.warn('Biometric enrollment skipped:', bioErr)
+        }
+      }
+
+      onLoginSuccess(updatedTenant)
+      if (onClose) onClose()
       return
     }
 
-    if ((found.password || '') !== cleanPass) {
-      setErrorMsg('Contraseña incorrecta. Verifica tu clave o toca "¿Olvidaste tu contraseña?".')
-      return
-    }
-
-    let updatedTenant = found
-
-    // If user checked "Vincular mi Huella en este teléfono", register WebAuthn credential now
-    if (enrollBiometricOnLogin && bioSupported) {
+    // Check Cashier personal PIN login via backend (lets cashiers sign in with business email + their personal PIN)
+    if (cleanPin) {
       try {
-        const credId = await registerBiometricCredential({
-          userId: found.id,
-          email: found.email,
-          displayName: found.businessName
+        const res = await fetch('/api/auth/cashier-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, pin: cleanPin })
         })
-        const binding = {
-          tenantId: found.id,
-          email: found.email,
-          businessName: found.businessName,
-          credentialId: credId
+        if (res.ok) {
+          const data = await res.json()
+          if (data?.ok && data?.cashier) {
+            onLoginSuccess(data.tenant || found, {
+              cashierOperator: data.cashier,
+              forcedCashierLogin: true,
+              niche: data.niche
+            })
+            if (onClose) onClose()
+            return
+          }
         }
-        localStorage.setItem('barber_biometric_binding', JSON.stringify(binding))
-        setSavedBioBinding(binding)
-        updatedTenant = { ...found, biometricCredentialId: credId, biometricEnabled: true }
-        if (onUpdateTenant) {
-          await onUpdateTenant(updatedTenant)
+      } catch (err) {
+        // Offline fallback: inspect local cached workspace if available
+        if (found) {
+          try {
+            const rawWs = localStorage.getItem(`barber_ws_${found.id}`)
+            if (rawWs) {
+              const parsedWs = JSON.parse(rawWs)
+              const delStaff = new Set(Array.isArray(parsedWs.deletedStaffIds) ? parsedWs.deletedStaffIds : [])
+              const sbn = parsedWs.staffByNiche || {}
+              const niches = [parsedWs.currentNiche || found.niche, 'barberia', 'estetica', 'mixto', ...Object.keys(sbn)]
+              for (const nk of niches) {
+                const list = Array.isArray(sbn[nk]) ? sbn[nk] : []
+                const match = list.find(s =>
+                  s &&
+                  !delStaff.has(s.id) &&
+                  s.staff_role === 'cajero' &&
+                  String(s.pin || '').replace(/\s+/g, '') === cleanPin
+                )
+                if (match) {
+                  onLoginSuccess(found, {
+                    cashierOperator: { id: match.id, name: match.name, staff_role: 'cajero' },
+                    forcedCashierLogin: true,
+                    niche: nk
+                  })
+                  if (onClose) onClose()
+                  return
+                }
+              }
+            }
+          } catch (e) {}
         }
-      } catch (bioErr) {
-        console.warn('Biometric enrollment skipped:', bioErr)
       }
     }
 
-    onLoginSuccess(updatedTenant)
-    if (onClose) onClose()
+    if (!found) {
+      setErrorMsg('No encontramos ese correo o PIN de cajera. Si eres nuevo, toca la pestaña "Crear Cuenta Nueva".')
+      return
+    }
+
+    setErrorMsg('Contraseña o PIN de cajera incorrecto. Verifica tu clave o toca "¿Olvidaste tu clave?".')
   }
 
   // 3. Register New Account (+ Security PIN + Optional Fingerprint + Supabase Auth Mirror)
@@ -429,7 +485,7 @@ export default function AuthPortalModal({
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-bold text-slate-300">
-                    Contraseña de tu Cuenta
+                    Contraseña o PIN de Cajera
                   </label>
                   <button
                     type="button"
@@ -448,7 +504,7 @@ export default function AuthPortalModal({
                   <input
                     type="password"
                     required
-                    placeholder="••••••••"
+                    placeholder="Contraseña del dueño o PIN de cajera"
                     value={loginPass}
                     onChange={(e) => setLoginPass(e.target.value)}
                     className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"

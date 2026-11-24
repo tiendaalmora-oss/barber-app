@@ -290,7 +290,7 @@ export default function CommissionsView({
       base_salary_usd: isCashier ? (parseFloat(baseSalaryUsd) || 0) : 0,
       salary_period: isCashier ? salaryPeriod : null,
       commission_scope: isCashier ? commissionScope : null,
-      pin: isCashier ? staffPin.trim() : '',
+      pin: isCashier ? staffPin.replace(/\s+/g, '') : '',
       avatar,
       service_commissions: isCashier ? {} : finalServiceCommissions
     }
@@ -1523,8 +1523,9 @@ export default function CommissionsView({
                             PIN Personal (Opcional)
                           </label>
                           <input
-                            type="password"
+                            type="text"
                             inputMode="numeric"
+                            autoComplete="off"
                             maxLength={8}
                             placeholder="Ej. 1111"
                             value={staffPin}
@@ -1532,6 +1533,9 @@ export default function CommissionsView({
                             className="w-full px-3 py-2 rounded-xl bg-dark-900 border border-dark-700 text-xs text-white font-mono focus:outline-none focus:border-sky-400"
                           />
                         </div>
+                        <p className="col-span-2 text-[10px] text-sky-300/80 leading-snug">
+                          La cajera puede entrar con el correo del local + este PIN (directo a Modo Cajero).
+                        </p>
                       </div>
                     )}
                   </div>

@@ -783,7 +783,7 @@ export default function BusinessSettingsModal({
                     type="text"
                     inputMode="numeric"
                     maxLength={8}
-                    value={secForm.ownerPin || '1234'}
+                    value={secForm.ownerPin ?? '1234'}
                     onChange={(e) => updateSecForm({ ownerPin: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-dark-950 border border-gold-500/35 text-sm font-mono font-black text-white tracking-widest text-center focus:outline-none focus:border-gold-400"
                   />

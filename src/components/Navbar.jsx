@@ -34,6 +34,7 @@ export default function Navbar({
   activeOperator = null,
   onOpenRoleModal,
   onQuickLockCashier,
+  hasCashierStaff = false,
   todayAuditAlertCount = 0
 }) {
   const [bioSupported, setBioSupported] = useState(false)
@@ -168,7 +169,7 @@ export default function Navbar({
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5 lg:gap-2 shrink-0">
             {/* Owner / Cashier Role Switch Pill */}
-            {securityConfig?.enabled && (
+            {(securityConfig?.enabled || isCashierMode || hasCashierStaff) && (
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
@@ -501,7 +502,7 @@ export default function Navbar({
 
               {/* Opciones del Local */}
               <div className="space-y-1.5 pt-2 border-t border-dark-800">
-                {securityConfig?.enabled && (
+                {(securityConfig?.enabled || isCashierMode || hasCashierStaff) && (
                   <button
                     onClick={() => {
                       setIsMobileMenuOpen(false)

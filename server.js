@@ -656,6 +656,67 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
   }
 }
 
+  // --- CASHIER DIRECT PIN LOGIN (Email del local + PIN personal de cajera) ---
+  if (pathname === '/api/auth/cashier-login' && req.method === 'POST') {
+    const body = await parseBody(req)
+    const cleanEmail = String(body?.email || '').trim().toLowerCase()
+    const cleanPin = String(body?.pin || '').replace(/\s+/g, '')
+    if (!cleanEmail || !cleanPin) {
+      return sendJson(res, 400, { ok: false, error: 'Ingresa el correo del local y el PIN de cajera.' })
+    }
+
+    const delEmailSet = new Set((db.deletedTenantEmails || []).map(e => (e || '').toLowerCase().trim()))
+    const delIdSet = new Set(db.deletedTenantIds || [])
+    const tenant = (db.tenants || []).find(t =>
+      t &&
+      t.id &&
+      !delIdSet.has(t.id) &&
+      !delEmailSet.has((t.email || '').toLowerCase().trim()) &&
+      (t.email || '').toLowerCase().trim() === cleanEmail
+    )
+
+    if (!tenant) {
+      return sendJson(res, 401, { ok: false, error: 'PIN de cajera no encontrado o incorrecto' })
+    }
+
+    const ws = db.workspaces[tenant.id] || {}
+    const deletedStaffSet = new Set(Array.isArray(ws.deletedStaffIds) ? ws.deletedStaffIds : [])
+    const sbn = ws.staffByNiche || {}
+    const order = []
+    ;[ws.currentNiche || tenant.niche, 'barberia', 'estetica', 'mixto', ...Object.keys(sbn)].forEach(k => {
+      if (k && !order.includes(k)) order.push(k)
+    })
+
+    let matched = null
+    let matchedNiche = null
+    for (const nk of order) {
+      const arr = Array.isArray(sbn[nk]) ? sbn[nk] : []
+      const found = arr.find(s =>
+        s &&
+        !deletedStaffSet.has(s.id) &&
+        s.staff_role === 'cajero' &&
+        String(s.pin || '').replace(/\s+/g, '') === cleanPin &&
+        String(s.pin || '').replace(/\s+/g, '').length > 0
+      )
+      if (found) {
+        matched = found
+        matchedNiche = nk
+        break
+      }
+    }
+
+    if (!matched) {
+      return sendJson(res, 401, { ok: false, error: 'PIN de cajera no encontrado o incorrecto' })
+    }
+
+    return sendJson(res, 200, {
+      ok: true,
+      tenant,
+      cashier: { id: matched.id, name: matched.name, staff_role: 'cajero' },
+      niche: matchedNiche
+    })
+  }
+
   if (pathname.startsWith('/api/workspace/')) {
     const tenantId = decodeURIComponent(pathname.replace('/api/workspace/', ''))
     if (!tenantId) return sendJson(res, 400, { error: 'Missing tenantId' })
@@ -674,21 +735,31 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       const body = await parseBody(req)
       const currentWs = db.workspaces[tenantId] || {}
 
+      // Tombstones for intentionally deleted appointments (guarantees deleted appointments never resurrect)
       const existingApts = Array.isArray(currentWs.appointments) ? currentWs.appointments : []
-      let incomingApts = Array.isArray(body.appointments) ? body.appointments : existingApts
+      const deletedAptIds = new Set([
+        ...(Array.isArray(currentWs.deletedAppointmentIds) ? currentWs.deletedAppointmentIds : []),
+        ...(Array.isArray(body.deletedAppointmentIds) ? body.deletedAppointmentIds : [])
+      ])
+      let incomingApts = (Array.isArray(body.appointments) ? body.appointments : existingApts)
+        .filter(a => a && a.id && !deletedAptIds.has(a.id))
 
       // If a single new appointment is provided (e.g. from public client booking)
-      if (body.newAppointment && body.newAppointment.id) {
+      if (body.newAppointment && body.newAppointment.id && !deletedAptIds.has(body.newAppointment.id)) {
         const exists = incomingApts.some(a => a.id === body.newAppointment.id)
         if (!exists) {
           incomingApts = [body.newAppointment, ...incomingApts]
         }
       }
 
-      // Merge: preserve any appointments existing on server that were not in incomingApts unless cancelled
+      // Merge: preserve any appointments existing on server that were not in incomingApts unless cancelled or deleted
       const incomingIds = new Set(incomingApts.map(a => a.id))
-      const preservedApts = existingApts.filter(a => !incomingIds.has(a.id) && a.status !== 'cancelada')
-      const finalAppointments = [...incomingApts, ...preservedApts]
+      const preservedApts = existingApts.filter(
+        a => a && a.id && !incomingIds.has(a.id) && a.status !== 'cancelada' && !deletedAptIds.has(a.id)
+      )
+      const finalAppointments = [...incomingApts, ...preservedApts].filter(
+        a => a && a.id && !deletedAptIds.has(a.id)
+      )
 
       // Merge clients: preserve existing server clients if incoming has fewer
       const existingClients = Array.isArray(currentWs.clients) ? currentWs.clients : []
@@ -725,6 +796,28 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
         .slice(0, 2000)
 
+      // Tombstones for intentionally deleted staff + configUpdatedAt protection across multiple devices
+      const deletedStaffIdSet = new Set([
+        ...(Array.isArray(currentWs.deletedStaffIds) ? currentWs.deletedStaffIds : []),
+        ...(Array.isArray(body.deletedStaffIds) ? body.deletedStaffIds : [])
+      ])
+
+      const stripDeletedStaff = (sbn) => {
+        if (!sbn || typeof sbn !== 'object' || deletedStaffIdSet.size === 0) return sbn
+        const cleaned = {}
+        for (const k of Object.keys(sbn)) {
+          cleaned[k] = Array.isArray(sbn[k])
+            ? sbn[k].filter(s => s && !deletedStaffIdSet.has(s.id))
+            : sbn[k]
+        }
+        return cleaned
+      }
+
+      const existingConfigTs = Number(currentWs.configUpdatedAt) || 0
+      const incomingConfigTs = Number(body.configUpdatedAt) || 0
+      const isOlderConfigFromStaleDevice =
+        existingConfigTs > 0 && (incomingConfigTs === 0 || incomingConfigTs < existingConfigTs)
+
       // Protect customized staff, services, profile, and exchangeRate against stale/empty browser tabs
       const isStaleEmptyPayload =
         (existingClients.length > 0 || existingTxs.length > 0) &&
@@ -739,19 +832,30 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         svbn && Array.isArray(svbn.barberia) && svbn.barberia.length === 5 &&
         svbn.barberia[0]?.name === 'Corte Clásico / Degradé' && Number(svbn.barberia[0]?.price_usd) === 8
 
-      const finalStaffByNiche =
+      const rawStaffByNiche =
+        (isOlderConfigFromStaleDevice && currentWs.staffByNiche) ||
         (isStaleEmptyPayload && currentWs.staffByNiche) ||
         (currentWs.staffByNiche && !isDefaultMockStaff(currentWs.staffByNiche) && isDefaultMockStaff(body.staffByNiche))
           ? currentWs.staffByNiche
           : (body.staffByNiche || currentWs.staffByNiche)
 
+      const finalStaffByNiche = stripDeletedStaff(rawStaffByNiche)
+
       const finalServicesByNiche =
+        (isOlderConfigFromStaleDevice && currentWs.servicesByNiche) ||
         (isStaleEmptyPayload && currentWs.servicesByNiche) ||
         (currentWs.servicesByNiche && !isDefaultMockServices(currentWs.servicesByNiche) && isDefaultMockServices(body.servicesByNiche))
           ? currentWs.servicesByNiche
           : (body.servicesByNiche || currentWs.servicesByNiche)
 
+      const finalProductsByNiche =
+        (isOlderConfigFromStaleDevice && currentWs.productsByNiche) ||
+        (isStaleEmptyPayload && currentWs.productsByNiche)
+          ? currentWs.productsByNiche
+          : (body.productsByNiche || currentWs.productsByNiche)
+
       const finalBusinessProfile =
+        (isOlderConfigFromStaleDevice && currentWs.businessProfile) ||
         (isStaleEmptyPayload && currentWs.businessProfile) ||
         (currentWs.businessProfile?.businessName &&
           currentWs.businessProfile.businessName !== 'Barbería & Studio El Fino' &&
@@ -760,7 +864,8 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
           : (body.businessProfile || currentWs.businessProfile)
 
       const finalExchangeRate =
-        isStaleEmptyPayload && currentWs.exchangeRate
+        (isOlderConfigFromStaleDevice && currentWs.exchangeRate) ||
+        (isStaleEmptyPayload && currentWs.exchangeRate)
           ? currentWs.exchangeRate
           : (body.exchangeRate || currentWs.exchangeRate)
 
@@ -770,11 +875,15 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
         businessProfile: finalBusinessProfile,
         staffByNiche: finalStaffByNiche,
         servicesByNiche: finalServicesByNiche,
+        productsByNiche: finalProductsByNiche,
         exchangeRate: finalExchangeRate,
         clients: finalClients,
         transactions: finalTransactions,
         deletedTxIds: Array.from(deletedTxIds),
         appointments: finalAppointments,
+        deletedAppointmentIds: Array.from(deletedAptIds),
+        deletedStaffIds: Array.from(deletedStaffIdSet),
+        configUpdatedAt: Math.max(existingConfigTs, incomingConfigTs),
         dailyClosings: finalDailyClosings,
         auditLogs: finalAuditLogs,
         updatedAt: Date.now()
