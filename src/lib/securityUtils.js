@@ -93,9 +93,10 @@ export function calculateCashierCommissionForTx(txOrItems, cashierStaff) {
       }, 0)
     } else {
       const isPureProduct = tx.category === 'Venta Productos'
-      if (scope === 'servicios') eligibleBase = isPureProduct ? 0 : (Number(tx.monto_usd) || 0)
-      else if (scope === 'productos') eligibleBase = isPureProduct ? (Number(tx.monto_usd) || 0) : 0
-      else eligibleBase = Number(tx.monto_usd) || 0
+      const baseVal = Number(tx.subtotal_base_usd ?? tx.monto_usd) || 0
+      if (scope === 'servicios') eligibleBase = isPureProduct ? 0 : baseVal
+      else if (scope === 'productos') eligibleBase = isPureProduct ? baseVal : 0
+      else eligibleBase = baseVal
     }
   }
 

@@ -103,7 +103,7 @@ export function isEfectivoMethod(method) {
 }
 
 export function isPuntoMethod(method) {
-  return method === 'punto' || method === 'punto_de_venta'
+  return method === 'punto' || method === 'punto_de_venta' || method === 'tarjeta_credito'
 }
 
 export function isPagoMovilMethod(method) {
@@ -187,6 +187,7 @@ export function formatMethodName(method, isAr = isArgentina()) {
   if (!method) return isAr ? 'Mercado Pago / Transf.' : 'Pago Móvil'
   if (isEfectivoMethod(method)) return isAr ? 'Efectivo' : 'Efectivo $'
   if (isPagoMovilMethod(method)) return isAr ? 'Mercado Pago / Transf.' : 'Pago Móvil'
+  if (method === 'tarjeta_credito') return 'Tarjeta Crédito'
   if (isPuntoMethod(method)) return isAr ? 'Tarjeta / Point' : 'Punto de Venta'
   if (isDigitalMethod(method)) return isAr ? 'Digital / USDT' : 'Zelle / Binance'
   if (isFiadoMethod(method)) return 'Fiado'
@@ -201,6 +202,14 @@ export function formatTxPaymentSummary(tx, isAr = isArgentina()) {
       .filter(s => s && Number(s.amount_usd) > 0)
       .map(s => `${formatMethodName(s.method, isAr)} ${formatCurrency(s.amount_usd, isAr)}`)
     if (parts.length > 0) return `Mixto (${parts.join(' + ')})`
+  }
+  if (tx.metodo_pago === 'tarjeta_credito' || (isAr && tx.card_type === 'credito')) {
+    return Number(tx.card_surcharge_pct) > 0
+      ? `Tarjeta Crédito (+${tx.card_surcharge_pct}%)`
+      : 'Tarjeta Crédito'
+  }
+  if (isAr && isPuntoMethod(tx.metodo_pago) && tx.card_type === 'debito') {
+    return 'Tarjeta Débito'
   }
   return formatMethodName(tx.metodo_pago, isAr)
 }

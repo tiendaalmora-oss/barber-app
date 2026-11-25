@@ -16,7 +16,8 @@ import {
   Star,
   ShieldCheck,
   User,
-  Zap
+  Zap,
+  Plus
 } from 'lucide-react'
 import {
   getLocalDateIso,
@@ -32,6 +33,7 @@ import {
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
 import { getOperativeStaff } from '../lib/securityUtils'
+import { getSuggestedAddons, computeBookingTotals } from '../lib/bookingUtils'
 import PhoneCountryInput from './PhoneCountryInput'
 
 const SHORT_DAY_NAMES = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
@@ -71,6 +73,8 @@ export default function PublicBookingView({
   const [catalogTab, setCatalogTab] = useState('servicios')
   const [selectedCategory, setSelectedCategory] = useState('Todos')
   const [selectedService, setSelectedService] = useState(allServices[0]?.name || '')
+  const [selectedAddonIds, setSelectedAddonIds] = useState([])
+  const [showMoreAddons, setShowMoreAddons] = useState(false)
   const [selectedStaff, setSelectedStaff] = useState(getOperativeStaff(nicheData?.staff)[0]?.id || 'any')
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
 
@@ -132,7 +136,50 @@ export default function PublicBookingView({
   const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
 
   const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
-  const selectedDuration = currentServiceObj?.duration_min || inferServiceDuration(currentServiceObj)
+
+  useEffect(() => {
+    setSelectedAddonIds(prev => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev
+      const filtered = prev.filter(id => {
+        const match = allServices.find(s => (s.id || s.name) === id)
+        if (!match) return false
+        if (currentServiceObj && ((match.id && currentServiceObj.id && match.id === currentServiceObj.id) || match.name === currentServiceObj.name)) {
+          return false
+        }
+        return true
+      })
+      return filtered.length === prev.length ? prev : filtered
+    })
+  }, [allServices, currentServiceObj?.id, currentServiceObj?.name])
+
+  const suggestedAddons = useMemo(
+    () => getSuggestedAddons(allServices, currentServiceObj, 4),
+    [allServices, currentServiceObj]
+  )
+  const extraCatalogAddons = useMemo(() => {
+    const sugKeys = new Set(suggestedAddons.map(s => s.id || s.name))
+    return allServices.filter(s =>
+      s &&
+      s.name &&
+      s.name !== currentServiceObj?.name &&
+      (!s.id || s.id !== currentServiceObj?.id) &&
+      !sugKeys.has(s.id || s.name)
+    )
+  }, [allServices, currentServiceObj, suggestedAddons])
+  const selectedAddonObjs = useMemo(
+    () => allServices.filter(s => selectedAddonIds.includes(s.id || s.name) && s.name !== currentServiceObj?.name),
+    [allServices, selectedAddonIds, currentServiceObj]
+  )
+  const bookingTotals = useMemo(
+    () => computeBookingTotals(currentServiceObj, selectedAddonObjs),
+    [currentServiceObj, selectedAddonObjs]
+  )
+  const selectedDuration = bookingTotals.totalDuration
+  const totalBookingPriceUsd = bookingTotals.totalPriceUsd
+  const toggleAddon = (addonKey) => {
+    setSelectedAddonIds(prev => prev.includes(addonKey) ? prev.filter(id => id !== addonKey) : [...prev, addonKey])
+  }
+  const arCreditSurchargePct = isAr ? Math.max(0, Number(businessProfile?.creditCardSurchargePct) || 0) : 0
 
   const isSlotInPast = (timeStr) => {
     return isTimeSlotInPast(timeStr, selectedDate, 10)
@@ -199,7 +246,7 @@ export default function PublicBookingView({
       const firstFree = activeSlots.find(s => !isSlotUnavailable(s))
       if (firstFree) setSelectedTime(firstFree)
     }
-  }, [selectedDate, selectedStaff, appointments, selectedService, activeSlots])
+  }, [selectedDate, selectedStaff, appointments, selectedService, selectedDuration, activeSlots])
 
   const morningSlots = activeSlots.filter(s => timeToMinutes(s) < 720)
   const afternoonSlots = activeSlots.filter(s => timeToMinutes(s) >= 720 && timeToMinutes(s) < 1020)
@@ -277,6 +324,8 @@ export default function PublicBookingView({
 
     const assignedStaffObj = staffList.find(s => s.id === assignedStaffId)
 
+    const finalServiceLabel = bookingTotals.combinedServiceName || selectedService
+
     const newApt = {
       id: 'web_' + Date.now(),
       client_name: clientName.trim(),
@@ -285,7 +334,9 @@ export default function PublicBookingView({
       time: normTime,
       staff_id: assignedStaffId,
       staff_name: assignedStaffObj?.name || '',
-      service: selectedService,
+      service: finalServiceLabel,
+      services_list: bookingTotals.items,
+      total_price_usd: totalBookingPriceUsd,
       duration_min: selectedDuration,
       status: 'pendiente',
       source: 'web'
@@ -296,9 +347,10 @@ export default function PublicBookingView({
       ...newApt,
       code: 'VIP-' + String(Date.now()).slice(-4),
       staffName: assignedStaffObj ? assignedStaffObj.name : (businessProfile?.businessName || 'Especialista Asignado'),
-      priceUsd: currentServiceObj?.price_usd || 0,
-      priceBs: ((currentServiceObj?.price_usd || 0) * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-      durationMin: selectedDuration
+      priceUsd: totalBookingPriceUsd,
+      priceBs: (totalBookingPriceUsd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      durationMin: selectedDuration,
+      services_list: bookingTotals.items
     })
   }
 
@@ -824,13 +876,25 @@ export default function PublicBookingView({
                     <span className="text-slate-400">Servicio elegido</span>
                     <span className="font-bold text-white text-right">{bookedTicket.service}</span>
                   </div>
+                  {Array.isArray(bookedTicket.services_list) && bookedTicket.services_list.length > 1 && (
+                    <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-2.5 space-y-1">
+                      {bookedTicket.services_list.map((it, idx) => (
+                        <div key={it.id || idx} className="flex justify-between items-center text-[11px] text-slate-300">
+                          <span className="truncate pr-2">• {it.name}</span>
+                          <span className="font-mono font-bold text-white shrink-0">
+                            ${fmt(it.price_usd)} {isAr ? 'ARS' : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">Especialista</span>
                     <span className="font-bold text-gold-400">{bookedTicket.staffName}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">Duración estimada</span>
-                    <span className="font-semibold text-slate-200 font-mono">⏱ ~{bookedTicket.durationMin || 30} min</span>
+                    <span className="font-semibold text-slate-200 font-mono">⏱ ~{formatDurationLabel(bookedTicket.durationMin || 30)}</span>
                   </div>
 
                   {/* Perforated Divider Line */}
@@ -877,6 +941,8 @@ export default function PublicBookingView({
                   onClick={() => {
                     setBookedTicket(null)
                     setClientName('')
+                    setSelectedAddonIds([])
+                    setShowMoreAddons(false)
                     const nextFree = activeSlots.find(s => !isSlotUnavailable(s))
                     if (nextFree) setSelectedTime(nextFree)
                   }}
@@ -936,6 +1002,95 @@ export default function PublicBookingView({
                     })}
                   </select>
                 </div>
+
+                {/* Order Bump: Complementos Adicionales Opcionales */}
+                {suggestedAddons.length > 0 && (
+                  <div className="mt-2.5 p-3.5 rounded-2xl bg-[#090b10] border border-gold-500/20 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-gold-400 shrink-0" />
+                        <span>¿Deseas agregar algo más?</span>
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        selectedAddonObjs.length > 0
+                          ? 'bg-gold-500/20 text-gold-300 border-gold-500/40'
+                          : 'bg-white/[0.04] text-slate-400 border-white/10'
+                      }`}>
+                        {selectedAddonObjs.length > 0 ? `+${selectedAddonObjs.length} extra` : 'Opcional'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(showMoreAddons ? [...suggestedAddons, ...extraCatalogAddons] : suggestedAddons).map(addon => {
+                        const addonKey = addon.id || addon.name
+                        const isSelected = selectedAddonIds.includes(addonKey)
+                        const addonDur = Number(addon.duration_min) || inferServiceDuration(addon)
+                        const addonBs = (addon.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        return (
+                          <button
+                            type="button"
+                            key={addonKey}
+                            onClick={() => toggleAddon(addonKey)}
+                            className={`p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-all active:scale-[0.98] ${
+                              isSelected
+                                ? 'bg-gradient-to-br from-gold-500/20 to-amber-500/5 border-gold-500 text-white shadow-sm shadow-gold-500/10'
+                                : 'bg-dark-950/80 border-white/[0.07] text-slate-300 hover:border-gold-500/35 hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                                isSelected ? 'bg-gold-500 text-black' : 'bg-white/[0.06] text-slate-400'
+                              }`}>
+                                {isSelected ? <Check className="w-3 h-3 stroke-[3]" /> : <Plus className="w-3 h-3" />}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="block text-xs font-bold truncate">{addon.name}</span>
+                                <span className="block text-[10px] text-slate-400 font-mono">
+                                  +{formatDurationLabel(addonDur, true)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className={`block text-xs font-black font-mono ${isSelected ? 'text-gold-400' : 'text-emerald-400'}`}>
+                                +${fmt(addon.price_usd)}
+                              </span>
+                              {!isAr && (
+                                <span className="block text-[9px] text-slate-500 font-mono">
+                                  Bs. {addonBs}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {extraCatalogAddons.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowMoreAddons(prev => !prev)}
+                        className="text-[11px] font-bold text-slate-400 hover:text-gold-400 transition-colors flex items-center gap-1"
+                      >
+                        <span>
+                          {showMoreAddons
+                            ? 'Ver menos opciones'
+                            : `+ Ver más servicios del catálogo (${extraCatalogAddons.length})`}
+                        </span>
+                      </button>
+                    )}
+
+                    {selectedAddonObjs.length > 0 && (
+                      <div className="pt-2 border-t border-white/[0.07] flex items-center justify-between gap-2 text-[11px]">
+                        <span className="text-slate-300 font-medium">
+                          Tiempo total actualizado: <strong className="text-gold-400 font-mono">⏱ {formatDurationLabel(selectedDuration)}</strong>
+                        </span>
+                        <span className="font-mono font-black text-white">
+                          Total: ${fmt(totalBookingPriceUsd)} {isAr ? 'ARS' : ''}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* PASO 2: Especialista (Solo en modo multi-profesional) */}
@@ -1218,25 +1373,36 @@ export default function PublicBookingView({
 
               {/* Resumen Previo a Confirmar */}
               {!isDayClosed && !isSlotUnavailable(selectedTime) && currentServiceObj && (
-                <div className="rounded-2xl bg-[#090b10] border border-white/[0.07] px-4 py-3 flex items-center justify-between gap-2 text-xs">
-                  <div className="min-w-0">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
-                      Resumen de tu Cita
-                    </span>
-                    <p className="font-bold text-white truncate">
-                      {currentServiceObj.name} • <span className="text-gold-400 font-mono">{selectedTime}</span>
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-base font-black text-white font-mono">
-                      ${fmt(currentServiceObj.price_usd)} {isAr ? 'ARS' : ''}
-                    </span>
-                    {!isAr && (
-                      <span className="block text-[10px] text-slate-400 font-mono">
-                        Bs. {(currentServiceObj.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className="rounded-2xl bg-[#090b10] border border-white/[0.07] px-4 py-3 space-y-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400 block">
+                        Resumen de tu Cita
                       </span>
-                    )}
+                      <p className={`font-bold text-white ${selectedAddonObjs.length > 0 ? 'leading-snug' : 'truncate'}`}>
+                        {bookingTotals.combinedServiceName || currentServiceObj.name} • <span className="text-gold-400 font-mono">{selectedTime}</span>
+                      </p>
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                        ⏱ {formatDurationLabel(selectedDuration)}
+                      </span>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-base font-black text-white font-mono">
+                        ${fmt(totalBookingPriceUsd)} {isAr ? 'ARS' : ''}
+                      </span>
+                      {!isAr && (
+                        <span className="block text-[10px] text-slate-400 font-mono">
+                          Bs. {(totalBookingPriceUsd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {arCreditSurchargePct > 0 && (
+                    <div className="pt-1.5 border-t border-white/[0.06] text-[10px] text-sky-300/90 flex items-center gap-1.5">
+                      <span>💳</span>
+                      <span>Pagos con tarjeta de crédito tienen un +{arCreditSurchargePct}% de recargo.</span>
+                    </div>
+                  )}
                 </div>
               )}
 

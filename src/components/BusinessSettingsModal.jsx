@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { X, Store, Upload, Image as ImageIcon, Phone, MapPin, Clock, Instagram, Sparkles, Check, Trash2, CreditCard, ShieldCheck, Copy, Lock } from 'lucide-react'
 import { MASTER_BOOKING_SLOTS, DEFAULT_BOOKING_SLOTS, SLOTS_PRESET_15_MIN, SLOTS_PRESET_30_MIN, SLOTS_PRESET_45_MIN, SLOTS_PRESET_60_MIN, DEFAULT_WEEKLY_SCHEDULE } from '../lib/mockData'
 import { DAYS_OF_WEEK } from '../lib/dateUtils'
-import { getActiveBrand } from '../lib/brandConfig'
+import { getActiveBrand, isArgentina } from '../lib/brandConfig'
 import { getSecurityConfig, getDeviceForceCashier, setDeviceForceCashier } from '../lib/securityUtils'
 import PhoneCountryInput from './PhoneCountryInput'
 
@@ -23,6 +23,7 @@ export default function BusinessSettingsModal({
 }) {
   const brand = getActiveBrand(activeTenant)
   const isGlam = brand?.code === 'glamos'
+  const isAr = isArgentina(activeTenant, businessProfile)
 
   // ALL hooks declared at top level before any conditional return
   const [form, setForm] = useState(businessProfile || {})
@@ -719,14 +720,10 @@ export default function BusinessSettingsModal({
                   <span>Métodos de Pago que Acepta tu Local:</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {[
-                    'Pago Móvil BCV',
-                    'Efectivo ($)',
-                    'Punto de Venta',
-                    'Zelle',
-                    'Binance Pay',
-                    'Biopago'
-                  ].map(method => {
+                  {(isAr
+                    ? ['Efectivo', 'Mercado Pago', 'Transferencia', 'Tarjeta / Point', 'Digital / USDT']
+                    : ['Pago Móvil BCV', 'Efectivo ($)', 'Punto de Venta', 'Zelle', 'Binance Pay', 'Biopago']
+                  ).map(method => {
                     const isChecked = (form.paymentMethods || []).includes(method)
                     return (
                       <button
@@ -746,6 +743,56 @@ export default function BusinessSettingsModal({
                   })}
                 </div>
               </div>
+
+              {isAr && (
+                <div className="p-3.5 rounded-2xl bg-sky-500/5 border border-sky-500/30 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                      <span>💳 Recargo por Tarjeta de Crédito (%)</span>
+                    </label>
+                    <span className="text-xs font-mono font-black text-sky-400">
+                      +{(Number(form.creditCardSurchargePct) || 0)}%
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[0, 5, 10, 15, 20].map(pctVal => (
+                      <button
+                        key={pctVal}
+                        type="button"
+                        onClick={() => setForm(prev => ({ ...prev, creditCardSurchargePct: pctVal }))}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer ${
+                          (Number(form.creditCardSurchargePct) || 0) === pctVal
+                            ? 'bg-sky-500 text-black border-sky-400 shadow-sm'
+                            : 'bg-dark-900 text-slate-300 border-dark-750 hover:text-white'
+                        }`}
+                      >
+                        {pctVal}%
+                      </button>
+                    ))}
+                    <div className="flex items-center bg-dark-950 border border-dark-700 focus-within:border-sky-500 rounded-xl px-2.5 py-1.5 w-24 ml-auto">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder="0"
+                        value={form.creditCardSurchargePct ?? ''}
+                        onChange={(e) => setForm(prev => ({
+                          ...prev,
+                          creditCardSurchargePct: e.target.value === '' ? 0 : Math.max(0, Math.min(100, Number(e.target.value) || 0))
+                        }))}
+                        className="w-full bg-transparent text-xs font-mono font-bold text-white focus:outline-none text-right"
+                      />
+                      <span className="text-xs text-slate-400 ml-1 font-mono">%</span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Al cobrar con Tarjeta de Crédito en Caja se agrega este % automáticamente (incluye Pago Mixto). Las comisiones del equipo siguen calculándose sobre el precio base.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

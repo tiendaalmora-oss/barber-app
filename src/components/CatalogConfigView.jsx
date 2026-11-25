@@ -32,6 +32,7 @@ export default function CatalogConfigView({
   const [newSvcDuration, setNewSvcDuration] = useState(30)
   const [newSvcCategory, setNewSvcCategory] = useState('Servicios')
   const [newSvcCommission, setNewSvcCommission] = useState('')
+  const [newSvcIsAddon, setNewSvcIsAddon] = useState(false)
   const [editingSvcId, setEditingSvcId] = useState(null)
 
   const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
@@ -78,7 +79,8 @@ export default function CatalogConfigView({
         price_usd: parseFloat(newSvcPrice) || 5,
         category: newSvcCategory,
         duration_min: finalDur,
-        commission_pct: finalComm
+        commission_pct: finalComm,
+        is_addon: Boolean(newSvcIsAddon)
       })
       setEditingSvcId(null)
     } else {
@@ -88,13 +90,15 @@ export default function CatalogConfigView({
         price_usd: parseFloat(newSvcPrice) || 5,
         category: newSvcCategory,
         duration_min: finalDur,
-        commission_pct: finalComm
+        commission_pct: finalComm,
+        is_addon: Boolean(newSvcIsAddon)
       })
     }
     setNewSvcName('')
     setNewSvcPrice('')
     setNewSvcDuration(30)
     setNewSvcCommission('')
+    setNewSvcIsAddon(false)
   }
 
   const [selectedDay, setSelectedDay] = useState('lunes')
@@ -194,6 +198,7 @@ export default function CatalogConfigView({
     setNewSvcCategory(svc.category || 'Servicios')
     setNewSvcDuration(svc.duration_min || inferServiceDuration(svc))
     setNewSvcCommission(svc.commission_pct ? String(svc.commission_pct) : '')
+    setNewSvcIsAddon(Boolean(svc.is_addon))
   }
 
   return (
@@ -586,6 +591,53 @@ export default function CatalogConfigView({
               </div>
             </div>
 
+            {isAr && (
+              <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/25 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-sky-300 flex items-center gap-1.5">
+                      <span>💳 Recargo Tarjeta de Crédito (%)</span>
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      Solo aplica en pagos con Tarjeta de Crédito. No suma comisión al equipo.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {[0, 5, 10, 15].map(pctVal => (
+                      <button
+                        key={pctVal}
+                        type="button"
+                        onClick={() => setForm({ ...form, creditCardSurchargePct: pctVal })}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-mono font-bold border transition-all ${
+                          (Number(form.creditCardSurchargePct) || 0) === pctVal
+                            ? 'bg-sky-500 text-black border-sky-400'
+                            : 'bg-dark-900 text-slate-400 border-dark-750 hover:text-white'
+                        }`}
+                      >
+                        {pctVal}%
+                      </button>
+                    ))}
+                    <div className="flex items-center bg-dark-950 border border-dark-700 focus-within:border-sky-500 rounded-lg px-2 py-1 w-16">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        placeholder="0"
+                        value={form.creditCardSurchargePct ?? ''}
+                        onChange={(e) => setForm({
+                          ...form,
+                          creditCardSurchargePct: e.target.value === '' ? 0 : Math.max(0, Math.min(100, Number(e.target.value) || 0))
+                        })}
+                        className="w-full bg-transparent text-xs font-mono font-bold text-white focus:outline-none text-right"
+                      />
+                      <span className="text-[10px] text-slate-500 ml-0.5">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!isCashierMode && (
               <div className="pt-2 flex justify-end">
                 <button
@@ -620,7 +672,7 @@ export default function CatalogConfigView({
                 {editingSvcId && (
                   <button
                     type="button"
-                    onClick={() => { setEditingSvcId(null); setNewSvcName(''); setNewSvcPrice('') }}
+                    onClick={() => { setEditingSvcId(null); setNewSvcName(''); setNewSvcPrice(''); setNewSvcIsAddon(false) }}
                     className="text-[10px] text-slate-400 hover:text-white flex items-center gap-0.5"
                   >
                     <X className="w-3 h-3" /> Cancelar
@@ -729,6 +781,30 @@ export default function CatalogConfigView({
               </div>
 
               <button
+                type="button"
+                onClick={() => setNewSvcIsAddon(prev => !prev)}
+                className={`w-full px-3 py-2 rounded-xl border text-left flex items-center justify-between gap-2 transition-all ${
+                  newSvcIsAddon
+                    ? 'bg-gold-500/15 border-gold-500/40 text-gold-300'
+                    : 'bg-dark-900 border-dark-750 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div className="min-w-0">
+                  <span className="text-[11px] font-bold block truncate">
+                    ✨ Sugerir como adicional al reservar
+                  </span>
+                  <span className="text-[10px] text-slate-400 block truncate">
+                    Aparece como extra en tu Link Web
+                  </span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black shrink-0 ${
+                  newSvcIsAddon ? 'bg-gold-500 text-black' : 'bg-dark-800 text-slate-400'
+                }`}>
+                  {newSvcIsAddon ? 'SÍ' : 'NO'}
+                </span>
+              </button>
+
+              <button
                 type="submit"
                 className="w-full py-2 rounded-lg bg-gold-500 hover:bg-gold-400 text-black text-xs font-black transition-all"
               >
@@ -758,6 +834,11 @@ export default function CatalogConfigView({
                         {Number(svc.commission_pct) > 0 && (
                           <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold shrink-0">
                             🏷️ {svc.commission_pct}% com.
+                          </span>
+                        )}
+                        {svc.is_addon && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-gold-500/15 text-gold-300 border border-gold-500/30 font-bold shrink-0">
+                            ✨ Adicional
                           </span>
                         )}
                       </div>

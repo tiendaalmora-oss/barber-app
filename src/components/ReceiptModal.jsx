@@ -27,7 +27,10 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
         msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: ${fmt(it.price_usd * (it.qty || 1))}\n`
       })
     } else {
-      msg += `• ${tx.item_name}: ${fmt(tx.monto_usd)}\n`
+      msg += `• ${tx.item_name}: ${fmt(tx.subtotal_base_usd ?? tx.monto_usd)}\n`
+    }
+    if (tx.card_surcharge_usd > 0) {
+      msg += `💳 *Recargo Tarjeta Crédito (+${tx.card_surcharge_pct}%):* +${fmt(tx.card_surcharge_usd)} ${currTag}\n`
     }
     if (tx.propina_usd > 0) {
       msg += isAr
@@ -114,7 +117,14 @@ export default function ReceiptModal({ isOpen, onClose, transaction, exchangeRat
             ) : (
               <div className="flex justify-between text-slate-300">
                 <span className="truncate pr-2">{tx.item_name}</span>
-                <span className="font-bold">${fmt(tx.monto_usd)}</span>
+                <span className="font-bold">${fmt(tx.subtotal_base_usd ?? tx.monto_usd)}</span>
+              </div>
+            )}
+
+            {tx.card_surcharge_usd > 0 && (
+              <div className="flex justify-between text-sky-400">
+                <span>💳 Recargo Crédito (+{tx.card_surcharge_pct}%):</span>
+                <span className="font-bold">+${fmt(tx.card_surcharge_usd)}</span>
               </div>
             )}
 

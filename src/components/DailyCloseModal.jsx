@@ -90,6 +90,7 @@ export default function DailyCloseModal({
   const zelleUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'zelle'), 0)
 
   const puntoUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'punto'), 0)
+  const totalCardSurchargeUSD = incomeTx.reduce((sum, t) => sum + (Number(t.card_surcharge_usd) || 0), 0)
 
   const fiadoUSD = incomeTx.reduce((sum, t) => sum + getTxMethodAmountUSD(t, 'fiado'), 0)
 
@@ -193,7 +194,7 @@ export default function DailyCloseModal({
     msg += isAr
       ? `  - 📲 Mercado Pago / Transf.: ${fmt(pagoMovilUSD)} ARS\n`
       : `  - 📲 Pago Móvil: Bs. ${pagoMovilBs.toFixed(2)} (${pagoMovilUSD.toFixed(2)})\n`
-    if (puntoUSD > 0) msg += `  - 💳 ${isAr ? 'Tarjeta / Point' : 'Punto de Venta'}: ${fmt(puntoUSD)}\n`
+    if (puntoUSD > 0) msg += `  - 💳 ${isAr ? 'Tarjeta / Point' : 'Punto de Venta'}: ${fmt(puntoUSD)}${isAr && totalCardSurchargeUSD > 0 ? ` (incl. recargo crédito: +${fmt(totalCardSurchargeUSD)})` : ''}\n`
     if (zelleUSD > 0) msg += `  - 🟡 ${isAr ? 'Digital / USDT' : 'Zelle / Binance'}: ${fmt(zelleUSD)}\n`
     if (fiadoUSD > 0) msg += `  - 📝 Fiados ${isWeekly ? 'de la Semana' : 'del Día'}: ${fmt(fiadoUSD)}\n`
 

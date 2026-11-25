@@ -3,12 +3,14 @@ import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2,
 import PhoneCountryInput from './PhoneCountryInput'
 import { getLocalDateIso, normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
-import { getOperativeStaff, getCashierStaff, calculateCashierCommissionForTx } from '../lib/securityUtils'
+import { getOperativeStaff, getCashierStaff, calculateCashierCommissionForTx, formatCashierBonusBadge } from '../lib/securityUtils'
+import { calculateCreditCardSurcharge } from '../lib/bookingUtils'
 
-const getSplitMethodOptions = (isAr) => isAr ? [
+const getSplitMethodOptions = (isAr, creditSurchargePct = 0) => isAr ? [
   { id: 'efectivo_usd', label: '💵 Efectivo (En Caja)' },
   { id: 'pago_movil', label: '📲 Mercado Pago / Transf.' },
-  { id: 'punto_de_venta', label: '💳 Tarjeta / Point' },
+  { id: 'punto_de_venta', label: '💳 Tarjeta Débito' },
+  { id: 'tarjeta_credito', label: creditSurchargePct > 0 ? `💳 Tarjeta Crédito (+${creditSurchargePct}%)` : '💳 Tarjeta Crédito' },
   { id: 'zelle', label: '🟡 Digital / USDT' },
   { id: 'fiado', label: '📝 Fiado / Cta. Cte.' },
 ] : [
@@ -33,7 +35,8 @@ export default function QuickCashModal({
   activeOperator = null
 }) {
   const isAr = isArgentina(null, businessProfile)
-  const SPLIT_METHOD_OPTIONS = getSplitMethodOptions(isAr)
+  const creditSurchargePct = isAr ? Math.max(0, Number(businessProfile?.creditCardSurchargePct) || 0) : 0
+  const SPLIT_METHOD_OPTIONS = getSplitMethodOptions(isAr, creditSurchargePct)
   const fmt = (val) => formatCurrency(val, isAr)
   const currTag = isAr ? 'ARS' : 'USD'
   const operativeRaw = getOperativeStaff(nicheData.staff || [])
@@ -43,6 +46,7 @@ export default function QuickCashModal({
   const [selectedStaff, setSelectedStaff] = useState(operativeStaff[0]?.id || '')
   const [activeItemTab, setActiveItemTab] = useState('servicios') // 'servicios' | 'productos'
   const [paymentMethod, setPaymentMethod] = useState('pago_movil')
+  const [cardType, setCardType] = useState('debito') // 'debito' | 'credito' (AR only)
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
 
@@ -104,6 +108,7 @@ export default function QuickCashModal({
 
     setTipUSD(0)
     setCustomTip('')
+    setCardType('debito')
     setSplitInput1('')
     setSplitCurrency1('USD')
     setSplitMethod1('efectivo_usd')
@@ -115,31 +120,76 @@ export default function QuickCashModal({
       const targetStaffId = prefillData.staffId || operativeStaff[0]?.id || ''
       setSelectedStaff(targetStaffId)
       const targetStaffObj = operativeStaff.find(s => s.id === targetStaffId) || operativeStaff[0]
+      const catalogServices = nicheData.services || []
 
-      // Pre-fill cart with the appointment's service
-      const svcMatch = (nicheData.services || []).find(s => 
-        s.name.toLowerCase() === (prefillData.serviceName || '').toLowerCase()
-      )
+      const buildCartFromSpecs = (specs) => {
+        const nextCart = []
+        specs.forEach((spec, idx) => {
+          if (!spec || !spec.name) return
+          const matched = catalogServices.find(s =>
+            (spec.id && s.id === spec.id) ||
+            s.name.toLowerCase() === spec.name.trim().toLowerCase()
+          )
+          const resolvedId = matched?.id || spec.id || `svc_${Date.now()}_${idx}`
+          const existingIdx = nextCart.findIndex(ci => ci.id === resolvedId)
+          if (existingIdx >= 0) {
+            nextCart[existingIdx] = { ...nextCart[existingIdx], qty: nextCart[existingIdx].qty + 1 }
+          } else {
+            const itemComm = resolveItemCommission(matched || spec, targetStaffObj)
+            nextCart.push({
+              id: resolvedId,
+              name: matched?.name || spec.name,
+              price_usd: matched?.price_usd ?? (Number(spec.price_usd) || 5),
+              commission_pct: itemComm,
+              isProduct: false,
+              qty: 1
+            })
+          }
+        })
+        return nextCart
+      }
 
-      if (svcMatch) {
-        const itemComm = resolveItemCommission(svcMatch, targetStaffObj)
-        setCart([{
-          id: svcMatch.id,
-          name: svcMatch.name,
-          price_usd: svcMatch.price_usd,
-          commission_pct: itemComm,
-          isProduct: false,
-          qty: 1
-        }])
-      } else if (prefillData.serviceName) {
-        setCart([{
-          id: 'svc_' + Date.now(),
-          name: prefillData.serviceName,
-          price_usd: 5,
-          commission_pct: targetStaffObj?.commission_pct || 50,
-          isProduct: false,
-          qty: 1
-        }])
+      if (Array.isArray(prefillData.servicesList) && prefillData.servicesList.length > 0) {
+        setCart(buildCartFromSpecs(prefillData.servicesList))
+      } else {
+        const svcMatch = catalogServices.find(s =>
+          s.name.toLowerCase() === (prefillData.serviceName || '').toLowerCase()
+        )
+        if (svcMatch) {
+          const itemComm = resolveItemCommission(svcMatch, targetStaffObj)
+          setCart([{
+            id: svcMatch.id,
+            name: svcMatch.name,
+            price_usd: svcMatch.price_usd,
+            commission_pct: itemComm,
+            isProduct: false,
+            qty: 1
+          }])
+        } else if ((prefillData.serviceName || '').includes(' + ')) {
+          const pieces = prefillData.serviceName.split(' + ').map(p => p.trim()).filter(Boolean)
+          const hasAnyMatch = pieces.some(p => catalogServices.some(s => s.name.toLowerCase() === p.toLowerCase()))
+          if (hasAnyMatch) {
+            setCart(buildCartFromSpecs(pieces.map(p => ({ name: p }))))
+          } else {
+            setCart([{
+              id: 'svc_' + Date.now(),
+              name: prefillData.serviceName,
+              price_usd: 5,
+              commission_pct: targetStaffObj?.commission_pct || 50,
+              isProduct: false,
+              qty: 1
+            }])
+          }
+        } else if (prefillData.serviceName) {
+          setCart([{
+            id: 'svc_' + Date.now(),
+            name: prefillData.serviceName,
+            price_usd: 5,
+            commission_pct: targetStaffObj?.commission_pct || 50,
+            isProduct: false,
+            qty: 1
+          }])
+        }
       }
     } else {
       // Normal open: reset or default
@@ -235,9 +285,8 @@ export default function QuickCashModal({
     setCart([])
   }
 
-  // Totals & Commission math
-  const totalUSD = cart.reduce((sum, ci) => sum + (ci.price_usd * ci.qty), 0)
-  const totalBs = (totalUSD * exchangeRate).toFixed(2)
+  // Totals & Commission math (Barbers and Cashiers earn commission strictly on baseSubtotalUSD)
+  const baseSubtotalUSD = cart.reduce((sum, ci) => sum + (ci.price_usd * ci.qty), 0)
 
   // Commission is earned strictly on services, respecting custom % per service
   const staffCommissionUSD = cart
@@ -247,23 +296,43 @@ export default function QuickCashModal({
       return sum + (ci.price_usd * ci.qty * (pct / 100))
     }, 0)
   const cashierCommissionUSD = calculateCashierCommissionForTx(cart, activeCashierObj)
-  const businessProfitUSD = Math.max(0, totalUSD - staffCommissionUSD - cashierCommissionUSD)
 
-  // Grand total including tip
-  const grandTotalUSD = totalUSD + tipUSD
-  const grandTotalBs = (grandTotalUSD * exchangeRate).toFixed(2)
-
-  // Split / Mixed payment live calculations
+  // Split / Mixed payment base calculations
   const parsedSplit1Raw = parseFloat(splitInput1)
-  const split1USD = !isNaN(parsedSplit1Raw) && parsedSplit1Raw > 0
+  const split1BaseUSD = !isNaN(parsedSplit1Raw) && parsedSplit1Raw > 0
     ? (splitCurrency1 === 'Bs' && exchangeRate > 0 ? (parsedSplit1Raw / exchangeRate) : parsedSplit1Raw)
     : 0
+
+  const surchargeCalc = calculateCreditCardSurcharge({
+    isAr,
+    creditSurchargePct,
+    paymentMethod,
+    cardType,
+    baseSubtotalUSD,
+    tipUSD,
+    splitMethod1,
+    splitMethod2,
+    split1BaseUSD
+  })
+
+  const cardSurchargeUSD = surchargeCalc.cardSurchargeUSD
+  const totalUSD = surchargeCalc.totalUSD
+  const totalBs = (totalUSD * exchangeRate).toFixed(2)
+  const businessProfitUSD = Math.max(0, totalUSD - staffCommissionUSD - cashierCommissionUSD)
+
+  // Grand total including tip & optional AR credit card surcharge
+  const baseGrandTotalUSD = surchargeCalc.baseGrandTotalUSD
+  const grandTotalUSD = surchargeCalc.grandTotalUSD
+  const grandTotalBs = (grandTotalUSD * exchangeRate).toFixed(2)
+
+  const split1USD = surchargeCalc.split1ChargedUSD
   const split1Bs = split1USD * exchangeRate
-  const split2USD = Math.max(0, grandTotalUSD - split1USD)
+  const split2BaseUSD = surchargeCalc.split2BaseUSD
+  const split2USD = surchargeCalc.split2ChargedUSD
   const split2Bs = split2USD * exchangeRate
   const isSplitValid = paymentMethod !== 'mixto' || (
-    split1USD > 0.001 &&
-    split1USD < (grandTotalUSD - 0.001) &&
+    split1BaseUSD > 0.001 &&
+    split1BaseUSD < (baseGrandTotalUSD - 0.001) &&
     splitMethod1 !== splitMethod2
   )
 
@@ -279,8 +348,8 @@ export default function QuickCashModal({
         alert(isAr ? 'En Pago Mixto debes elegir dos métodos de pago diferentes (ej: Efectivo y Mercado Pago).' : 'En Pago Mixto debes elegir dos métodos de pago diferentes (ej: Efectivo $ y Pago Móvil).')
         return
       }
-      if (split1USD <= 0 || split1USD >= grandTotalUSD) {
-        alert(`En Pago Mixto, ingresa en la 1ra parte un monto mayor a $0 y menor al total a cobrar (${fmt(grandTotalUSD)} ${currTag}).`)
+      if (split1BaseUSD <= 0 || split1BaseUSD >= baseGrandTotalUSD) {
+        alert(`En Pago Mixto, ingresa en la 1ra parte un monto mayor a $0 y menor al subtotal a dividir (${fmt(baseGrandTotalUSD)} ${currTag}).`)
         return
       }
     }
@@ -291,10 +360,11 @@ export default function QuickCashModal({
     // Compute exact split breakdown if paymentMethod === 'mixto'
     let paymentSplits = null
     if (paymentMethod === 'mixto' && grandTotalUSD > 0) {
-      const cleanSplit1USD = Math.round(split1USD * 100) / 100
-      const cleanSplit2USD = Math.round((grandTotalUSD - cleanSplit1USD) * 100) / 100
-      const ratio1 = cleanSplit1USD / grandTotalUSD
-      const net1USD = Math.round(totalUSD * ratio1 * 100) / 100
+      const cleanSplit1USD = surchargeCalc.split1ChargedUSD
+      const cleanSplit2USD = surchargeCalc.split2ChargedUSD
+      const baseRatio1 = baseGrandTotalUSD > 0 ? (split1BaseUSD / baseGrandTotalUSD) : 0.5
+      const baseNet1 = Math.round(baseSubtotalUSD * baseRatio1 * 100) / 100
+      const net1USD = Math.round((baseNet1 + (splitMethod1 === 'tarjeta_credito' ? cardSurchargeUSD : 0)) * 100) / 100
       const net2USD = Math.round((totalUSD - net1USD) * 100) / 100
 
       paymentSplits = [
@@ -327,7 +397,11 @@ export default function QuickCashModal({
       staff_id: staffObj?.id,
       client_name: clientName.trim() || 'Cliente Mostrador',
       client_phone: clientPhone.trim() || '',
-      monto_usd: totalUSD, // Ingreso neto del local por servicios y productos
+      subtotal_base_usd: surchargeCalc.baseSubtotalUSD,
+      card_surcharge_usd: cardSurchargeUSD,
+      card_surcharge_pct: surchargeCalc.cardSurchargePct,
+      card_type: surchargeCalc.cardTypeSaved,
+      monto_usd: totalUSD, // Ingreso neto del local (incluye recargo bancario/Point si aplica)
       monto_bs: parseFloat(totalBs),
       propina_usd: tipUSD, // Propina registrada aparte
       propina_bs: parseFloat((tipUSD * exchangeRate).toFixed(2)),
@@ -337,7 +411,7 @@ export default function QuickCashModal({
       propina_staff_id: tipUSD > 0 ? staffObj?.id : null,
       propina_staff_name: tipUSD > 0 ? (staffObj?.name || 'Venta del Local') : null,
       tasa_bcv: exchangeRate,
-      metodo_pago: paymentMethod,
+      metodo_pago: surchargeCalc.effectiveMethod,
       payment_splits: paymentSplits,
       comision_usd: staffCommissionUSD,
       comision_cajero_usd: cashierCommissionUSD,
@@ -373,6 +447,9 @@ export default function QuickCashModal({
       ;(completedTx.items || []).forEach(it => {
         msg += `• ${it.qty > 1 ? `${it.qty}x ` : ''}${it.name}: ${fmt(it.price_usd * (it.qty || 1))}\n`
       })
+      if (completedTx.card_surcharge_usd > 0) {
+        msg += `💳 *Recargo Tarjeta Crédito (+${completedTx.card_surcharge_pct}%):* +${fmt(completedTx.card_surcharge_usd)} ${currTag}\n`
+      }
       if (completedTx.propina_usd > 0) {
         msg += isAr
           ? `🪙 *Propina:* ${fmt(completedTx.propina_usd)} ARS\n`
@@ -441,6 +518,12 @@ export default function QuickCashModal({
                   <span className="font-bold">${fmt(it.price_usd * (it.qty || 1))}</span>
                 </div>
               ))}
+              {completedTx.card_surcharge_usd > 0 && (
+                <div className="flex justify-between text-sky-400">
+                  <span>💳 Recargo Crédito (+{completedTx.card_surcharge_pct}%):</span>
+                  <span className="font-bold">+${fmt(completedTx.card_surcharge_usd)}</span>
+                </div>
+              )}
               {completedTx.propina_usd > 0 && (
                 <div className="flex justify-between text-amber-400">
                   <span>🪙 Propina:</span>
@@ -808,6 +891,53 @@ export default function QuickCashModal({
               ))}
             </div>
 
+            {/* Sub-selector Débito vs Crédito (Solo Argentina + Tarjeta / Point) */}
+            {isAr && paymentMethod === 'punto_de_venta' && (
+              <div className="p-3 rounded-xl bg-sky-950/20 border border-sky-500/35 space-y-2 animate-fadeIn">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCardType('debito')}
+                    className={`p-2 rounded-xl border text-left transition-all ${
+                      cardType === 'debito'
+                        ? 'bg-sky-500/20 border-sky-400 text-white font-bold shadow-sm'
+                        : 'bg-dark-900 border-dark-750 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-xs leading-tight">💳 Tarjeta Débito</div>
+                    <div className="text-[10px] text-emerald-400 font-mono mt-0.5">Sin recargo (0%)</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCardType('credito')}
+                    className={`p-2 rounded-xl border text-left transition-all ${
+                      cardType === 'credito'
+                        ? 'bg-sky-500/20 border-sky-400 text-white font-bold shadow-sm'
+                        : 'bg-dark-900 border-dark-750 text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <div className="text-xs leading-tight">💳 Tarjeta Crédito</div>
+                    <div className={`text-[10px] font-mono mt-0.5 ${creditSurchargePct > 0 ? 'text-sky-300 font-bold' : 'text-slate-400'}`}>
+                      {creditSurchargePct > 0 ? `+${creditSurchargePct}% recargo` : 'Sin recargo (0%)'}
+                    </div>
+                  </button>
+                </div>
+
+                {cardType === 'credito' && cardSurchargeUSD > 0 && (
+                  <div className="text-[11px] text-sky-300 flex items-center justify-between px-1">
+                    <span>Recargo aplicado: <strong className="font-mono">+${fmt(cardSurchargeUSD)} ARS</strong></span>
+                    <span className="text-[10px] text-slate-400">(no suma comisión al equipo)</span>
+                  </div>
+                )}
+
+                {cardType === 'credito' && creditSurchargePct === 0 && (
+                  <p className="text-[10px] text-slate-400 px-1">
+                    Configura tu % de recargo en ⚙️ Configuración → Pagos & Promos.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Calculadora Interactiva de Pago Mixto (Se despliega al elegir 'mixto') */}
             {paymentMethod === 'mixto' && (
               <div className="p-3 rounded-xl bg-purple-950/20 border border-purple-500/35 space-y-2.5 animate-fadeIn">
@@ -815,8 +945,13 @@ export default function QuickCashModal({
                   <span className="font-bold text-purple-300 uppercase tracking-wider">
                     🔀 División de Cobro Mixto
                   </span>
-                  <span className="font-mono text-slate-300">
-                    Total: <strong className="text-white">${fmt(grandTotalUSD)} {currTag}</strong> {!isAr && `(Bs. ${grandTotalBs})`}
+                  <span className="font-mono text-slate-300 flex items-center gap-1.5">
+                    <span>Total: <strong className="text-white">${fmt(grandTotalUSD)} {currTag}</strong> {!isAr && `(Bs. ${grandTotalBs})`}</span>
+                    {cardSurchargeUSD > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">
+                        incl. +${fmt(cardSurchargeUSD)} créd.
+                      </span>
+                    )}
                   </span>
                 </div>
 
@@ -902,7 +1037,15 @@ export default function QuickCashModal({
 
                   {split1USD > 0 && (
                     <div className="text-right text-[10px] font-mono text-slate-400">
-                      1ra Parte: <strong className="text-emerald-400">${fmt(split1USD)} {currTag}</strong> {!isAr && `(Bs. ${split1Bs.toFixed(2)})`}
+                      {isAr && splitMethod1 === 'tarjeta_credito' && cardSurchargeUSD > 0 ? (
+                        <span>
+                          Base ${fmt(split1BaseUSD)} + Recargo {creditSurchargePct}% (${fmt(cardSurchargeUSD)}) = <strong className="text-sky-300">${fmt(split1USD)} ARS</strong>
+                        </span>
+                      ) : (
+                        <span>
+                          1ra Parte: <strong className="text-emerald-400">${fmt(split1USD)} {currTag}</strong> {!isAr && `(Bs. ${split1Bs.toFixed(2)})`}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -942,6 +1085,11 @@ export default function QuickCashModal({
                         <span className="text-sm font-black text-amber-400 block leading-tight">
                           ${fmt(split2USD)} {currTag}
                         </span>
+                        {isAr && splitMethod2 === 'tarjeta_credito' && cardSurchargeUSD > 0 && (
+                          <span className="text-[9px] text-sky-300 font-bold block">
+                            Base ${fmt(split2BaseUSD)} + {creditSurchargePct}% créd.
+                          </span>
+                        )}
                         {!isAr && (
                           <span className="text-[10px] text-emerald-400 font-bold block">
                             Bs. {split2Bs.toFixed(2)}
@@ -954,7 +1102,7 @@ export default function QuickCashModal({
 
                 {!isSplitValid && splitInput1 !== '' && (
                   <p className="text-[11px] text-red-400 font-semibold text-center">
-                    ⚠️ El monto de la 1ra parte debe ser menor al total (${fmt(grandTotalUSD)}) y con métodos distintos.
+                    ⚠️ El monto de la 1ra parte debe ser menor al subtotal (${fmt(baseGrandTotalUSD)}) y con métodos distintos.
                   </p>
                 )}
               </div>
@@ -1114,6 +1262,18 @@ export default function QuickCashModal({
 
           {/* Caja con la división de la plata */}
           <div className="p-3.5 rounded-xl bg-dark-850 border border-dark-700/80 space-y-2">
+            {cardSurchargeUSD > 0 && (
+              <div className="space-y-1 pb-2 border-b border-dark-750/70 text-xs">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Subtotal servicios/prod.:</span>
+                  <span className="font-mono font-bold text-slate-200">${fmt(baseSubtotalUSD)} {currTag}</span>
+                </div>
+                <div className="flex items-center justify-between text-sky-400 font-semibold">
+                  <span>💳 Recargo Tarjeta Crédito (+{creditSurchargePct}%):</span>
+                  <span className="font-mono font-bold">+${fmt(cardSurchargeUSD)} {currTag}</span>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between pb-2 border-b border-dark-750">
               <span className="text-xs text-slate-400">Total a Cobrar al Cliente:</span>
               <div className="text-right">
@@ -1140,7 +1300,7 @@ export default function QuickCashModal({
                 {cashierCommissionUSD > 0 && (
                   <div className="p-2 rounded-lg bg-dark-900 border border-sky-500/30">
                     <span className="text-[10px] text-sky-400 block truncate">
-                      Caja ({activeCashierObj?.name.split(' ')[0]} {activeCashierObj?.commission_pct}%):
+                      Caja ({activeCashierObj?.name.split(' ')[0]} {formatCashierBonusBadge(activeCashierObj, fmt, currTag)}):
                     </span>
                     <span className="text-xs font-bold text-sky-300">
                       +${fmt(cashierCommissionUSD)}

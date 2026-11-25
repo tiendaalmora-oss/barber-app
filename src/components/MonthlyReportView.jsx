@@ -827,7 +827,7 @@ export default function MonthlyReportView({
                                 ? 'bg-purple-500/15 text-purple-300 border-purple-500/30 font-bold'
                                 : 'bg-dark-800 text-slate-300 border-dark-750'
                             }`}>
-                              {formatTxPaymentSummary(tx)}
+                              {formatTxPaymentSummary(tx, isAr)}
                             </span>
                           )}
 

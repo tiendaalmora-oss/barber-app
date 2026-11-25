@@ -1898,7 +1898,8 @@ export default function App() {
       clientName: apt.client_name,
       clientPhone: apt.client_phone || '',
       staffId: apt.staff_id,
-      serviceName: apt.service
+      serviceName: apt.service,
+      servicesList: Array.isArray(apt.services_list) && apt.services_list.length > 0 ? apt.services_list : null
     })
     setIsCashModalOpen(true)
   }

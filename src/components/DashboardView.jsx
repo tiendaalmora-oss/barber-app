@@ -649,7 +649,7 @@ export default function DashboardView({
                                 ? 'bg-purple-500/15 text-purple-300 border-purple-500/30 font-bold'
                                 : 'bg-dark-800 text-slate-400 border-dark-750'
                             }`}>
-                              {formatTxPaymentSummary(tx)}
+                              {formatTxPaymentSummary(tx, isAr)}
                             </span>
                           )}
                         </div>
@@ -665,6 +665,12 @@ export default function DashboardView({
                             <>
                               <span className="text-slate-600">•</span>
                               <span className="text-amber-400 font-bold">🪙 +${fmt(tx.propina_usd)}</span>
+                            </>
+                          )}
+                          {tx.card_surcharge_usd > 0 && (
+                            <>
+                              <span className="text-slate-600">•</span>
+                              <span className="text-sky-400 font-bold">💳 +{tx.card_surcharge_pct}% (+${fmt(tx.card_surcharge_usd)})</span>
                             </>
                           )}
                           <span className="text-slate-600">•</span>
