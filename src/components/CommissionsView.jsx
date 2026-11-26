@@ -309,8 +309,27 @@ export default function CommissionsView({
     }
 
     if (editingStaff) {
+      const {
+        isCashier: _ic,
+        baseSalaryUSD: _bs,
+        servicesCount: _sc,
+        totalBilledUSD: _tb,
+        totalEarnedUSD: _te,
+        totalEarnedBs: _teb,
+        totalTipsUSD: _tt,
+        totalTipsBs: _ttb,
+        valesUSD: _vu,
+        valesCount: _vc,
+        pendingVales: _pv,
+        pendingCuts: _pc,
+        pendingTips: _pt,
+        barberBreakdown: _bb,
+        netBalanceUSD: _nb,
+        netBalanceBs: _nbb,
+        ...cleanEditingStaff
+      } = editingStaff
       onUpdateStaff({
-        ...editingStaff,
+        ...cleanEditingStaff,
         ...staffPayload
       })
     } else {

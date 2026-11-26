@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, Check, DollarSign, User, Scissors, ShoppingBag, Plus, Minus, Trash2, CreditCard, Smartphone, ShieldCheck, AlertCircle, Receipt } from 'lucide-react'
 import PhoneCountryInput from './PhoneCountryInput'
 import { getLocalDateIso, normalizeWhatsAppPhone, formatMethodName } from '../lib/dateUtils'
@@ -58,6 +58,7 @@ export default function QuickCashModal({
   const [tipCurrency, setTipCurrency] = useState('USD') // 'USD' | 'Bs'
   const [customTip, setCustomTip] = useState('')
   const [completedTx, setCompletedTx] = useState(null)
+  const submitLockRef = useRef(false)
 
   // Split / Mixed Payment state ('mixto')
   const [splitMethod1, setSplitMethod1] = useState('efectivo_usd')
@@ -108,6 +109,7 @@ export default function QuickCashModal({
   useEffect(() => {
     if (!isOpen) return
 
+    submitLockRef.current = false
     setTipUSD(0)
     setCustomTip('')
     setCardType('debito')
@@ -354,6 +356,7 @@ export default function QuickCashModal({
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (submitLockRef.current) return
     if (totalUSD <= 0 || cart.length === 0) {
       alert('Por favor agrega al menos un servicio o producto para registrar el cobro.')
       return
@@ -444,6 +447,7 @@ export default function QuickCashModal({
       appointment_id: prefillData?.appointmentId || null
     }
 
+    submitLockRef.current = true
     onRegisterTransaction(transaction)
     setCompletedTx(transaction)
   }
@@ -585,6 +589,7 @@ export default function QuickCashModal({
 
             <button
               onClick={() => {
+                submitLockRef.current = false
                 setCompletedTx(null)
                 onClose()
               }}
@@ -614,7 +619,10 @@ export default function QuickCashModal({
             </div>
           </div>
           <button 
-            onClick={onClose} 
+            onClick={() => {
+              submitLockRef.current = false
+              onClose()
+            }}
             className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-dark-800"
           >
             <X className="w-5 h-5" />

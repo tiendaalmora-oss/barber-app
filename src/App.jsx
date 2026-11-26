@@ -1857,11 +1857,11 @@ export default function App() {
             phone: newApt.client_phone || '',
             debt_usd: 0,
             plan: 'Cliente Regular',
-            last_visit: new Date().toISOString().split('T')[0],
-            last_service: newApt.service,
-            last_staff: 'Agenda Web',
+            last_visit: '',
+            last_service: 'Cita Agendada',
+            last_staff: newApt.staff_name || 'Agenda Web',
             cycle_days: retargetingConfig.defaultCycleDays || 15,
-            visits_count: 1,
+            visits_count: 0,
             updatedAt: nowTs
           }, ...prev]
         }
