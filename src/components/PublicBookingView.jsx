@@ -28,7 +28,9 @@ import {
   inferServiceDuration,
   formatDurationLabel,
   getScheduleForDate,
-  getDayLabelFromDate
+  getDayLabelFromDate,
+  isStaffAvailableOnDate,
+  getAvailableStaffForDate
 } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
@@ -103,12 +105,15 @@ export default function PublicBookingView({
   const upcomingDays = useMemo(() => {
     const days = []
     const base = new Date()
+    const opStaff = getOperativeStaff(nicheData?.staff)
     for (let i = 0; i < 7; i++) {
       const d = new Date(base)
       d.setDate(base.getDate() + i)
       const iso = getLocalDateIso(d)
       const sched = getScheduleForDate(businessProfile, iso, DEFAULT_BOOKING_SLOTS)
-      const isClosed = !sched.enabled || sched.slots.length === 0
+      const availStaff = getAvailableStaffForDate(opStaff, iso)
+      const noStaffAvailable = opStaff.length > 0 && availStaff.length === 0
+      const isClosed = !sched.enabled || sched.slots.length === 0 || noStaffAvailable
       days.push({
         iso,
         dayName: i === 0 ? 'HOY' : i === 1 ? 'MAÑ' : SHORT_DAY_NAMES[d.getDay()],
@@ -118,7 +123,7 @@ export default function PublicBookingView({
       })
     }
     return days
-  }, [businessProfile])
+  }, [businessProfile, nicheData?.staff])
 
   // Dynamic day-of-week schedule awareness
   const dateSchedule = getScheduleForDate(businessProfile, selectedDate, DEFAULT_BOOKING_SLOTS)
@@ -134,6 +139,13 @@ export default function PublicBookingView({
 
   const staffList = getOperativeStaff(nicheData?.staff)
   const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
+  const availableStaffForDate = useMemo(
+    () => getAvailableStaffForDate(staffList, selectedDate),
+    [staffList, selectedDate]
+  )
+  const selectedStaffObj = selectedStaff === 'any' ? null : staffList.find(s => s.id === selectedStaff)
+  const isSelectedStaffOff = Boolean(!isSingleChair && selectedStaffObj && !isStaffAvailableOnDate(selectedStaffObj, selectedDate))
+  const allStaffOffForDate = staffList.length > 0 && availableStaffForDate.length === 0
 
   const currentServiceObj = allServices.find(s => s.name === selectedService) || allServices[0]
 
@@ -186,10 +198,12 @@ export default function PublicBookingView({
   }
 
   const isSlotBooked = (timeStr) => {
+    if (allStaffOffForDate || isSelectedStaffOff) return true
     if (!Array.isArray(appointments) || appointments.length === 0) return false
     const reqStart = timeToMinutes(timeStr)
     const reqEnd = reqStart + (selectedDuration || 30)
-    const totalStaffCount = Math.max(1, staffList.length)
+    const availIds = new Set(availableStaffForDate.map(s => s.id))
+    const totalStaffCount = Math.max(1, availableStaffForDate.length)
 
     const overlappingApts = appointments.filter(apt => {
       if (!apt || !apt.date || !apt.time) return false
@@ -218,9 +232,11 @@ export default function PublicBookingView({
         } else {
           const directMatch = staffList.find(s => s.id === apt.staff_id || s.name === apt.staff_id || s.name === apt.staff_name)
           if (directMatch) {
-            busyStaffIds.add(directMatch.id)
-          } else {
-            busyStaffIds.add(apt.staff_id || apt.staff_name)
+            if (availIds.has(directMatch.id)) {
+              busyStaffIds.add(directMatch.id)
+            }
+          } else if (availIds.has(apt.staff_id)) {
+            busyStaffIds.add(apt.staff_id)
           }
         }
       }
@@ -241,12 +257,12 @@ export default function PublicBookingView({
   }
 
   useEffect(() => {
-    if (activeSlots.length === 0) return
+    if (activeSlots.length === 0 || allStaffOffForDate || isSelectedStaffOff) return
     if (!activeSlots.includes(selectedTime) || isSlotUnavailable(selectedTime)) {
       const firstFree = activeSlots.find(s => !isSlotUnavailable(s))
       if (firstFree) setSelectedTime(firstFree)
     }
-  }, [selectedDate, selectedStaff, appointments, selectedService, selectedDuration, activeSlots])
+  }, [selectedDate, selectedStaff, appointments, selectedService, selectedDuration, activeSlots, allStaffOffForDate, isSelectedStaffOff])
 
   const morningSlots = activeSlots.filter(s => timeToMinutes(s) < 720)
   const afternoonSlots = activeSlots.filter(s => timeToMinutes(s) >= 720 && timeToMinutes(s) < 1020)
@@ -282,6 +298,14 @@ export default function PublicBookingView({
       alert(`⚠️ El local no labora los ${selectedDayLabel}s. Por favor selecciona otra fecha disponible.`)
       return
     }
+    if (allStaffOffForDate) {
+      alert(`⚠️ No hay especialistas disponibles el ${selectedDate}. Por favor selecciona otro día.`)
+      return
+    }
+    if (isSelectedStaffOff) {
+      alert(`⚠️ ${selectedStaffObj?.name || 'Este especialista'} no labora el ${selectedDate}. Elige otro día u otro especialista disponible.`)
+      return
+    }
 
     const normTime = normalizeTimeSlot(selectedTime)
     if (isSlotInPast(selectedTime)) {
@@ -296,7 +320,7 @@ export default function PublicBookingView({
     let assignedStaffId = selectedStaff
     if (selectedStaff === 'any' || !selectedStaff) {
       if (isSingleChair) {
-        assignedStaffId = staffList[0]?.id || 'e1'
+        assignedStaffId = availableStaffForDate[0]?.id || staffList[0]?.id || 'e1'
       } else {
         const reqStart = timeToMinutes(normTime)
         const reqEnd = reqStart + (selectedDuration || 30)
@@ -315,11 +339,13 @@ export default function PublicBookingView({
             return directMatch ? directMatch.id : apt.staff_id
           })
 
-        const freeStaff = staffList.find(st => !busyStaffIds.includes(st.id))
-        assignedStaffId = freeStaff ? freeStaff.id : (staffList[0]?.id || 'e1')
+        const freeStaff = availableStaffForDate.find(st => !busyStaffIds.includes(st.id))
+        assignedStaffId = freeStaff ? freeStaff.id : (availableStaffForDate[0]?.id || staffList[0]?.id || 'e1')
       }
     } else if (!staffList.some(s => s.id === selectedStaff)) {
-      assignedStaffId = staffList[0]?.id || 'e1'
+      assignedStaffId = availableStaffForDate[0]?.id || staffList[0]?.id || 'e1'
+    } else if (isSingleChair && selectedStaffObj && !isStaffAvailableOnDate(selectedStaffObj, selectedDate)) {
+      assignedStaffId = availableStaffForDate[0]?.id || selectedStaff
     }
 
     const assignedStaffObj = staffList.find(s => s.id === assignedStaffId)
@@ -1104,6 +1130,7 @@ export default function PublicBookingView({
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {staffList.map(st => {
                       const active = selectedStaff === st.id
+                      const staffOffToday = !isStaffAvailableOnDate(st, selectedDate)
                       return (
                         <button
                           type="button"
@@ -1111,18 +1138,24 @@ export default function PublicBookingView({
                           onClick={() => setSelectedStaff(st.id)}
                           className={`p-3 rounded-2xl border text-left flex items-center gap-2.5 transition-all ${
                             active
-                              ? 'bg-gradient-to-br from-gold-500/20 to-amber-500/5 border-gold-500 text-white shadow-md shadow-gold-500/10'
+                              ? staffOffToday
+                                ? 'bg-rose-950/30 border-rose-500/60 text-white shadow-md'
+                                : 'bg-gradient-to-br from-gold-500/20 to-amber-500/5 border-gold-500 text-white shadow-md shadow-gold-500/10'
+                              : staffOffToday
+                              ? 'bg-[#090b10] border-white/[0.04] text-slate-500 opacity-65 hover:border-white/15'
                               : 'bg-[#090b10] border-white/[0.07] text-slate-400 hover:text-white hover:border-white/20'
                           }`}
                         >
                           <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-base shrink-0 ${
-                            active ? 'bg-gold-500 text-black' : 'bg-white/[0.05]'
+                            active ? (staffOffToday ? 'bg-rose-500 text-white' : 'bg-gold-500 text-black') : 'bg-white/[0.05]'
                           }`}>
                             {st.avatar || '✂️'}
                           </div>
                           <div className="min-w-0">
                             <span className="block text-xs font-bold text-white truncate">{st.name}</span>
-                            <span className="block text-[10px] text-emerald-400">Disponible</span>
+                            <span className={`block text-[10px] ${staffOffToday ? 'text-rose-400 font-bold' : 'text-emerald-400'}`}>
+                              {staffOffToday ? 'Libra ese día' : 'Disponible'}
+                            </span>
                           </div>
                         </button>
                       )
@@ -1234,13 +1267,24 @@ export default function PublicBookingView({
                 </div>
 
                 {/* Horarios del Día Seleccionado */}
-                {isDayClosed ? (
+                {isDayClosed || allStaffOffForDate ? (
                   <div className="p-5 rounded-2xl bg-[#090b10] border border-white/[0.07] text-center space-y-1.5">
                     <p className="text-xs font-bold text-slate-200">
-                      El local permanece cerrado los {selectedDayLabel}s
+                      {allStaffOffForDate && !isDayClosed
+                        ? 'No hay especialistas disponibles este día'
+                        : `El local permanece cerrado los ${selectedDayLabel}s`}
                     </p>
                     <p className="text-[11px] text-slate-500">
                       Toca otro día en la barra superior para ver los turnos libres.
+                    </p>
+                  </div>
+                ) : isSelectedStaffOff ? (
+                  <div className="p-5 rounded-2xl bg-rose-950/20 border border-rose-500/30 text-center space-y-1.5">
+                    <p className="text-xs font-bold text-rose-300">
+                      📅 {selectedStaffObj?.name} no labora este día
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Selecciona otro día en la barra superior o elige otro especialista arriba.
                     </p>
                   </div>
                 ) : (
@@ -1372,7 +1416,7 @@ export default function PublicBookingView({
               </div>
 
               {/* Resumen Previo a Confirmar */}
-              {!isDayClosed && !isSlotUnavailable(selectedTime) && currentServiceObj && (
+              {!isDayClosed && !allStaffOffForDate && !isSelectedStaffOff && !isSlotUnavailable(selectedTime) && currentServiceObj && (
                 <div className="rounded-2xl bg-[#090b10] border border-white/[0.07] px-4 py-3 space-y-2 text-xs">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
@@ -1409,15 +1453,19 @@ export default function PublicBookingView({
               {/* CTA Final */}
               <button
                 type="submit"
-                disabled={isDayClosed || activeSlots.length === 0 || isSlotUnavailable(selectedTime)}
+                disabled={isDayClosed || allStaffOffForDate || isSelectedStaffOff || activeSlots.length === 0 || isSlotUnavailable(selectedTime)}
                 className={`w-full py-4 rounded-2xl font-black text-sm tracking-wide shadow-2xl transition-all flex items-center justify-center gap-2 ${
-                  isDayClosed || activeSlots.length === 0 || isSlotUnavailable(selectedTime)
+                  isDayClosed || allStaffOffForDate || isSelectedStaffOff || activeSlots.length === 0 || isSlotUnavailable(selectedTime)
                     ? 'bg-dark-850 text-slate-500 border border-white/[0.05] cursor-not-allowed opacity-60'
                     : 'bg-gradient-to-r from-gold-500 via-amber-500 to-gold-500 hover:opacity-95 text-black shadow-gold-500/20 active:scale-98'
                 }`}
               >
                 {isDayClosed ? (
                   <span>Cerrado los {selectedDayLabel}s</span>
+                ) : allStaffOffForDate ? (
+                  <span>Sin especialistas disponibles este día</span>
+                ) : isSelectedStaffOff ? (
+                  <span>{selectedStaffObj?.name} libra este día</span>
                 ) : isSlotUnavailable(selectedTime) ? (
                   <span>Selecciona una hora libre arriba</span>
                 ) : (

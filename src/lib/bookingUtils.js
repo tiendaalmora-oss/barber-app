@@ -151,3 +151,47 @@ export function calculateCreditCardSurcharge({
     split2ChargedUSD
   }
 }
+
+/**
+ * Returns true when a transaction represents settling an existing Fiado debt,
+ * rather than a new service cut or retail product sale.
+ */
+export function isDebtSettlementTx(tx) {
+  return Boolean(tx && (tx.category === 'Cobro Fiado' || tx.type === 'cobro_fiado'))
+}
+
+/**
+ * Returns true when a positive transaction consists strictly of retail products
+ * (e.g., water, pomade, oil) and includes NO haircut/beauty service.
+ */
+export function isPureProductTx(tx) {
+  if (!tx || isDebtSettlementTx(tx)) return false
+  if (Array.isArray(tx.items) && tx.items.length > 0) {
+    return tx.items.every(it => Boolean(it && it.isProduct))
+  }
+  return tx.category === 'Venta Productos'
+}
+
+/**
+ * Returns true when a positive transaction includes at least one real service
+ * (haircut, beard, nails, aesthetic procedure), excluding pure product sales and debt settlements.
+ */
+export function isServiceTx(tx) {
+  if (!tx || Number(tx.monto_usd || 0) <= 0) return false
+  if (isDebtSettlementTx(tx) || isPureProductTx(tx)) return false
+  if (Array.isArray(tx.items) && tx.items.length > 0) {
+    return tx.items.some(it => it && !it.isProduct)
+  }
+  return true
+}
+
+/**
+ * Classifies a transaction into service, pure product sale, or debt settlement.
+ */
+export function classifyTransaction(tx) {
+  return {
+    isService: isServiceTx(tx),
+    isPureProduct: isPureProductTx(tx),
+    isDebtSettlement: isDebtSettlementTx(tx)
+  }
+}

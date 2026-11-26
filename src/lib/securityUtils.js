@@ -1,5 +1,6 @@
 // Security, Role Management, Cashier Payroll & Audit Trail helpers
 import { getLocalDateIso } from './dateUtils'
+import { isDebtSettlementTx, isPureProductTx, isServiceTx } from './bookingUtils'
 
 export const DEFAULT_SECURITY_CONFIG = {
   enabled: false,
@@ -63,6 +64,25 @@ export function formatCashierBonusBadge(staff, fmtFn, currTag) {
 }
 
 /**
+ * Determines whether a transaction is eligible for cashier ticket counting and bonus
+ * according to the cashier's configured scope, excluding debt settlements and out-of-scope items.
+ */
+export function isTxEligibleForCashier(tx, cashierStaff) {
+  if (!tx || Number(tx.monto_usd || 0) <= 0) return false
+  if (isDebtSettlementTx(tx)) return false
+
+  const scope = cashierStaff?.commission_scope || 'servicios'
+  if (scope === 'servicios') return isServiceTx(tx)
+  if (scope === 'productos') {
+    if (Array.isArray(tx.items) && tx.items.length > 0) {
+      return tx.items.some(it => Boolean(it && it.isProduct))
+    }
+    return isPureProductTx(tx) || tx.category === 'Corte + Producto'
+  }
+  return isServiceTx(tx) || isPureProductTx(tx)
+}
+
+/**
  * Calculates the additional bonus earned by a Cashier/Receptionist
  * on a sale (cart items array or saved transaction object).
  * Supports both fixed bonus per eligible ticket/client ('fixed') and percentage ('percent').
@@ -83,7 +103,7 @@ export function calculateCashierCommissionForTx(txOrItems, cashierStaff) {
     }, 0)
   } else if (txOrItems && typeof txOrItems === 'object') {
     const tx = txOrItems
-    if (Number(tx.monto_usd) <= 0) return 0
+    if (Number(tx.monto_usd) <= 0 || isDebtSettlementTx(tx)) return 0
     if (Array.isArray(tx.items) && tx.items.length > 0) {
       eligibleBase = tx.items.reduce((sum, item) => {
         const lineTotal = (Number(item.price_usd) || 0) * (Number(item.qty) || 1)
@@ -92,10 +112,10 @@ export function calculateCashierCommissionForTx(txOrItems, cashierStaff) {
         return sum + lineTotal
       }, 0)
     } else {
-      const isPureProduct = tx.category === 'Venta Productos'
+      const pureProduct = isPureProductTx(tx)
       const baseVal = Number(tx.subtotal_base_usd ?? tx.monto_usd) || 0
-      if (scope === 'servicios') eligibleBase = isPureProduct ? 0 : baseVal
-      else if (scope === 'productos') eligibleBase = isPureProduct ? baseVal : 0
+      if (scope === 'servicios') eligibleBase = pureProduct ? 0 : baseVal
+      else if (scope === 'productos') eligibleBase = pureProduct ? baseVal : 0
       else eligibleBase = baseVal
     }
   }

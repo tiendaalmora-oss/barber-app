@@ -29,6 +29,7 @@ export default function QuickCashModal({
   businessProfile = {},
   onRegisterTransaction,
   clients = [],
+  onAddClient = null,
   prefillData = null,
   isCashierMode = false,
   securityConfig = {},
@@ -49,6 +50,7 @@ export default function QuickCashModal({
   const [cardType, setCardType] = useState('debito') // 'debito' | 'credito' (AR only)
   const [clientName, setClientName] = useState('')
   const [clientPhone, setClientPhone] = useState('')
+  const [clientQuickSaved, setClientQuickSaved] = useState(false)
 
   // Multi-item cart: holds services and products on the same bill
   const [cart, setCart] = useState([])
@@ -109,6 +111,7 @@ export default function QuickCashModal({
     setTipUSD(0)
     setCustomTip('')
     setCardType('debito')
+    setClientQuickSaved(false)
     setSplitInput1('')
     setSplitCurrency1('USD')
     setSplitMethod1('efectivo_usd')
@@ -192,22 +195,12 @@ export default function QuickCashModal({
         }
       }
     } else {
-      // Normal open: reset or default
+      // Manual open: start with empty cart so cashier/owner taps the exact service(s) or product(s)
       setClientName('')
       setClientPhone('')
       const defaultStaffId = operativeStaff[0]?.id || ''
       if (defaultStaffId) setSelectedStaff(defaultStaffId)
-      const defaultStaffObj = operativeStaff[0]
-      const firstSvc = nicheData.services[0]
-      const firstComm = firstSvc ? resolveItemCommission(firstSvc, defaultStaffObj) : 50
-      setCart(firstSvc ? [{
-        id: firstSvc.id,
-        name: firstSvc.name,
-        price_usd: firstSvc.price_usd,
-        commission_pct: firstComm,
-        isProduct: false,
-        qty: 1
-      }] : [])
+      setCart([])
     }
   }, [isOpen, prefillData])
 
@@ -222,6 +215,29 @@ export default function QuickCashModal({
 
   const servicesList = nicheData.services || []
   const productsList = nicheData.products || []
+  const isPureProductCart = cart.length > 0 && cart.every(ci => ci.isProduct)
+  const trimmedClientName = clientName.trim()
+  const matchedClient = trimmedClientName
+    ? clients.find(c => (c.name || '').trim().toLowerCase() === trimmedClientName.toLowerCase())
+    : null
+
+  const handleQuickSaveClient = () => {
+    if (!onAddClient || !trimmedClientName || matchedClient) return
+    onAddClient({
+      id: 'c_' + Date.now(),
+      name: trimmedClientName,
+      phone: clientPhone.trim(),
+      debt_usd: 0,
+      plan: 'Cliente Regular',
+      last_visit: '',
+      last_service: 'Registro en Caja',
+      last_staff: 'Caja',
+      cycle_days: 15,
+      visits_count: 0
+    })
+    setClientQuickSaved(true)
+    setTimeout(() => setClientQuickSaved(false), 2500)
+  }
 
   const handleSelectStaff = (newStaffId) => {
     setSelectedStaff(newStaffId)
@@ -393,8 +409,8 @@ export default function QuickCashModal({
       category: cart.some(ci => ci.isProduct) && cart.some(ci => !ci.isProduct) 
         ? 'Corte + Producto' 
         : cart.some(ci => ci.isProduct) ? 'Venta Productos' : 'Cortes',
-      staff_name: staffObj?.name || 'Venta del Local',
-      staff_id: staffObj?.id,
+      staff_name: isPureProductCart ? 'Venta de Productos' : (staffObj?.name || 'Venta del Local'),
+      staff_id: isPureProductCart ? null : (staffObj?.id || null),
       client_name: clientName.trim() || 'Cliente Mostrador',
       client_phone: clientPhone.trim() || '',
       subtotal_base_usd: surchargeCalc.baseSubtotalUSD,
@@ -643,6 +659,12 @@ export default function QuickCashModal({
                 </button>
               ))}
             </div>
+            {isPureProductCart && (
+              <div className="mt-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2">
+                <span>🛍️</span>
+                <span>Venta solo de productos: se registra como venta de mostrador (no suma corte al barbero ni cita al cliente).</span>
+              </div>
+            )}
           </div>
 
           {/* 2. Seleccionar Servicios y Productos Múltiples */}
@@ -1109,34 +1131,68 @@ export default function QuickCashModal({
             )}
           </div>
 
-          {/* Nombre y WhatsApp del cliente (para Retargeting y Fidelidad) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div>
-              <input
-                type="text"
-                list="existing-clients-list"
-                placeholder="Nombre del cliente (suma sello VIP)"
-                value={clientName}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setClientName(val)
-                  const match = clients.find(c => c.name.toLowerCase() === val.toLowerCase())
-                  if (match && match.phone) setClientPhone(match.phone)
-                }}
-                className="w-full px-3 py-2 rounded-xl bg-dark-800 border border-dark-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-gold-500"
-              />
-              <datalist id="existing-clients-list">
-                {clients.map(c => (
-                  <option key={c.id} value={c.name} />
-                ))}
-              </datalist>
+          {/* Nombre y WhatsApp del cliente (Seguimiento, Registro Rápido y Fidelidad) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Cliente (Seguimiento y Directorio)
+              </label>
+              {matchedClient ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
+                  ✓ Registrado ({matchedClient.visits_count || 0} {matchedClient.visits_count === 1 ? 'visita' : 'visitas'})
+                </span>
+              ) : clientQuickSaved ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold">
+                  ✓ Guardado en directorio
+                </span>
+              ) : trimmedClientName ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">
+                    🆕 Nuevo
+                  </span>
+                  {onAddClient && (
+                    <button
+                      type="button"
+                      onClick={handleQuickSaveClient}
+                      className="text-[10px] px-2 py-0.5 rounded-full bg-gold-500/20 hover:bg-gold-500/30 text-gold-300 border border-gold-500/40 font-black transition-all active:scale-95"
+                      title="Guardar cliente en el directorio sin esperar a facturar"
+                    >
+                      + Guardar ahora
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>
-            <div>
-              <PhoneCountryInput
-                value={clientPhone}
-                onChange={setClientPhone}
-                placeholder="WhatsApp del cliente"
-              />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <input
+                  type="text"
+                  list="existing-clients-list"
+                  placeholder="Buscar o escribir nombre de cliente nuevo..."
+                  value={clientName}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setClientName(val)
+                    setClientQuickSaved(false)
+                    const match = clients.find(c => c.name.toLowerCase() === val.toLowerCase())
+                    if (match && match.phone) setClientPhone(match.phone)
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-dark-800 border border-dark-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-gold-500"
+                />
+                <datalist id="existing-clients-list">
+                  {clients.map(c => (
+                    <option key={c.id} value={c.name} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <PhoneCountryInput
+                  value={clientPhone}
+                  onChange={setClientPhone}
+                  placeholder="WhatsApp del cliente"
+                />
+              </div>
             </div>
           </div>
 
@@ -1291,7 +1347,7 @@ export default function QuickCashModal({
               <div className={`grid ${cashierCommissionUSD > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-2 text-xs pt-0.5`}>
                 <div className="p-2 rounded-lg bg-dark-900 border border-dark-800">
                   <span className="text-[10px] text-slate-400 block truncate">
-                    Comisión {staffObj?.name.split(' ')[0]}:
+                    Comisión {isPureProductCart ? 'Mostrador' : staffObj?.name.split(' ')[0]}:
                   </span>
                   <span className="text-xs font-bold text-amber-400">
                     ${fmt(staffCommissionUSD)}

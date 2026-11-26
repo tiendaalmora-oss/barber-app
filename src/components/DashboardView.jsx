@@ -3,6 +3,7 @@ import { TrendingUp, DollarSign, Users, Award, ArrowUpRight, ArrowDownRight, Wal
 import { getLocalDateIso, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD, formatTxPaymentSummary, normalizeWhatsAppPhone } from '../lib/dateUtils'
 import ReceiptModal from './ReceiptModal'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
+import { isServiceTx, isPureProductTx } from '../lib/bookingUtils'
 
 export default function DashboardView({ 
   transactions = [], 
@@ -69,7 +70,8 @@ export default function DashboardView({
 
   // Net profit = Income - Expenses - Commissions
   const totalBusinessNetUSD = totalIncomeUSD - totalExpensesUSD - totalCommissionsUSD
-  const totalServicesCount = dateTransactions.filter(t => t.monto_usd > 0).length
+  const totalServicesCount = dateTransactions.filter(t => isServiceTx(t)).length
+  const totalProductSalesCount = dateTransactions.filter(t => isPureProductTx(t)).length
 
   // 1. DYNAMIC 7-day revenue trend based strictly on REAL transactions (Local Timezone Resilient)
   const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -156,7 +158,7 @@ export default function DashboardView({
             </span>
             <span className="text-slate-600">•</span>
             <span className="text-xs text-slate-400 font-medium">
-              {totalServicesCount} {totalServicesCount === 1 ? 'servicio' : 'servicios'}
+              {totalServicesCount} {totalServicesCount === 1 ? 'servicio' : 'servicios'}{totalProductSalesCount > 0 ? ` · ${totalProductSalesCount} prod.` : ''}
             </span>
             {!isViewingToday && (
               <button

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, Settings, DollarSign, Sparkles, AlertCircle, Clock3 } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes, isStaffAvailableOnDate } from '../lib/dateUtils'
 import { getOperativeStaff } from '../lib/securityUtils'
 
 export default function AppointmentsView({ 
@@ -94,6 +94,14 @@ export default function AppointmentsView({
     const effectiveStaffObj = staffList.find(s => s.id === newStaff) || staffList[0] || null
     const effectiveStaffId = effectiveStaffObj?.id || newStaff || 'e1'
     const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
+
+    if (effectiveStaffObj && !isStaffAvailableOnDate(effectiveStaffObj, newDate)) {
+      const confirmOff = window.confirm(
+        `⚠️ ${effectiveStaffObj.name} está marcado como LIBRE / AUSENTE el ${newDate}.\n\n` +
+        `¿Deseas agendar esta cita de todas formas?`
+      )
+      if (!confirmOff) return
+    }
 
     const collidingApt = (appointments || []).find(apt => {
       if (apt.date !== newDate || apt.status === 'cancelada' || apt.status === 'completada') return false
@@ -709,9 +717,20 @@ export default function AppointmentsView({
                   className="w-full px-3.5 py-2.5 rounded-2xl bg-dark-850 border border-dark-750 text-xs text-white focus:outline-none"
                 >
                   {operativeStaff.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.name}{!isStaffAvailableOnDate(s, newDate) ? ' (Libre este día)' : ''}
+                    </option>
                   ))}
                 </select>
+                {(() => {
+                  const modalStaffObj = operativeStaff.find(s => s.id === newStaff)
+                  if (!modalStaffObj || isStaffAvailableOnDate(modalStaffObj, newDate)) return null
+                  return (
+                    <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-300 font-semibold">
+                      ⚠️ {modalStaffObj.name} está marcado como libre el {newDate}.
+                    </div>
+                  )
+                })()}
                 {operativeStaff.length > 1 && businessProfile?.singleChairMode !== false && (
                   <div className="mt-1.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-2 text-[10px] text-amber-200 leading-snug">
                     <span>

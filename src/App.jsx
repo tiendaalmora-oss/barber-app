@@ -36,6 +36,7 @@ import {
 import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck, MessageSquare } from 'lucide-react'
 import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
+import { isPureProductTx, isDebtSettlementTx } from './lib/bookingUtils'
 import { getActiveBrand, isArgentina } from './lib/brandConfig'
 import {
   getSecurityConfig,
@@ -1807,7 +1808,7 @@ export default function App() {
 
   // Calculate how many clients are due for retargeting (for sidebar badge)
   const overdueClientsCount = clients.filter(c => {
-    if (!c.last_visit) return true
+    if (!c.last_visit) return false
     const last = new Date(c.last_visit + 'T00:00:00')
     const days = Math.floor((Date.now() - last.getTime()) / (1000 * 60 * 60 * 24))
     const cycle = c.cycle_days || retargetingConfig.defaultCycleDays || 15
@@ -1853,7 +1854,7 @@ export default function App() {
           return [{
             id: 'c_' + nowTs,
             name: newApt.client_name,
-            phone: newApt.client_phone || '+584120000000',
+            phone: newApt.client_phone || '',
             debt_usd: 0,
             plan: 'Cliente Regular',
             last_visit: new Date().toISOString().split('T')[0],
@@ -1946,6 +1947,7 @@ export default function App() {
     const todayStr = getLocalDateIso()
 
     if (newTx.client_name && newTx.client_name !== 'Cliente Mostrador') {
+      const countsAsServiceVisit = !isPureProductTx(newTx) && !isDebtSettlementTx(newTx)
       setClients(prev => {
         const found = prev.find(c => c.name.toLowerCase() === newTx.client_name.toLowerCase())
         const addedDebt = getTxMethodCollectedUSD(newTx, 'fiado')
@@ -1954,24 +1956,28 @@ export default function App() {
             ...c,
             phone: newTx.client_phone || c.phone,
             debt_usd: (c.debt_usd || 0) + addedDebt,
-            last_visit: todayStr,
-            last_service: newTx.item_name,
-            last_staff: newTx.staff_name,
-            visits_count: (c.visits_count || 0) + 1,
+            ...(countsAsServiceVisit ? {
+              last_visit: todayStr,
+              last_service: newTx.item_name,
+              last_staff: newTx.staff_name,
+              visits_count: (c.visits_count || 0) + 1
+            } : {}),
             updatedAt: nowTs
           } : c)
         } else {
           return [{
             id: 'c_' + nowTs,
             name: newTx.client_name,
-            phone: newTx.client_phone || '+584120000000',
+            phone: newTx.client_phone || '',
             debt_usd: addedDebt,
             plan: 'Cliente Regular',
-            last_visit: todayStr,
-            last_service: newTx.item_name,
-            last_staff: newTx.staff_name,
+            last_visit: countsAsServiceVisit ? todayStr : '',
+            last_service: countsAsServiceVisit
+              ? newTx.item_name
+              : (isPureProductTx(newTx) ? 'Compra de Productos' : 'Registro Directo'),
+            last_staff: countsAsServiceVisit ? newTx.staff_name : 'Mostrador',
             cycle_days: retargetingConfig.defaultCycleDays || 15,
-            visits_count: 1,
+            visits_count: countsAsServiceVisit ? 1 : 0,
             updatedAt: nowTs
           }, ...prev]
         }
@@ -2518,6 +2524,7 @@ export default function App() {
           {activeTab === 'retargeting' && (
             <RetargetingView
               clients={clients}
+              onAddClient={handleAddClient}
               onUpdateClient={handleUpdateClient}
               onDeleteClient={isCashierMode ? null : handleDeleteClient}
               retargetingConfig={retargetingConfig}
@@ -2614,6 +2621,7 @@ export default function App() {
         businessProfile={businessProfile}
         onRegisterTransaction={handleRegisterTransaction}
         clients={clients}
+        onAddClient={handleAddClient}
         prefillData={cashModalPrefill}
         isCashierMode={isCashierMode}
         securityConfig={securityConfig}

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { X, Lock, DollarSign, Users, ArrowDownRight, MessageSquare, Copy, Check, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react'
 import { isDateToday, isDateInWeek, getWeekBoundsLocal, getLocalDateIso, normalizeWhatsAppPhone, isEfectivoMethod, isPuntoMethod, isPagoMovilMethod, isDigitalMethod, isFiadoMethod, getTxMethodAmountUSD } from '../lib/dateUtils'
 import { getActiveBrand, isArgentina, formatCurrency } from '../lib/brandConfig'
-import { isCashierStaff, calculateCashierCommissionForTx, getCashierCommissionType } from '../lib/securityUtils'
+import { isServiceTx, isPureProductTx } from '../lib/bookingUtils'
+import { isCashierStaff, isTxEligibleForCashier, calculateCashierCommissionForTx, getCashierCommissionType } from '../lib/securityUtils'
 
 export default function DailyCloseModal({
   isOpen,
@@ -60,6 +61,8 @@ export default function DailyCloseModal({
     return isDateToday(t.fecha)
   })
   const incomeTx = periodTx.filter(t => t.monto_usd > 0)
+  const serviceTxCount = incomeTx.filter(t => isServiceTx(t)).length
+  const productOnlyTxCount = incomeTx.filter(t => isPureProductTx(t)).length
   const totalIncomeUSD = incomeTx.reduce((sum, t) => sum + t.monto_usd, 0)
   const totalIncomeBs = totalIncomeUSD * exchangeRate
 
@@ -118,8 +121,8 @@ export default function DailyCloseModal({
   const commissionsByStaff = (staffList || []).map(staff => {
     const isCashier = isCashierStaff(staff)
     const staffTx = isCashier
-      ? incomeTx.filter(t => (t.cajero_staff_id ? t.cajero_staff_id === staff.id : cashierListInClose.length <= 1))
-      : incomeTx.filter(t => t.staff_id === staff.id || t.staff_name === staff.name)
+      ? incomeTx.filter(t => isTxEligibleForCashier(t, staff) && (t.cajero_staff_id ? t.cajero_staff_id === staff.id : cashierListInClose.length <= 1))
+      : incomeTx.filter(t => isServiceTx(t) && (t.staff_id === staff.id || t.staff_name === staff.name))
     const count = staffTx.length
     const generatedUSD = staffTx.reduce((sum, t) => sum + t.monto_usd, 0)
     const commissionUSD = isCashier
@@ -447,7 +450,9 @@ export default function DailyCloseModal({
 
             <div className="p-2.5 rounded-xl bg-dark-900 border border-dark-800">
               <span className="text-[10px] text-slate-400 block">✂️ Total Atenciones</span>
-              <strong className="text-white text-sm font-mono">{incomeTx.length} clientes</strong>
+              <strong className="text-white text-sm font-mono">
+                {serviceTxCount} {serviceTxCount === 1 ? 'servicio' : 'servicios'}{productOnlyTxCount > 0 ? ` · ${productOnlyTxCount} prod.` : ''}
+              </strong>
             </div>
           </div>
         </div>

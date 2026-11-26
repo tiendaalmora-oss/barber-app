@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award, FileText, Calendar, Clock, ArrowDownRight, MessageSquare, AlertCircle, Receipt, Wallet, Check, AlertTriangle, ChevronDown } from 'lucide-react'
-import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone } from '../lib/dateUtils'
+import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone, DAYS_OF_WEEK } from '../lib/dateUtils'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
+import { isServiceTx } from '../lib/bookingUtils'
 import {
   isCashierStaff,
   getCashierStaff,
+  isTxEligibleForCashier,
   calculateCashierCommissionForTx,
   getSalaryPeriodLabel,
   getCommissionScopeLabel,
@@ -64,6 +66,9 @@ export default function CommissionsView({
   const [selectedServiceToAdd, setSelectedServiceToAdd] = useState('')
   const [customPctToAdd, setCustomPctToAdd] = useState('')
   const [showAdvancedCommissions, setShowAdvancedCommissions] = useState(false)
+  const [staffDaysOff, setStaffDaysOff] = useState([])
+  const [staffBlockedDates, setStaffBlockedDates] = useState([])
+  const [blockedDateInput, setBlockedDateInput] = useState('')
 
   // Vale Form state
   const [valeAmount, setValeAmount] = useState('')
@@ -90,7 +95,7 @@ export default function CommissionsView({
     const isCashier = isCashierStaff(st)
 
     if (isCashier) {
-      const allShopIncome = transactions.filter(t => t && Number(t.monto_usd) > 0)
+      const allShopIncome = transactions.filter(t => isTxEligibleForCashier(t, st))
       const attributedIncome = allShopIncome.filter(t => {
         if (t.cajero_staff_id) return t.cajero_staff_id === st.id
         if (t.registered_by_id) return t.registered_by_id === st.id
@@ -162,8 +167,8 @@ export default function CommissionsView({
       }
     }
 
-    // All cuts/services for Barber / Operative staff
-    const allCuts = transactions.filter(t => (t.staff_id === st.id || t.staff_name === st.name) && t.monto_usd > 0)
+    // All real service cuts/procedures for Barber / Operative staff (excludes pure product sales & debt settlements)
+    const allCuts = transactions.filter(t => isServiceTx(t) && (t.staff_id === st.id || t.staff_name === st.name))
     // Pending cuts (not liquidated yet)
     const pendingCuts = allCuts.filter(t => !t.comision_pagada)
 
@@ -240,6 +245,9 @@ export default function CommissionsView({
     setSelectedServiceToAdd('')
     setCustomPctToAdd('')
     setShowAdvancedCommissions(false)
+    setStaffDaysOff([])
+    setStaffBlockedDates([])
+    setBlockedDateInput('')
     setIsStaffModalOpen(true)
   }
 
@@ -262,6 +270,9 @@ export default function CommissionsView({
     setSelectedServiceToAdd('')
     setCustomPctToAdd('')
     setShowAdvancedCommissions(Object.keys(st.service_commissions || {}).length > 0)
+    setStaffDaysOff(Array.isArray(st.days_off) ? st.days_off : [])
+    setStaffBlockedDates(Array.isArray(st.blocked_dates) ? st.blocked_dates : [])
+    setBlockedDateInput('')
     setIsStaffModalOpen(true)
   }
 
@@ -292,7 +303,9 @@ export default function CommissionsView({
       commission_scope: isCashier ? commissionScope : null,
       pin: isCashier ? staffPin.replace(/\s+/g, '') : '',
       avatar,
-      service_commissions: isCashier ? {} : finalServiceCommissions
+      service_commissions: isCashier ? {} : finalServiceCommissions,
+      days_off: isCashier ? [] : staffDaysOff,
+      blocked_dates: isCashier ? [] : Array.from(new Set(staffBlockedDates.filter(Boolean))).sort()
     }
 
     if (editingStaff) {
@@ -453,10 +466,10 @@ export default function CommissionsView({
     window.open(url, '_blank')
   }
 
-  // Team Totals for Hero Command Center
+  // Team Totals for Hero Command Center (operative services only so cashiers never double-count cuts)
   const totalTeamNetUSD = staffStats.reduce((sum, s) => sum + Math.max(0, s.netBalanceUSD), 0)
   const totalTeamNetBs = totalTeamNetUSD * exchangeRate
-  const totalTeamServices = staffStats.reduce((sum, s) => sum + s.servicesCount, 0)
+  const totalTeamServices = staffStats.filter(s => !s.isCashier).reduce((sum, s) => sum + s.servicesCount, 0)
   const totalTeamEarnedUSD = staffStats.reduce((sum, s) => sum + s.totalEarnedUSD, 0)
 
   return (
@@ -711,6 +724,16 @@ export default function CommissionsView({
                                   className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-lg bg-blue-500/15 text-blue-300 border border-blue-500/30 font-medium"
                                 >
                                   🏷️ {Object.keys(st.service_commissions).length} esp.
+                                </span>
+                              )}
+                              {!st.isCashier && Array.isArray(st.days_off) && st.days_off.length > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/25 font-medium">
+                                  📅 Libre: {st.days_off.map(d => DAYS_OF_WEEK.find(w => w.id === d)?.short || d).join(', ')}
+                                </span>
+                              )}
+                              {!st.isCashier && Array.isArray(st.blocked_dates) && st.blocked_dates.includes(getLocalDateIso()) && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold">
+                                  🚫 Hoy libre
                                 </span>
                               )}
                             </div>
@@ -1597,6 +1620,131 @@ export default function CommissionsView({
                   ))}
                 </div>
               </div>
+
+              {/* Sección: Disponibilidad y Días Libres (Solo Operativos) */}
+              {staffRole !== 'cajero' && (() => {
+                const todayIso = getLocalDateIso()
+                const tomDate = new Date()
+                tomDate.setDate(tomDate.getDate() + 1)
+                const tomorrowIso = getLocalDateIso(tomDate)
+                const activeBlocked = staffBlockedDates.filter(d => d && d >= todayIso)
+                const toggleBlocked = (iso) => {
+                  if (!iso) return
+                  setStaffBlockedDates(prev => prev.includes(iso) ? prev.filter(x => x !== iso) : [...prev, iso].sort())
+                }
+                return (
+                  <div className="pt-2 border-t border-dark-800 space-y-2.5">
+                    <div>
+                      <label className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                        <span>📅 Disponibilidad y Días Libres</span>
+                      </label>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        Hereda el horario del local. Marca solo los días que libra o fechas ausentes.
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-1">
+                      {DAYS_OF_WEEK.map(d => {
+                        const isOff = staffDaysOff.includes(d.id)
+                        return (
+                          <button
+                            key={d.id}
+                            type="button"
+                            onClick={() => {
+                              setStaffDaysOff(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])
+                            }}
+                            className={`py-1.5 px-1 rounded-lg border text-center transition-all flex flex-col items-center ${
+                              isOff
+                                ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                                : 'bg-dark-850 border-dark-750 text-slate-300 hover:border-dark-650'
+                            }`}
+                            title={isOff ? `Libra los ${d.label} (toca para activar)` : `Trabaja los ${d.label} (toca para marcar libre)`}
+                          >
+                            <span className="text-[10px] font-bold">{d.short}</span>
+                            <span className={`text-[8px] font-black uppercase ${isOff ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {isOff ? 'Libre' : 'Act'}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-dark-950/80 border border-dark-800 space-y-2">
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-slate-300">Ausencias puntuales:</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleBlocked(todayIso)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                              staffBlockedDates.includes(todayIso)
+                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                : 'bg-dark-850 border-dark-700 text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            {staffBlockedDates.includes(todayIso) ? '✓ Hoy libre' : '+ Hoy libre'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleBlocked(tomorrowIso)}
+                            className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all ${
+                              staffBlockedDates.includes(tomorrowIso)
+                                ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                                : 'bg-dark-850 border-dark-700 text-slate-300 hover:text-white'
+                            }`}
+                          >
+                            {staffBlockedDates.includes(tomorrowIso) ? '✓ Mañana libre' : '+ Mañana libre'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="date"
+                          min={todayIso}
+                          value={blockedDateInput}
+                          onChange={(e) => setBlockedDateInput(e.target.value)}
+                          className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-dark-900 border border-dark-700 text-[11px] font-mono text-white focus:outline-none focus:border-rose-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!blockedDateInput) return
+                            if (!staffBlockedDates.includes(blockedDateInput)) {
+                              setStaffBlockedDates(prev => [...prev, blockedDateInput].sort())
+                            }
+                            setBlockedDateInput('')
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/35 text-[10px] font-black shrink-0"
+                        >
+                          + Agregar fecha
+                        </button>
+                      </div>
+
+                      {activeBlocked.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {activeBlocked.map(dt => (
+                            <span
+                              key={dt}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-mono font-bold"
+                            >
+                              <span>{dt === todayIso ? `Hoy (${dt})` : dt === tomorrowIso ? `Mañana (${dt})` : dt}</span>
+                              <button
+                                type="button"
+                                onClick={() => setStaffBlockedDates(prev => prev.filter(x => x !== dt))}
+                                className="hover:text-white font-sans"
+                                title="Quitar fecha libre"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Sección: Comisiones Especiales por Servicio (Solo Operativos) */}
               {staffRole !== 'cajero' && (

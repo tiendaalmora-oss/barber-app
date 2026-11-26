@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
-import { BellRing, MessageSquare, Clock, Award, Zap, Settings2, Check, Flame, UserCheck, Calendar, Sparkles, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { BellRing, MessageSquare, Clock, Award, Zap, Settings2, Check, Flame, UserCheck, Calendar, Sparkles, Plus, RotateCcw, Trash2, X } from 'lucide-react'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
+import PhoneCountryInput from './PhoneCountryInput'
 
 export default function RetargetingView({
   clients,
+  onAddClient,
   onUpdateClient,
   onDeleteClient,
   retargetingConfig,
@@ -15,6 +17,10 @@ export default function RetargetingView({
   const [showConfig, setShowConfig] = useState(false)
   const [configForm, setConfigForm] = useState(retargetingConfig)
   const [savedToast, setSavedToast] = useState(false)
+  const [showNewClientModal, setShowNewClientModal] = useState(false)
+  const [newClientName, setNewClientName] = useState('')
+  const [newClientPhone, setNewClientPhone] = useState('')
+  const [newClientCycle, setNewClientCycle] = useState(retargetingConfig?.defaultCycleDays || 15)
 
   const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
   const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}`
@@ -32,16 +38,19 @@ export default function RetargetingView({
 
   // Enrich clients with computed status
   const enrichedClients = clients.map(c => {
-    const days = getDaysSince(c.last_visit)
+    const hasVisitDate = Boolean(c.last_visit)
+    const days = hasVisitDate ? getDaysSince(c.last_visit) : 0
     const cycle = c.cycle_days || retargetingConfig.defaultCycleDays || 15
     const remaining = cycle - days
     let status = 'ok' // green
-    if (days >= cycle) {
+    if (!hasVisitDate) {
+      status = 'new'
+    } else if (days >= cycle) {
       status = 'overdue' // red: ya le toca
     } else if (remaining <= 3) {
       status = 'soon' // yellow: le toca pronto
     }
-    const visits = c.visits_count || 1
+    const visits = hasVisitDate ? (c.visits_count || 1) : (c.visits_count || 0)
     const isNearVip = visits >= (retargetingConfig.loyaltyGoal - 1)
     return {
       ...c,
@@ -140,6 +149,21 @@ export default function RetargetingView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {onAddClient && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNewClientName('')
+                  setNewClientPhone('')
+                  setNewClientCycle(retargetingConfig?.defaultCycleDays || 15)
+                  setShowNewClientModal(true)
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black text-xs font-black shadow-lg shadow-gold-500/20 active:scale-95 transition-all"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Nuevo Cliente</span>
+              </button>
+            )}
             <button
               onClick={() => setShowConfig(!showConfig)}
               className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-200 border border-dark-700 text-xs font-bold transition-all"
@@ -373,11 +397,18 @@ export default function RetargetingView({
                       <span>{client.name}</span>
                     </h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      Último: <strong className="text-slate-200">{client.last_service || 'Corte Clásico'}</strong> ({client.last_staff || 'Equipo'})
+                      {client.status === 'new'
+                        ? 'Sin cortes registrados aún (Listo para invitar)'
+                        : <>Último: <strong className="text-slate-200">{client.last_service || 'Corte Clásico'}</strong> ({client.last_staff || 'Equipo'})</>}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {client.status === 'new' && (
+                      <span className="px-2.5 py-1 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/30 text-[10px] font-black uppercase">
+                        🆕 Nuevo (Sin visitas)
+                      </span>
+                    )}
                     {client.status === 'overdue' && (
                       <span className="px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-black uppercase">
                         🔴 Hace {client.daysSince}d (¡Le Toca!)
@@ -500,6 +531,108 @@ export default function RetargetingView({
           )
         })}
       </div>
+
+      {/* Modal: Registrar Cliente Nuevo */}
+      {showNewClientModal && onAddClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="bg-dark-900 border border-dark-750 w-full max-w-md rounded-3xl shadow-2xl p-5 sm:p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-dark-800">
+              <div>
+                <h3 className="font-black text-white text-base">Registrar Cliente Nuevo</h3>
+                <p className="text-xs text-slate-400">
+                  Agrégalo a tu base para darle seguimiento por WhatsApp
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewClientModal(false)}
+                className="w-8 h-8 rounded-full bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-white flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (!newClientName.trim()) return
+                onAddClient({
+                  id: 'c_' + Date.now(),
+                  name: newClientName.trim(),
+                  phone: newClientPhone.trim(),
+                  debt_usd: 0,
+                  plan: 'Cliente Regular',
+                  last_visit: '',
+                  last_service: 'Registro Directo',
+                  last_staff: 'Local',
+                  cycle_days: parseInt(newClientCycle, 10) || 15,
+                  visits_count: 0
+                })
+                setShowNewClientModal(false)
+              }}
+              className="space-y-3.5"
+            >
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Nombre y Apellido *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder="Ej. Carlos Mendoza"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white focus:outline-none focus:border-gold-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  WhatsApp (Opcional)
+                </label>
+                <PhoneCountryInput
+                  value={newClientPhone}
+                  onChange={setNewClientPhone}
+                  placeholder="WhatsApp del cliente"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Frecuencia de retorno recomendada
+                </label>
+                <select
+                  value={newClientCycle}
+                  onChange={(e) => setNewClientCycle(Number(e.target.value))}
+                  className="w-full px-3 py-2.5 rounded-xl bg-dark-850 border border-dark-700 text-xs text-white font-bold focus:outline-none focus:border-gold-500"
+                >
+                  <option value={10}>Cada 10 días</option>
+                  <option value={15}>Cada 15 días</option>
+                  <option value={21}>Cada 21 días</option>
+                  <option value={30}>Cada 30 días</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewClientModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-dark-800 text-slate-300 text-xs font-bold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black text-xs font-black shadow-lg shadow-gold-500/20"
+                >
+                  Guardar Cliente
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   )

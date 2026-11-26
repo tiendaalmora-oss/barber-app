@@ -395,3 +395,34 @@ export function getScheduleForDate(businessProfile, dateStr, fallbackSlots = [])
     slots: defaultSlots
   }
 }
+
+/**
+ * Checks whether a staff member (barber/stylist) is scheduled to work on a given YYYY-MM-DD date.
+ * Backward-compatible: if days_off and blocked_dates are empty/missing, returns true.
+ */
+export function isStaffAvailableOnDate(staff, dateStr) {
+  if (!staff || !dateStr) return true
+  const cleanDate = typeof dateStr === 'string' && dateStr.includes('T')
+    ? dateStr.split('T')[0]
+    : String(dateStr).trim()
+
+  if (Array.isArray(staff.blocked_dates) && staff.blocked_dates.includes(cleanDate)) {
+    return false
+  }
+
+  if (Array.isArray(staff.days_off) && staff.days_off.length > 0) {
+    const dayKey = getDayKeyFromDate(cleanDate)
+    if (staff.days_off.includes(dayKey)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+/**
+ * Filters a list of staff members to those available on the given YYYY-MM-DD date.
+ */
+export function getAvailableStaffForDate(staffList = [], dateStr) {
+  return (Array.isArray(staffList) ? staffList : []).filter(st => st && isStaffAvailableOnDate(st, dateStr))
+}
