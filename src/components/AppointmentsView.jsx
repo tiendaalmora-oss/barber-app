@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, Settings, DollarSign, Sparkles, AlertCircle, Clock3 } from 'lucide-react'
-import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes, isStaffAvailableOnDate } from '../lib/dateUtils'
+import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes, isStaffAvailableOnDate, isStaffAvailableForSlot } from '../lib/dateUtils'
+import { isArgentina } from '../lib/brandConfig'
 import { getOperativeStaff } from '../lib/securityUtils'
 
 export default function AppointmentsView({ 
@@ -14,12 +15,15 @@ export default function AppointmentsView({
   onOpenSettings, 
   onChargeAppointment 
 }) {
+  const isAr = isArgentina(null, businessProfile)
+
   // Today's ISO date string strictly in local timezone
   const getTodayStr = () => getLocalDateIso()
 
   const [selectedDate, setSelectedDate] = useState(getTodayStr())
   const [showAddModal, setShowAddModal] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all') // 'all' | 'pendiente' | 'en_atencion' | 'completada'
+  const [staffFilter, setStaffFilter] = useState('all') // 'all' | staff.id
   
   // Form fields
   const operativeStaff = getOperativeStaff(nicheData?.staff)
@@ -58,15 +62,23 @@ export default function AppointmentsView({
     return cleanDigits ? `${cleanDigits} ${period}` : `03:00 ${period}`
   }
 
-  // Filter list by selected date and optional status filter
-  const dateAppointments = appointments.filter(a => {
-    if (!a.date) return true // legacy fallback
-    return a.date === selectedDate
-  })
+  // Filter list by selected date, sort strictly chronologically, then apply status + staff filters
+  const dateAppointments = appointments
+    .filter(a => {
+      if (!a.date) return true // legacy fallback
+      return a.date === selectedDate
+    })
+    .slice()
+    .sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time))
 
   const filteredList = dateAppointments.filter(a => {
-    if (statusFilter === 'all') return true
-    return a.status === statusFilter
+    if (statusFilter !== 'all' && a.status !== statusFilter) return false
+    if (staffFilter !== 'all') {
+      const targetSt = operativeStaff.find(s => s.id === staffFilter)
+      const matchesStaff = a.staff_id === staffFilter || (targetSt && a.staff_name === targetSt.name)
+      if (!matchesStaff) return false
+    }
+    return true
   })
 
   const pendingCount = dateAppointments.filter(a => a.status === 'pendiente' || !a.status).length
@@ -101,6 +113,14 @@ export default function AppointmentsView({
         `¿Deseas agendar esta cita de todas formas?`
       )
       if (!confirmOff) return
+    } else if (effectiveStaffObj && !isStaffAvailableForSlot(effectiveStaffObj, newDate, canonicalTime, dur)) {
+      const blk = (effectiveStaffObj.blocked_hours || []).find(b => b && b.date === newDate)
+      const blkInfo = blk ? ` (${blk.start} – ${blk.end})` : ''
+      const confirmPartialOff = window.confirm(
+        `⏱️ ${effectiveStaffObj.name} tiene un bloqueo horario parcial${blkInfo} el ${newDate}.\n\n` +
+        `¿Deseas agendar este turno de todas formas?`
+      )
+      if (!confirmPartialOff) return
     }
 
     const collidingApt = (appointments || []).find(apt => {
@@ -205,9 +225,10 @@ export default function AppointmentsView({
   const handleWhatsAppReminder = (apt, staffObj) => {
     const foundClient = clients.find(c => c.name.toLowerCase() === apt.client_name.toLowerCase())
     const rawPhone = apt.client_phone || foundClient?.phone || ''
-    const cleanPhone = normalizeWhatsAppPhone(rawPhone)
+    const cleanPhone = normalizeWhatsAppPhone(rawPhone, isAr ? 'AR' : 'VE')
     const bizName = businessProfile?.businessName || 'nuestro local'
-    const msg = `👋 ¡Activo *${apt.client_name.split(' ')[0]}*! 💈✂️ Te escribimos de *${bizName}* para confirmar tu turno de *${formatDateLabel(apt.date || selectedDate)}* a las *${apt.time}* (${apt.service} con ${staffObj?.name || 'el equipo'}).\n\n¿Me confirmas tu asistencia? ¡Te esperamos puntual!`
+    const greeting = isAr ? `👋 ¡Hola *${apt.client_name.split(' ')[0]}*!` : `👋 ¡Activo *${apt.client_name.split(' ')[0]}*!`
+    const msg = `${greeting} 💈✂️ Te escribimos de *${bizName}* para confirmar tu turno de *${formatDateLabel(apt.date || selectedDate)}* a las *${apt.time}* (${apt.service} con ${staffObj?.name || 'el equipo'}).\n\n¿Me confirmas tu asistencia? ¡Te esperamos puntual!`
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
       : `https://wa.me/?text=${encodeURIComponent(msg)}`
@@ -217,92 +238,82 @@ export default function AppointmentsView({
   return (
     <div className="space-y-5 animate-fadeIn">
       
-      {/* ─── HEADER COMMAND BAR: AGENDA & CITAS ─── */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-dark-850 via-dark-900 to-dark-950 border border-dark-750/80 p-5 sm:p-6 rounded-3xl shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        
-        {/* Subtle Ambient Glow */}
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative z-10">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse ring-4 ring-purple-500/20" />
-            <span className="text-[11px] font-black uppercase tracking-wider text-purple-400">
-              Agenda de Turnos • {formatDateLabel(selectedDate)}
-            </span>
-            <span className="text-slate-600 hidden sm:inline">•</span>
-            <span className="text-xs text-slate-300 font-medium">
-              {dateAppointments.length} {dateAppointments.length === 1 ? 'cliente agendado' : 'clientes agendados'}
+      {/* ─── HEADER COMPACTO: AGENDA & TURNOS ─── */}
+      <div className="bg-dark-900 border border-dark-800 px-4 py-3.5 sm:px-5 sm:py-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="w-2 h-2 rounded-full bg-purple-400 shrink-0" />
+            <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+              Agenda de Turnos
+            </h2>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-dark-800 text-slate-300 border border-dark-700">
+              {formatDateLabel(selectedDate)} · {dateAppointments.length} {dateAppointments.length === 1 ? 'turno' : 'turnos'}
             </span>
           </div>
-
-          <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
-            Control de Turnos & Citas
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Organiza el flujo de clientes sin filas de espera y cobra en caja con 1 toque
+          <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+            Ordenados cronológicamente por hora · Toca el estado para pasar a silla o cobrar
           </p>
         </div>
 
-        {/* Action Buttons */}
-        <div className="relative z-10 flex items-center gap-2 self-start sm:self-auto flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           {onOpenSettings && (
             <button
               type="button"
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-dark-800/90 hover:bg-dark-750 text-slate-300 hover:text-white border border-dark-700 text-xs font-bold transition-all active:scale-95 shadow-sm"
-              title="Configurar los horarios de atención y bloques de reserva de tu agenda"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-dark-850 hover:bg-dark-800 text-slate-300 hover:text-white border border-dark-750 text-xs font-bold transition-all active:scale-95"
+              title="Configurar los horarios de atención de tu agenda"
             >
               <Settings className="w-3.5 h-3.5 text-gold-400" />
-              <span className="hidden sm:inline">Modificar Horarios</span>
+              <span className="hidden sm:inline">Horarios</span>
             </button>
           )}
 
           <button
+            type="button"
             onClick={() => {
               setNewDate(selectedDate)
               setShowAddModal(true)
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-purple-600/25 active:scale-95 transition-all"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-purple-600/20 active:scale-95 transition-all"
           >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Apartar Turno</span>
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{isAr ? 'Nuevo Turno' : 'Apartar Turno'}</span>
           </button>
         </div>
       </div>
 
-      {/* ─── INTERACTIVE 7-DAY APPLE-STYLE CALENDAR STRIP ─── */}
-      <div className="bg-dark-900 border border-dark-800/80 p-4 sm:p-5 rounded-3xl shadow-xl space-y-3.5">
-        
-        {/* Month Selector & Controls */}
+      {/* ─── CALENDARIO SEMANAL & FILTROS ─── */}
+      <div className="bg-dark-900 border border-dark-800 p-3.5 sm:p-4 rounded-2xl shadow-lg space-y-3">
+        {/* Mes + Controles de fecha */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2">
-            <CalendarIcon className="w-4 h-4 text-purple-400" />
-            <h3 className="font-black text-white text-sm sm:text-base">
+            <CalendarIcon className="w-4 h-4 text-purple-400 shrink-0" />
+            <h3 className="font-bold text-white text-sm">
               {getMonthYearLabel(selectedDate)}
             </h3>
             {selectedDate !== getTodayStr() && (
               <button
+                type="button"
                 onClick={() => setSelectedDate(getTodayStr())}
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 border border-purple-500/30 transition-all ml-1"
+                className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/15 text-purple-300 hover:bg-purple-500/25 border border-purple-500/30 transition-all"
               >
-                Volver a Hoy
+                Hoy
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Quick Week Shift Buttons */}
             <button
+              type="button"
               onClick={() => changeDateByDays(-7)}
-              className="p-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-700/80 transition-all"
+              className="p-1.5 rounded-lg bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750 transition-all"
               title="Semana anterior"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
 
-            {/* Native Date Picker Popover */}
-            <label className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 border border-dark-700/80 text-xs text-slate-300 font-bold cursor-pointer transition-all">
-              <span className="text-[11px] text-slate-400 hidden sm:inline">Otra fecha:</span>
+            <label className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-dark-850 hover:bg-dark-800 border border-dark-750 text-xs text-slate-300 font-bold cursor-pointer transition-all">
+              <span className="text-[11px] text-slate-400 hidden sm:inline">Fecha:</span>
               <input
                 type="date"
                 value={selectedDate}
@@ -312,8 +323,9 @@ export default function AppointmentsView({
             </label>
 
             <button
+              type="button"
               onClick={() => changeDateByDays(7)}
-              className="p-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-400 hover:text-white border border-dark-700/80 transition-all"
+              className="p-1.5 rounded-lg bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-white border border-dark-750 transition-all"
               title="Semana siguiente"
             >
               <ChevronRight className="w-4 h-4" />
@@ -321,229 +333,265 @@ export default function AppointmentsView({
           </div>
         </div>
 
-        {/* 7-Day Pills Grid */}
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+        {/* Tira compacta de 7 días */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {weekDays.map((d) => (
             <button
+              type="button"
               key={d.iso}
               onClick={() => setSelectedDate(d.iso)}
-              className={`p-2 sm:p-3 rounded-2xl flex flex-col items-center justify-center transition-all relative group ${
+              className={`py-2 px-1 rounded-xl flex flex-col items-center justify-center transition-all border ${
                 d.isSelected
-                  ? 'bg-gradient-to-b from-purple-600 to-indigo-600 text-white font-bold shadow-lg shadow-purple-600/30 scale-[1.02] border border-purple-400/50'
-                  : 'bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-slate-200 border border-dark-750/70'
+                  ? 'bg-purple-600 text-white border-purple-400/60 shadow-md shadow-purple-600/25'
+                  : 'bg-dark-850 hover:bg-dark-800 text-slate-400 hover:text-slate-200 border-dark-800'
               }`}
             >
-              <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider block opacity-90">
+              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider opacity-85">
                 {d.dayName}
               </span>
-              <span className="text-sm sm:text-lg font-black font-mono mt-0.5 block">
+              <span className="text-sm sm:text-base font-black font-mono leading-tight my-0.5">
                 {d.dayNum}
               </span>
-
-              {/* Dot / Count Badge for appointments on that date */}
-              {d.count > 0 ? (
-                <span className={`mt-1 text-[9px] px-1.5 py-0.2 rounded-full font-mono font-bold flex items-center gap-0.5 ${
-                  d.isSelected
-                    ? 'bg-white text-purple-900 font-black'
-                    : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                }`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block animate-pulse" />
-                  <span>{d.count}</span>
-                </span>
-              ) : d.isToday ? (
-                <span className="mt-1 text-[9px] font-bold text-emerald-400 block">
-                  Hoy
-                </span>
-              ) : (
-                <span className="mt-1 h-3 block" />
-              )}
+              <span className={`text-[9px] font-mono font-bold px-1.5 rounded-full min-h-[14px] leading-[14px] ${
+                d.count > 0
+                  ? d.isSelected
+                    ? 'bg-white/20 text-white'
+                    : 'bg-purple-500/20 text-purple-300'
+                  : d.isToday
+                  ? 'text-emerald-400'
+                  : 'text-transparent'
+              }`}>
+                {d.count > 0 ? d.count : d.isToday ? 'Hoy' : '0'}
+              </span>
             </button>
           ))}
         </div>
 
-        {/* Status Filters Bar */}
-        <div className="flex items-center justify-between border-t border-dark-800/80 pt-3 gap-2 flex-wrap text-xs">
-          <div className="flex items-center gap-1.5 bg-dark-850 p-1 rounded-xl border border-dark-750/80 overflow-x-auto">
-            {[
-              { id: 'all', label: `Todos (${dateAppointments.length})` },
-              { id: 'pendiente', label: `⏳ Por Atender (${pendingCount})` },
-              { id: 'en_atencion', label: `⚡ En Silla (${inProgressCount})` },
-              { id: 'completada', label: `✓ Listos (${completedCount})` },
-            ].map(f => (
-              <button
-                key={f.id}
-                onClick={() => setStatusFilter(f.id)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all ${
-                  statusFilter === f.id
-                    ? 'bg-purple-600 text-white shadow-sm font-black'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+        {/* Fila unificada de filtros: Estado + Especialista */}
+        <div className="pt-2.5 border-t border-dark-800/80 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-dark-950 p-1 rounded-xl border border-dark-800 overflow-x-auto max-w-full">
+              {[
+                { id: 'all', label: `Todos (${dateAppointments.length})` },
+                { id: 'pendiente', label: `Por atender (${pendingCount})` },
+                { id: 'en_atencion', label: `En silla (${inProgressCount})` },
+                { id: 'completada', label: `Listos (${completedCount})` },
+              ].map(f => (
+                <button
+                  type="button"
+                  key={f.id}
+                  onClick={() => setStatusFilter(f.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold shrink-0 transition-all ${
+                    statusFilter === f.id
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtro por Especialista / Barbero */}
+            {operativeStaff.length > 0 && (
+              <div className="flex items-center gap-1 overflow-x-auto max-w-full pb-0.5">
+                <button
+                  type="button"
+                  onClick={() => setStaffFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
+                    staffFilter === 'all'
+                      ? 'bg-dark-800 text-white border-dark-650'
+                      : 'bg-transparent text-slate-400 border-dark-800 hover:text-white'
+                  }`}
+                >
+                  Todo el equipo
+                </button>
+                {operativeStaff.map(st => {
+                  const stCount = dateAppointments.filter(a => a.staff_id === st.id || a.staff_name === st.name).length
+                  const isOffDate = !isStaffAvailableOnDate(st, selectedDate)
+                  const hasPartialHours = Array.isArray(st.blocked_hours) && st.blocked_hours.some(b => b && b.date === selectedDate)
+                  return (
+                    <button
+                      type="button"
+                      key={st.id}
+                      onClick={() => setStaffFilter(staffFilter === st.id ? 'all' : st.id)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border shrink-0 transition-all ${
+                        staffFilter === st.id
+                          ? 'bg-gold-500/20 text-gold-300 border-gold-500/50'
+                          : isOffDate
+                          ? 'bg-rose-500/10 text-rose-300/80 border-rose-500/25'
+                          : 'bg-dark-850 text-slate-300 border-dark-800 hover:border-dark-700'
+                      }`}
+                      title={isOffDate ? `${st.name} libra este día` : hasPartialHours ? `${st.name} tiene bloqueo por horas este día` : st.name}
+                    >
+                      <span>{st.avatar || '✂️'}</span>
+                      <span className="truncate max-w-[90px]">{st.name.split(' ')[0]}</span>
+                      <span className="text-[10px] font-mono opacity-75">({stCount})</span>
+                      {hasPartialHours && !isOffDate && <span className="text-[9px] text-amber-400">⏱️</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
-
-          <span className="text-[11px] text-slate-400 hidden md:inline">
-            💡 Toca el estado de cualquier turno para cambiarlo a "En la Silla" o "Listo"
-          </span>
         </div>
-
       </div>
 
-      {/* ─── APPOINTMENTS LIST FOR SELECTED DATE ─── */}
+      {/* ─── LISTA CRONOLÓGICA LIMPIA DEL DÍA ─── */}
       {filteredList.length === 0 ? (
-        <div className="relative overflow-hidden bg-dark-900 border border-dark-800/80 rounded-3xl p-8 sm:p-12 text-center space-y-4 shadow-xl">
-          <div className="w-14 h-14 rounded-3xl bg-purple-500/10 text-purple-400 border border-purple-500/20 mx-auto flex items-center justify-center shadow-inner">
-            <CalendarIcon className="w-7 h-7" />
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl p-8 text-center space-y-3 shadow-lg">
+          <div className="w-12 h-12 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20 mx-auto flex items-center justify-center">
+            <CalendarIcon className="w-6 h-6" />
           </div>
           <div className="space-y-1">
-            <h3 className="font-black text-white text-base sm:text-lg">
+            <h3 className="font-bold text-white text-sm sm:text-base">
               {dateAppointments.length === 0
-                ? `Agenda despejada para el ${formatDateLabel(selectedDate)}`
-                : `No hay turnos con el filtro seleccionado`}
+                ? `Agenda despejada para ${formatDateLabel(selectedDate)}`
+                : 'No hay turnos con los filtros actuales'}
             </h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">
               {dateAppointments.length === 0
-                ? 'No hay clientes agendados en esta fecha. Puedes apartar un turno manual o recibir citas desde tu catálogo web.'
-                : 'Cambia el filtro de arriba a "Todos" para ver todas las citas agendadas.'}
+                ? 'Aún no hay turnos registrados para este día.'
+                : 'Prueba limpiando los filtros de estado o especialista.'}
             </p>
           </div>
-          <button
-            onClick={() => {
-              setNewDate(selectedDate)
-              setShowAddModal(true)
-            }}
-            className="px-5 py-2.5 rounded-2xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black shadow-lg shadow-purple-600/20 active:scale-95 transition-all"
-          >
-            + Apartar Turno para el {formatDateLabel(selectedDate)}
-          </button>
+          {dateAppointments.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setNewDate(selectedDate)
+                setShowAddModal(true)
+              }}
+              className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black shadow-md transition-all"
+            >
+              + {isAr ? 'Nuevo Turno' : 'Apartar Turno'} ({formatDateLabel(selectedDate)})
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setStatusFilter('all'); setStaffFilter('all') }}
+              className="px-4 py-1.5 rounded-xl bg-dark-800 hover:bg-dark-750 text-slate-200 text-xs font-bold border border-dark-700"
+            >
+              Mostrar todos ({dateAppointments.length})
+            </button>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+        <div className="bg-dark-900 border border-dark-800 rounded-2xl divide-y divide-dark-800/80 overflow-hidden shadow-xl">
           {filteredList.map((apt) => {
             const staffObj = (nicheData?.staff || []).find(s => s.id === apt.staff_id) ||
               (apt.staff_name ? (nicheData?.staff || []).find(s => s.name === apt.staff_name) : null)
             const isCompleted = apt.status === 'completada'
             const isInChair = apt.status === 'en_atencion'
+            const durLabel = formatDurationLabel(apt.duration_min || inferServiceDuration(apt.service))
 
             return (
-              <div 
+              <div
                 key={apt.id}
-                className={`relative overflow-hidden bg-dark-900 border hover:border-dark-700/90 rounded-3xl p-4 sm:p-5 shadow-xl transition-all group flex flex-col justify-between gap-3.5 ${
-                  isCompleted 
-                    ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-950/15 via-dark-900 to-dark-900' 
-                    : isInChair 
-                    ? 'border-blue-500/40 bg-gradient-to-br from-blue-950/20 via-dark-900 to-dark-900' 
-                    : 'border-dark-800/90'
+                className={`relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 sm:px-5 sm:py-3.5 transition-colors ${
+                  isCompleted
+                    ? 'bg-emerald-950/10 opacity-80'
+                    : isInChair
+                    ? 'bg-blue-950/15'
+                    : 'hover:bg-dark-850/60'
                 }`}
               >
-                {/* Status indicator glow edge */}
-                <div className={`absolute top-0 left-0 bottom-0 w-1.5 ${
-                  isCompleted ? 'bg-emerald-500' : isInChair ? 'bg-blue-500' : 'bg-purple-500'
+                {/* Franja lateral de estado */}
+                <div className={`absolute top-0 left-0 bottom-0 w-1 ${
+                  isCompleted ? 'bg-emerald-500' : isInChair ? 'bg-blue-500' : 'bg-amber-400'
                 }`} />
 
-                {/* Top Section: Time, Duration & Status Toggle */}
-                <div className="flex items-center justify-between gap-2 pl-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-dark-800/90 border border-dark-750 text-white font-mono font-bold text-xs sm:text-sm shadow-sm">
-                      <Clock className="w-3.5 h-3.5 text-purple-400" />
-                      <span>{apt.time}</span>
+                {/* Bloque Izquierdo + Centro: Hora + Cliente + Servicio + Barbero */}
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1 pl-1.5">
+                  {/* Columna fija de Hora */}
+                  <div className="w-20 sm:w-24 shrink-0 pt-0.5 sm:pt-0">
+                    <div className="font-mono font-black text-white text-sm leading-none">
+                      {apt.time}
                     </div>
-
-                    <span className="text-[10px] px-2 py-1 rounded-xl bg-dark-850 text-slate-400 border border-dark-750 font-bold">
-                      ⏱️ {formatDurationLabel(apt.duration_min || inferServiceDuration(apt.service))}
-                    </span>
+                    <div className="text-[10px] text-slate-400 font-medium mt-1">
+                      {durLabel}
+                    </div>
                   </div>
 
-                  {/* Status Toggle Badge */}
-                  <button
-                    onClick={() => toggleStatus(apt.id)}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all active:scale-95 flex items-center gap-1.5 ${
-                      isCompleted 
-                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
-                        : isInChair 
-                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 ring-2 ring-blue-500/20 animate-pulse' 
-                        : 'bg-dark-800 text-amber-400 border-dark-700 hover:border-amber-500/40'
-                    }`}
-                    title="Click para cambiar estado (Esperando → En la Silla → Listo)"
-                  >
-                    {isCompleted && (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Listo</span>
-                      </>
-                    )}
-                    {isInChair && (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
-                        <span>En la Silla</span>
-                      </>
-                    )}
-                    {!isCompleted && !isInChair && (
-                      <>
-                        <Clock3 className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Esperando</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Middle Section: Client Name, Service & Staff */}
-                <div className="pl-2 space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-black text-white text-base tracking-tight truncate">
-                      {apt.client_name}
-                    </h4>
-                    {apt.source === 'web' && (
-                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-gold-500/15 text-gold-400 border border-gold-500/30 font-bold flex items-center gap-1">
-                        <Sparkles className="w-2.5 h-2.5" />
-                        <span>Link Web</span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                    <span className="font-semibold text-slate-200 bg-dark-850 px-2.5 py-0.5 rounded-lg border border-dark-750">
-                      ✂️ {apt.service}
-                    </span>
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <span>{staffObj?.avatar || '👤'}</span>
-                      <span className="text-slate-300 font-medium">{staffObj?.name || apt.staff_name || 'Cualquier especialista'}</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Bottom Actions Row: Cobrar + WhatsApp + Borrar */}
-                <div className="pl-2 pt-2 border-t border-dark-800/80 flex items-center justify-between gap-2 flex-wrap">
-                  
-                  <div className="flex items-center gap-2 flex-1">
-                    {/* Action 1: Cobrar en Caja */}
-                    {!isCompleted && onChargeAppointment && (
+                  {/* Información principal */}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-white text-sm tracking-tight truncate">
+                        {apt.client_name}
+                      </h4>
+                      {apt.source === 'web' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-gold-500/15 text-gold-400 border border-gold-500/30 font-bold inline-flex items-center gap-0.5">
+                          <Sparkles className="w-2.5 h-2.5" />
+                          <span>Web</span>
+                        </span>
+                      )}
                       <button
                         type="button"
-                        onClick={() => onChargeAppointment(apt)}
-                        className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black font-black text-xs shadow-md shadow-gold-500/20 active:scale-95 transition-all"
-                        title="Cobrar este turno en Caja con 1 toque"
+                        onClick={() => toggleStatus(apt.id)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all inline-flex items-center gap-1 ${
+                          isCompleted
+                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                            : isInChair
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                            : 'bg-amber-500/10 text-amber-300 border-amber-500/25 hover:border-amber-400/60'
+                        }`}
+                        title="Tocar para cambiar estado (Esperando → En silla → Listo)"
                       >
-                        <DollarSign className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span>Cobrar en Caja</span>
+                        {isCompleted ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Listo</span>
+                          </>
+                        ) : isInChair ? (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
+                            <span>En silla</span>
+                          </>
+                        ) : (
+                          <>
+                            <Clock3 className="w-3 h-3" />
+                            <span>Esperando</span>
+                          </>
+                        )}
                       </button>
-                    )}
+                    </div>
 
-                    {/* Action 2: Recordatorio WhatsApp Anti-Embarque */}
+                    <div className="flex items-center gap-1.5 text-xs text-slate-400 flex-wrap">
+                      <span className="text-slate-200 font-medium truncate max-w-[240px]">
+                        ✂️ {apt.service}
+                      </span>
+                      <span className="text-slate-600">·</span>
+                      <span className="inline-flex items-center gap-1 text-slate-300">
+                        <span>{staffObj?.avatar || '👤'}</span>
+                        <span>{staffObj?.name || apt.staff_name || 'Por asignar'}</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Acciones Derecha */}
+                <div className="flex items-center gap-1.5 pl-1.5 sm:pl-0 shrink-0 justify-end">
+                  {!isCompleted && onChargeAppointment && (
                     <button
                       type="button"
-                      onClick={() => handleWhatsAppReminder(apt, staffObj)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all active:scale-95"
-                      title="Enviar recordatorio de turno por WhatsApp"
+                      onClick={() => onChargeAppointment(apt)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gradient-to-r from-gold-500 to-amber-500 hover:from-gold-400 hover:to-amber-400 text-black font-black text-xs shadow-sm active:scale-95 transition-all"
+                      title="Cobrar este turno en Caja"
                     >
-                      <MessageSquare className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">WhatsApp</span>
+                      <DollarSign className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Cobrar</span>
                     </button>
-                  </div>
+                  )}
 
-                  {/* Action 3: Eliminar Cita */}
+                  <button
+                    type="button"
+                    onClick={() => handleWhatsAppReminder(apt, staffObj)}
+                    className="p-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 transition-all active:scale-95"
+                    title="Enviar recordatorio por WhatsApp"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                  </button>
+
                   {onDeleteAppointment && (
                     <button
                       type="button"
@@ -552,15 +600,13 @@ export default function AppointmentsView({
                           onDeleteAppointment(apt.id)
                         }
                       }}
-                      className="p-2 rounded-2xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-all active:scale-95"
+                      className="p-2 rounded-xl bg-dark-850 hover:bg-red-500/20 text-slate-500 hover:text-red-400 border border-dark-750 transition-all active:scale-95"
                       title="Cancelar / Eliminar turno"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-
                 </div>
-
               </div>
             )
           })}
@@ -625,7 +671,7 @@ export default function AppointmentsView({
                 <div className="flex items-center justify-between gap-2 mb-1">
                   <label className="block text-xs font-bold text-slate-300">Hora Estimada</label>
                   <span className="text-[10px] font-medium text-slate-400">
-                    <span className="text-red-400 font-bold">Rojo</span> = Ocupada · <span className="text-slate-500 font-bold">Gris</span> = Ya pasó
+                    <span className="text-red-400 font-bold">Rojo</span> = Ocupada · <span className="text-amber-300 font-bold">Ámbar</span> = Bloqueo · <span className="text-slate-500 font-bold">Gris</span> = Pasó
                   </span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 mb-2 max-h-32 overflow-y-auto p-1.5 bg-dark-950 rounded-2xl border border-dark-800">
@@ -635,7 +681,8 @@ export default function AppointmentsView({
                       ? sched.slots
                       : (businessProfile?.bookingSlots || ['09:00 AM', '10:00 AM', '11:00 AM', '02:00 PM', '04:00 PM', '05:30 PM', '07:00 PM'])
                     const staffList = operativeStaff
-                    const effectiveStaffId = staffList.some(s => s.id === newStaff) ? newStaff : (staffList[0]?.id || 'e1')
+                    const effectiveStaffObj = staffList.find(s => s.id === newStaff) || staffList[0] || null
+                    const effectiveStaffId = effectiveStaffObj?.id || 'e1'
                     const isSingleChair = Boolean(businessProfile?.singleChairMode !== false || staffList.length <= 1)
                     const matchedService = (nicheData?.services || []).find(s => s.name === newService)
                     const curDur = matchedService?.duration_min || inferServiceDuration(newService) || 30
@@ -653,6 +700,11 @@ export default function AppointmentsView({
                         if (isSingleChair) return true
                         return !a.staff_id || a.staff_id === effectiveStaffId
                       })
+                      const isBlockedHour = Boolean(
+                        effectiveStaffObj &&
+                        isStaffAvailableOnDate(effectiveStaffObj, newDate) &&
+                        !isStaffAvailableForSlot(effectiveStaffObj, newDate, h, curDur)
+                      )
                       const isPast = isTimeSlotInPast(h, newDate, 10)
                       const isSelected = newTime === h
                       return (
@@ -665,11 +717,21 @@ export default function AppointmentsView({
                               ? 'bg-purple-600 text-white border-purple-500 font-bold shadow-sm'
                               : isOccupied
                               ? 'bg-red-950/30 text-red-400 border-red-900/40 line-through'
+                              : isBlockedHour
+                              ? 'bg-amber-950/35 text-amber-300 border-amber-500/40'
                               : isPast
                               ? 'bg-dark-900/70 text-slate-500 border-dark-800/80 opacity-60'
                               : 'bg-dark-850 text-slate-300 border-dark-750 hover:text-white'
                           }`}
-                          title={isOccupied ? 'Horario ocupado por otra cita' : isPast ? 'Hora ya transcurrida' : 'Disponible'}
+                          title={
+                            isOccupied
+                              ? 'Horario ocupado por otra cita'
+                              : isBlockedHour
+                              ? 'Tramo bloqueado en la disponibilidad del especialista'
+                              : isPast
+                              ? 'Hora ya transcurrida'
+                              : 'Disponible'
+                          }
                         >
                           {h}
                         </button>
@@ -724,10 +786,19 @@ export default function AppointmentsView({
                 </select>
                 {(() => {
                   const modalStaffObj = operativeStaff.find(s => s.id === newStaff)
-                  if (!modalStaffObj || isStaffAvailableOnDate(modalStaffObj, newDate)) return null
+                  if (!modalStaffObj) return null
+                  if (!isStaffAvailableOnDate(modalStaffObj, newDate)) {
+                    return (
+                      <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-300 font-semibold">
+                        ⚠️ {modalStaffObj.name} está marcado como libre el {newDate}.
+                      </div>
+                    )
+                  }
+                  const dayBlocks = (modalStaffObj.blocked_hours || []).filter(b => b && b.date === newDate)
+                  if (dayBlocks.length === 0) return null
                   return (
-                    <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-[11px] text-rose-300 font-semibold">
-                      ⚠️ {modalStaffObj.name} está marcado como libre el {newDate}.
+                    <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-300 font-semibold">
+                      ⏱️ {modalStaffObj.name} bloqueó horas ese día: {dayBlocks.map(b => `${b.start}–${b.end}`).join(', ')}.
                     </div>
                   )
                 })()}

@@ -65,14 +65,17 @@ export default function App() {
   const isDirectClientLink = searchParams.includes('reserva=1')
   const publicTenantParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('b') : null
   const [publicTenantWs, setPublicTenantWs] = useState(null)
+  const [publicTenantLoaded, setPublicTenantLoaded] = useState(() => !publicTenantParam)
 
   useEffect(() => {
     if (!publicTenantParam) return
+    setPublicTenantLoaded(false)
     // 1. Try local cache
     try {
       const localScoped = localStorage.getItem(`barber_ws_${publicTenantParam}`)
       if (localScoped) {
         setPublicTenantWs(JSON.parse(localScoped))
+        setPublicTenantLoaded(true)
       }
     } catch (e) {}
 
@@ -86,6 +89,9 @@ export default function App() {
           }
         })
         .catch(() => {})
+        .finally(() => {
+          setPublicTenantLoaded(true)
+        })
     }
 
     fetchPublicWs()
@@ -2171,9 +2177,27 @@ export default function App() {
 
   // 2. If in Public Client Landing Mode (?reserva=1 or Owner Preview)
   if (isPublicPreview) {
+    if (isDirectClientLink && publicTenantParam && !publicTenantWs && !publicTenantLoaded) {
+      return (
+        <div className="min-h-screen bg-dark-950 text-slate-200 flex items-center justify-center p-6">
+          <div className="text-center space-y-2">
+            <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs font-semibold text-slate-400">Cargando agenda de turnos...</p>
+          </div>
+        </div>
+      )
+    }
+
+    const matchedPublicTenant = publicTenantParam
+      ? (Array.isArray(tenants) ? tenants.find(t => t && t.id === publicTenantParam) : null)
+      : activeTenant
+
     const bookingNiche = (publicTenantWs && publicTenantWs.currentNiche) || currentNiche
     const baseNicheObj = NICHES[bookingNiche] || nicheData
-    const bookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || businessProfile
+    const rawBookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || businessProfile
+    const bookingProfile = (matchedPublicTenant?.country && !rawBookingProfile?.country)
+      ? { ...rawBookingProfile, country: matchedPublicTenant.country }
+      : rawBookingProfile
     const bookingServices = (publicTenantWs && publicTenantWs.servicesByNiche && publicTenantWs.servicesByNiche[bookingNiche]) || (servicesByNiche[bookingNiche] || currentServices)
     const bookingStaff = (publicTenantWs && publicTenantWs.staffByNiche && publicTenantWs.staffByNiche[bookingNiche]) || (staffByNiche[bookingNiche] || currentStaff)
     const bookingProducts = (publicTenantWs && publicTenantWs.productsByNiche && publicTenantWs.productsByNiche[bookingNiche]) || (productsByNiche[bookingNiche] || currentProducts)

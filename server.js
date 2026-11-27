@@ -626,9 +626,22 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       if (db.workspaces[tenantId]) {
         db.workspaces[tenantId] = reconstructWorkspaceTransactions(tenantId, db.workspaces[tenantId])
       }
+      let ws = db.workspaces[tenantId] || null
+      if (ws) {
+        const tenantRec = Array.isArray(db.tenants) ? db.tenants.find(t => t && t.id === tenantId) : null
+        if (tenantRec?.country && (!ws.businessProfile || !ws.businessProfile.country)) {
+          ws = {
+            ...ws,
+            businessProfile: {
+              ...(ws.businessProfile || {}),
+              country: tenantRec.country
+            }
+          }
+        }
+      }
       return sendJson(res, 200, {
         ok: true,
-        workspace: db.workspaces[tenantId] || null
+        workspace: ws
       })
     }
 

@@ -1198,6 +1198,7 @@ export default function QuickCashModal({
                 <PhoneCountryInput
                   value={clientPhone}
                   onChange={setClientPhone}
+                  isAr={isAr}
                   placeholder="WhatsApp del cliente"
                 />
               </div>

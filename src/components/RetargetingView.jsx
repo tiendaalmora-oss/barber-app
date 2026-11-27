@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { BellRing, MessageSquare, Clock, Award, Zap, Settings2, Check, Flame, UserCheck, Calendar, Sparkles, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { isArgentina } from '../lib/brandConfig'
 import { normalizeWhatsAppPhone } from '../lib/dateUtils'
 import PhoneCountryInput from './PhoneCountryInput'
 
@@ -22,8 +23,9 @@ export default function RetargetingView({
   const [newClientPhone, setNewClientPhone] = useState('')
   const [newClientCycle, setNewClientCycle] = useState(retargetingConfig?.defaultCycleDays || 15)
 
+  const isAr = isArgentina(null, businessProfile)
   const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
-  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}`
+  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}${isAr ? '&pais=ar' : ''}`
 
   // Calculate days since last visit (Resilient with ISO strings and pure YYYY-MM-DD)
   const getDaysSince = (dateStr) => {
@@ -99,7 +101,7 @@ export default function RetargetingView({
   }
 
   const handleSendWhatsApp = (client) => {
-    const cleanPhone = normalizeWhatsAppPhone(client.phone || '')
+    const cleanPhone = normalizeWhatsAppPhone(client.phone || '', isAr ? 'AR' : 'VE')
     if (!cleanPhone || cleanPhone.length < 9) {
       alert(`El cliente ${client.name} no tiene un teléfono válido registrado para enviarle WhatsApp.`)
       return
@@ -594,6 +596,7 @@ export default function RetargetingView({
                 <PhoneCountryInput
                   value={newClientPhone}
                   onChange={setNewClientPhone}
+                  isAr={isAr}
                   placeholder="WhatsApp del cliente"
                 />
               </div>

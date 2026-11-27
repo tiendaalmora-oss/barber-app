@@ -12,6 +12,7 @@ import {
   Check,
   Instagram,
   Package,
+  ChevronLeft,
   ChevronRight,
   Star,
   ShieldCheck,
@@ -30,7 +31,9 @@ import {
   getScheduleForDate,
   getDayLabelFromDate,
   isStaffAvailableOnDate,
-  getAvailableStaffForDate
+  getAvailableStaffForDate,
+  isStaffAvailableForSlot,
+  getAvailableStaffForSlot
 } from '../lib/dateUtils'
 import { DEFAULT_BOOKING_SLOTS } from '../lib/mockData'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
@@ -101,14 +104,16 @@ export default function PublicBookingView({
     return allServices.filter(s => (s.category || '').trim() === selectedCategory)
   }, [allServices, selectedCategory])
 
-  // Generate next 7 days for the iOS / Booksy horizontal date carousel
+  const [weekOffset, setWeekOffset] = useState(0)
+
+  // Generate 7 days for the visible week (weekOffset 0..8) in the horizontal date carousel
   const upcomingDays = useMemo(() => {
     const days = []
     const base = new Date()
     const opStaff = getOperativeStaff(nicheData?.staff)
     for (let i = 0; i < 7; i++) {
       const d = new Date(base)
-      d.setDate(base.getDate() + i)
+      d.setDate(base.getDate() + weekOffset * 7 + i)
       const iso = getLocalDateIso(d)
       const sched = getScheduleForDate(businessProfile, iso, DEFAULT_BOOKING_SLOTS)
       const availStaff = getAvailableStaffForDate(opStaff, iso)
@@ -123,7 +128,24 @@ export default function PublicBookingView({
       })
     }
     return days
-  }, [businessProfile, nicheData?.staff])
+  }, [businessProfile, nicheData?.staff, weekOffset])
+
+  const handlePickCustomDate = (pickedIso) => {
+    if (!pickedIso) return
+    setSelectedDate(pickedIso)
+    const todayBase = new Date()
+    todayBase.setHours(0, 0, 0, 0)
+    const [yy, mm, dd] = pickedIso.split('-').map(Number)
+    if (yy && mm && dd) {
+      const target = new Date(yy, mm - 1, dd)
+      const diffDays = Math.round((target.getTime() - todayBase.getTime()) / (1000 * 60 * 60 * 24))
+      if (diffDays >= 0) {
+        setWeekOffset(Math.min(8, Math.floor(diffDays / 7)))
+      } else {
+        setWeekOffset(0)
+      }
+    }
+  }
 
   // Dynamic day-of-week schedule awareness
   const dateSchedule = getScheduleForDate(businessProfile, selectedDate, DEFAULT_BOOKING_SLOTS)
@@ -193,17 +215,38 @@ export default function PublicBookingView({
   }
   const arCreditSurchargePct = isAr ? Math.max(0, Number(businessProfile?.creditCardSurchargePct) || 0) : 0
 
+  const displayPaymentMethods = useMemo(() => {
+    const rawList = Array.isArray(businessProfile?.paymentMethods) ? businessProfile.paymentMethods : []
+    if (!isAr) return rawList
+    const VE_ONLY = new Set(['Pago Móvil BCV', 'Punto de Venta', 'Biopago', 'Zelle', 'Binance Pay', 'Pago Móvil', 'Efectivo USD'])
+    const cleaned = []
+    for (const pm of rawList) {
+      if (!pm || VE_ONLY.has(pm)) continue
+      const normalized = pm === 'Efectivo ($)' ? 'Efectivo' : pm
+      if (!cleaned.includes(normalized)) cleaned.push(normalized)
+    }
+    return cleaned.length > 0 ? cleaned : ['Efectivo', 'Mercado Pago', 'Transferencia']
+  }, [businessProfile?.paymentMethods, isAr])
+
   const isSlotInPast = (timeStr) => {
     return isTimeSlotInPast(timeStr, selectedDate, 10)
   }
 
   const isSlotBooked = (timeStr) => {
     if (allStaffOffForDate || isSelectedStaffOff) return true
+
+    const activeDur = selectedDuration || 30
+    const availForSlot = getAvailableStaffForSlot(staffList, selectedDate, timeStr, activeDur)
+
+    // Check partial-day hour blocks FIRST (even if there are 0 appointments that day)
+    if (staffList.length > 0 && availForSlot.length === 0) return true
+    if (selectedStaff !== 'any' && selectedStaffObj && !isStaffAvailableForSlot(selectedStaffObj, selectedDate, timeStr, activeDur)) {
+      return true
+    }
+
     if (!Array.isArray(appointments) || appointments.length === 0) return false
     const reqStart = timeToMinutes(timeStr)
-    const reqEnd = reqStart + (selectedDuration || 30)
-    const availIds = new Set(availableStaffForDate.map(s => s.id))
-    const totalStaffCount = Math.max(1, availableStaffForDate.length)
+    const reqEnd = reqStart + activeDur
 
     const overlappingApts = appointments.filter(apt => {
       if (!apt || !apt.date || !apt.time) return false
@@ -223,7 +266,12 @@ export default function PublicBookingView({
       return true
     }
 
+    if (staffList.length === 0) {
+      return overlappingApts.length >= 1
+    }
+
     if (selectedStaff === 'any') {
+      const availIds = new Set(availForSlot.map(s => s.id))
       const busyStaffIds = new Set()
       let unassignedCount = 0
       for (const apt of overlappingApts) {
@@ -240,7 +288,8 @@ export default function PublicBookingView({
           }
         }
       }
-      return (busyStaffIds.size + unassignedCount) >= totalStaffCount
+      const freeCount = availForSlot.filter(st => !busyStaffIds.has(st.id)).length - unassignedCount
+      return freeCount <= 0
     }
 
     return overlappingApts.some(apt => {
@@ -318,9 +367,10 @@ export default function PublicBookingView({
     }
 
     let assignedStaffId = selectedStaff
+    const availAtSlot = getAvailableStaffForSlot(staffList, selectedDate, normTime, selectedDuration || 30)
     if (selectedStaff === 'any' || !selectedStaff) {
       if (isSingleChair) {
-        assignedStaffId = availableStaffForDate[0]?.id || staffList[0]?.id || 'e1'
+        assignedStaffId = availAtSlot[0]?.id || availableStaffForDate[0]?.id || staffList[0]?.id || 'e1'
       } else {
         const reqStart = timeToMinutes(normTime)
         const reqEnd = reqStart + (selectedDuration || 30)
@@ -339,13 +389,13 @@ export default function PublicBookingView({
             return directMatch ? directMatch.id : apt.staff_id
           })
 
-        const freeStaff = availableStaffForDate.find(st => !busyStaffIds.includes(st.id))
-        assignedStaffId = freeStaff ? freeStaff.id : (availableStaffForDate[0]?.id || staffList[0]?.id || 'e1')
+        const freeStaff = availAtSlot.find(st => !busyStaffIds.includes(st.id))
+        assignedStaffId = freeStaff ? freeStaff.id : (availAtSlot[0]?.id || availableStaffForDate[0]?.id || staffList[0]?.id || 'e1')
       }
     } else if (!staffList.some(s => s.id === selectedStaff)) {
-      assignedStaffId = availableStaffForDate[0]?.id || staffList[0]?.id || 'e1'
-    } else if (isSingleChair && selectedStaffObj && !isStaffAvailableOnDate(selectedStaffObj, selectedDate)) {
-      assignedStaffId = availableStaffForDate[0]?.id || selectedStaff
+      assignedStaffId = availAtSlot[0]?.id || availableStaffForDate[0]?.id || staffList[0]?.id || 'e1'
+    } else if (isSingleChair && selectedStaffObj && !isStaffAvailableForSlot(selectedStaffObj, selectedDate, normTime, selectedDuration || 30)) {
+      assignedStaffId = availAtSlot[0]?.id || availableStaffForDate[0]?.id || selectedStaff
     }
 
     const assignedStaffObj = staffList.find(s => s.id === assignedStaffId)
@@ -382,9 +432,9 @@ export default function PublicBookingView({
 
   const handleSendWhatsAppConfirmation = () => {
     if (!bookedTicket) return
-    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
-    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de apartar mi turno desde su Ventana Digital:\n\n` +
-      `🎫 *Pase:* #${bookedTicket.code}\n` +
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '', isAr ? 'AR' : 'VE')
+    const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Acabo de reservar mi turno desde su link de reservas:\n\n` +
+      `🎫 *Turno:* #${bookedTicket.code}\n` +
       `👤 *Cliente:* ${bookedTicket.client_name}\n` +
       (isAr ? `✨ *Servicio:* ${bookedTicket.service} (${fmt(bookedTicket.priceUsd)} ARS)\n` : `✨ *Servicio:* ${bookedTicket.service} (${bookedTicket.priceUsd} / Bs. ${bookedTicket.priceBs})\n`) +
       `⏱️ *Duración:* ~${formatDurationLabel(bookedTicket.durationMin || 30)}\n` +
@@ -399,7 +449,7 @@ export default function PublicBookingView({
   }
 
   const handleOrderProductWhatsApp = (prod) => {
-    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '', isAr ? 'AR' : 'VE')
     const bs = (prod.price_usd * safeRate).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     const msg = isAr ? `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* (${fmt(prod.price_usd)} ARS) y quiero encargarlo.` : `👋 ¡Hola *${businessProfile?.businessName}*! Vi en su catálogo el producto *${prod.name}* (${prod.price_usd} / Bs. ${bs}) y quiero encargarlo.`
     const url = cleanPhone
@@ -409,7 +459,7 @@ export default function PublicBookingView({
   }
 
   const handleDirectWhatsAppContact = () => {
-    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '')
+    const cleanPhone = normalizeWhatsAppPhone(businessProfile?.whatsapp || '', isAr ? 'AR' : 'VE')
     const msg = `👋 ¡Hola *${businessProfile?.businessName}*! Estoy viendo su catálogo online y quisiera hacer una consulta.`
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
@@ -588,11 +638,11 @@ export default function PublicBookingView({
                 <strong className="text-white font-mono">Bs. {safeRate.toFixed(2)}</strong>
               </div>
             )}
-            {(businessProfile?.paymentMethods || []).length > 0 && (
+            {displayPaymentMethods.length > 0 && (
               <>
                 {!isAr && <span className="text-slate-700">|</span>}
                 <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-slate-300">
-                  {(businessProfile.paymentMethods || []).map((pm, idx) => (
+                  {displayPaymentMethods.map((pm, idx) => (
                     <React.Fragment key={pm}>
                       {idx > 0 && <span className="text-slate-600">·</span>}
                       <span>{pm}</span>
@@ -1153,9 +1203,13 @@ export default function PublicBookingView({
                           </div>
                           <div className="min-w-0">
                             <span className="block text-xs font-bold text-white truncate">{st.name}</span>
-                            <span className={`block text-[10px] ${staffOffToday ? 'text-rose-400 font-bold' : 'text-emerald-400'}`}>
-                              {staffOffToday ? 'Libra ese día' : 'Disponible'}
-                            </span>
+                            {staffOffToday ? (
+                              <span className="block text-[10px] text-rose-400 font-bold">Libra ese día</span>
+                            ) : Array.isArray(st.blocked_hours) && st.blocked_hours.some(b => b && b.date === selectedDate) ? (
+                              <span className="block text-[10px] text-amber-400 font-semibold">Horarios parciales</span>
+                            ) : (
+                              <span className="block text-[10px] text-emerald-400">Disponible</span>
+                            )}
                           </div>
                         </button>
                       )
@@ -1194,35 +1248,67 @@ export default function PublicBookingView({
                     <span>Selecciona Día y Hora</span>
                   </label>
 
-                  {/* Botón discreto para elegir otra fecha del calendario */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (customDateInputRef.current?.showPicker) {
-                          customDateInputRef.current.showPicker()
-                        } else if (customDateInputRef.current) {
-                          customDateInputRef.current.focus()
-                        }
-                      }}
-                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1.5 ${
-                        isCustomDateSelected
-                          ? 'bg-gold-500 text-black border-gold-400'
-                          : 'bg-white/[0.04] text-slate-300 border-white/10 hover:text-white'
-                      }`}
-                    >
-                      <CalendarIcon className="w-3 h-3" />
-                      <span>{isCustomDateSelected ? selectedDate : 'Otra fecha'}</span>
-                    </button>
+                  {/* Selector nativo de calendario compatible con iOS/Android/WhatsApp In-App */}
+                  <label
+                    className={`relative overflow-hidden cursor-pointer text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1.5 ${
+                      isCustomDateSelected
+                        ? 'bg-gold-500 text-black border-gold-400'
+                        : 'bg-white/[0.04] text-slate-300 border-white/10 hover:text-white'
+                    }`}
+                  >
+                    <CalendarIcon className="w-3 h-3" />
+                    <span>{isCustomDateSelected ? selectedDate : 'Otra fecha'}</span>
                     <input
-                      ref={customDateInputRef}
                       type="date"
                       value={selectedDate}
                       min={getTodayStr()}
-                      onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-                      className="sr-only"
+                      onChange={(e) => e.target.value && handlePickCustomDate(e.target.value)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                  </div>
+                  </label>
+                </div>
+
+                {/* Navegación entre semanas (Esta semana, Próx. semana, hasta 8 semanas adelante) */}
+                <div className="flex items-center justify-between gap-2 bg-[#090b10] border border-white/[0.06] rounded-xl px-2 py-1.5">
+                  <button
+                    type="button"
+                    disabled={weekOffset === 0}
+                    onClick={() => {
+                      const next = Math.max(0, weekOffset - 1)
+                      setWeekOffset(next)
+                      const target = new Date()
+                      target.setDate(target.getDate() + next * 7)
+                      setSelectedDate(getLocalDateIso(target))
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-slate-300 hover:text-white hover:bg-white/[0.06] disabled:opacity-30 disabled:pointer-events-none transition-all"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Ant.</span>
+                  </button>
+
+                  <span className="text-[10px] font-bold text-slate-300 text-center">
+                    {weekOffset === 0
+                      ? 'Esta semana'
+                      : weekOffset === 1
+                        ? `Próx. semana (${upcomingDays[0]?.dayNumber} ${upcomingDays[0]?.monthShort} – ${upcomingDays[6]?.dayNumber} ${upcomingDays[6]?.monthShort})`
+                        : `En ${weekOffset} sem. (${upcomingDays[0]?.dayNumber} ${upcomingDays[0]?.monthShort} – ${upcomingDays[6]?.dayNumber} ${upcomingDays[6]?.monthShort})`}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={weekOffset >= 8}
+                    onClick={() => {
+                      const next = Math.min(8, weekOffset + 1)
+                      setWeekOffset(next)
+                      const target = new Date()
+                      target.setDate(target.getDate() + next * 7)
+                      setSelectedDate(getLocalDateIso(target))
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold text-gold-400 hover:text-gold-300 hover:bg-gold-500/10 disabled:opacity-30 disabled:pointer-events-none transition-all"
+                  >
+                    <span>Próx. sem.</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
 
                 {/* Carrusel Horizontal de 7 Días (Estilo App Nativa) */}
@@ -1410,6 +1496,8 @@ export default function PublicBookingView({
                       value={clientPhone}
                       onChange={setClientPhone}
                       required
+                      isAr={isAr}
+                      restrictToCountry={true}
                     />
                   </div>
                 </div>

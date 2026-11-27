@@ -338,6 +338,7 @@ export default function BusinessSettingsModal({
                     value={form.whatsapp || ''}
                     onChange={(val) => setForm({ ...form, whatsapp: val })}
                     isGlam={isGlam}
+                    isAr={isAr}
                     required
                   />
                 </div>

@@ -40,9 +40,16 @@ function parseIncomingPhone(raw, defaultCountry = isArgentina() ? '54' : '58') {
     return { countryId: '58', localNumber: clean.startsWith('4') ? '0' + clean : clean }
   }
 
-  // Argentine local patterns: 11..., 15..., etc.
-  if (clean.startsWith('11') || clean.startsWith('15')) {
-    return { countryId: '54', localNumber: clean }
+  // Argentine local patterns: 11..., 15..., or interior 2xx/3xx area codes when defaultCountry is AR ('54')
+  if (
+    clean.startsWith('11') ||
+    clean.startsWith('15') ||
+    (defaultCountry === '54' && (/^[1-3]\d{9}$/.test(clean) || /^0[1-3]\d{9}$/.test(clean)))
+  ) {
+    return {
+      countryId: '54',
+      localNumber: clean.startsWith('0') && clean.length === 11 ? clean.slice(1) : clean
+    }
   }
 
   return { countryId: defaultCountry, localNumber: clean }
@@ -80,21 +87,30 @@ export default function PhoneCountryInput({
   placeholder,
   className = '',
   isGlam = false,
-  autoFocus = false
+  autoFocus = false,
+  isAr = undefined,
+  restrictToCountry = false
 }) {
-  const [selectedCountry, setSelectedCountry] = useState(() => isArgentina() ? '54' : '58')
+  const effectiveAr = typeof isAr === 'boolean' ? isAr : isArgentina()
+  const defaultCountryId = effectiveAr ? '54' : '58'
+  const visibleCountries = restrictToCountry && effectiveAr
+    ? COUNTRIES.filter(c => c.id !== '58')
+    : COUNTRIES
+
+  const [selectedCountry, setSelectedCountry] = useState(defaultCountryId)
   const [localNumber, setLocalNumber] = useState('')
 
-  // Sync internal state when external value changes
+  // Sync internal state when external value or detected country changes
   useEffect(() => {
     if (value) {
-      const parsed = parseIncomingPhone(value)
+      const parsed = parseIncomingPhone(value, defaultCountryId)
       setSelectedCountry(parsed.countryId)
       setLocalNumber(parsed.localNumber)
     } else {
+      setSelectedCountry(defaultCountryId)
       setLocalNumber('')
     }
-  }, [value])
+  }, [value, defaultCountryId])
 
   const handleCountryChange = (e) => {
     const newCountry = e.target.value
@@ -123,9 +139,9 @@ export default function PhoneCountryInput({
           value={selectedCountry}
           onChange={handleCountryChange}
           className="appearance-none bg-transparent text-xs text-white font-bold pl-2.5 pr-6 py-2.5 focus:outline-none cursor-pointer"
-          title="Seleccionar país (Venezuela +58 / Argentina +54)"
+          title={restrictToCountry && effectiveAr ? 'Seleccionar país (Argentina +54)' : 'Seleccionar país (Venezuela +58 / Argentina +54)'}
         >
-          {COUNTRIES.map(c => (
+          {visibleCountries.map(c => (
             <option key={c.id} value={c.id} className="bg-dark-900 text-white">
               {c.flag} {c.prefix}
             </option>

@@ -62,33 +62,71 @@ export function isDateInWeek(dateString, weekOffset = 0) {
 
 /**
  * Normalizes phone numbers for wa.me links.
- * Handles standard Venezuelan numbers (0412, 0414, 0424, 0416, 0426)
- * transforming them automatically to 584...
+ * Handles Venezuelan numbers (0412, 0414, 0424, 0416, 0426 -> 584...)
+ * and Argentine numbers (+54 9, Buenos Aires 11/15 and interior 2xx/3xx area codes -> 549...).
  */
-export function normalizeWhatsAppPhone(rawPhone) {
+export function normalizeWhatsAppPhone(rawPhone, defaultCountry = null) {
   if (!rawPhone) return ''
   let clean = rawPhone.toString().replace(/[^0-9]/g, '')
   if (clean.startsWith('00')) clean = clean.slice(2)
+  if (!clean) return ''
+
+  const effectiveCountry =
+    defaultCountry === 'AR' || defaultCountry === '54'
+      ? 'AR'
+      : defaultCountry === 'VE' || defaultCountry === '58'
+        ? 'VE'
+        : null
 
   // Fix common mistake in Venezuela: +5804... -> strip the redundant 0
   if (clean.startsWith('5804') && clean.length === 13) {
-    clean = '58' + clean.slice(3)
+    return '58' + clean.slice(3)
+  }
+  if (clean.startsWith('58') && clean.length >= 12) {
+    return clean
+  }
+
+  // Explicit Argentina prefix (+54...)
+  if (clean.startsWith('549') && clean.length >= 12) {
+    return clean
+  }
+  if (clean.startsWith('540') && clean.length >= 13) {
+    return '549' + clean.slice(3)
+  }
+  if (clean.startsWith('54') && !clean.startsWith('549') && clean.length >= 12) {
+    return '549' + clean.slice(2)
+  }
+
+  // Argentine patterns when tenant is AR (supports Buenos Aires 11/15 & interior 381, 351, 221, etc.)
+  if (effectiveCountry === 'AR') {
+    if (clean.startsWith('0') && clean.length === 11) {
+      return '549' + clean.slice(1)
+    }
+    if (clean.startsWith('15') && clean.length === 10) {
+      return '54911' + clean.slice(2)
+    }
+    if (/^[1-3]/.test(clean) && clean.length === 10) {
+      return '549' + clean
+    }
+    if (clean.startsWith('9') && clean.length === 11) {
+      return '54' + clean
+    }
   }
 
   // Venezuelan mobile numbers: 0412, 0414, 0424, 0416, 0426
-  if (clean.startsWith('04') && clean.length === 11) {
-    clean = '58' + clean.slice(1)
-  } else if (clean.startsWith('4') && clean.length === 10) {
-    clean = '58' + clean
+  if (effectiveCountry !== 'AR') {
+    if (clean.startsWith('04') && clean.length === 11) {
+      return '58' + clean.slice(1)
+    } else if (clean.startsWith('4') && clean.length === 10) {
+      return '58' + clean
+    }
   }
 
-  // Argentine mobile numbers for WhatsApp (requires +54 9):
-  if (clean.startsWith('54') && !clean.startsWith('549') && clean.length === 12) {
-    clean = '549' + clean.slice(2)
-  } else if (clean.startsWith('11') && clean.length === 10) {
-    clean = '549' + clean
+  // Default Argentine Buenos Aires mobile patterns (backward compatible when defaultCountry omitted)
+  if (clean.startsWith('11') && clean.length === 10) {
+    return '549' + clean
   } else if (clean.startsWith('011') && clean.length === 11) {
-    clean = '549' + clean.slice(1)
+    return '549' + clean.slice(1)
   }
 
   return clean
@@ -425,4 +463,47 @@ export function isStaffAvailableOnDate(staff, dateStr) {
  */
 export function getAvailableStaffForDate(staffList = [], dateStr) {
   return (Array.isArray(staffList) ? staffList : []).filter(st => st && isStaffAvailableOnDate(st, dateStr))
+}
+
+/**
+ * Checks whether a staff member is available on a specific date & time slot (YYYY-MM-DD, "09:00 AM"),
+ * checking both full-day absences (days_off, blocked_dates) and partial-day hour blocks (blocked_hours).
+ * Overlap rule: [reqStart, reqEnd) overlaps [blkStart, blkEnd) iff blkEnd > blkStart && max(reqStart, blkStart) < min(reqEnd, blkEnd).
+ */
+export function isStaffAvailableForSlot(staff, dateStr, slotTimeStr, durationMin = 30) {
+  if (!staff || !dateStr) return true
+  if (!isStaffAvailableOnDate(staff, dateStr)) return false
+  if (!slotTimeStr || !Array.isArray(staff.blocked_hours) || staff.blocked_hours.length === 0) {
+    return true
+  }
+
+  const cleanDate = typeof dateStr === 'string' && dateStr.includes('T')
+    ? dateStr.split('T')[0]
+    : String(dateStr).trim()
+
+  const reqStart = timeToMinutes(slotTimeStr)
+  if (!Number.isFinite(reqStart) || reqStart < 0) return true
+  const reqEnd = reqStart + Math.max(15, Number(durationMin) || 30)
+
+  for (const blk of staff.blocked_hours) {
+    if (!blk || blk.date !== cleanDate || !blk.start || !blk.end) continue
+    const blkStart = timeToMinutes(blk.start)
+    const blkEnd = timeToMinutes(blk.end)
+    if (Number.isFinite(blkStart) && Number.isFinite(blkEnd) && blkStart >= 0 && blkEnd > blkStart) {
+      if (Math.max(reqStart, blkStart) < Math.min(reqEnd, blkEnd)) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+/**
+ * Filters a list of staff members to those available on the given YYYY-MM-DD date and time slot.
+ */
+export function getAvailableStaffForSlot(staffList = [], dateStr, slotTimeStr, durationMin = 30) {
+  return (Array.isArray(staffList) ? staffList : []).filter(
+    st => st && isStaffAvailableForSlot(st, dateStr, slotTimeStr, durationMin)
+  )
 }

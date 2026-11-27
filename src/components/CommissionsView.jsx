@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Users, CheckCircle2, DollarSign, Plus, Pencil, Trash2, X, Award, FileText, Calendar, Clock, ArrowDownRight, MessageSquare, AlertCircle, Receipt, Wallet, Check, AlertTriangle, ChevronDown } from 'lucide-react'
-import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone, DAYS_OF_WEEK } from '../lib/dateUtils'
+import { getLocalDateIso, isDateToday, isDateInWeek, normalizeWhatsAppPhone, DAYS_OF_WEEK, timeToMinutes } from '../lib/dateUtils'
 import { isArgentina, formatCurrency } from '../lib/brandConfig'
+import { MASTER_BOOKING_SLOTS } from '../lib/mockData'
 import { isServiceTx } from '../lib/bookingUtils'
+
+const HOUR_BLOCK_SLOTS = [...MASTER_BOOKING_SLOTS, '09:00 PM']
 import {
   isCashierStaff,
   getCashierStaff,
@@ -69,6 +72,11 @@ export default function CommissionsView({
   const [staffDaysOff, setStaffDaysOff] = useState([])
   const [staffBlockedDates, setStaffBlockedDates] = useState([])
   const [blockedDateInput, setBlockedDateInput] = useState('')
+  const [staffBlockedHours, setStaffBlockedHours] = useState([])
+  const [bhDate, setBhDate] = useState(() => getLocalDateIso())
+  const [bhStart, setBhStart] = useState('02:00 PM')
+  const [bhEnd, setBhEnd] = useState('05:00 PM')
+  const [bhError, setBhError] = useState('')
 
   // Vale Form state
   const [valeAmount, setValeAmount] = useState('')
@@ -248,6 +256,11 @@ export default function CommissionsView({
     setStaffDaysOff([])
     setStaffBlockedDates([])
     setBlockedDateInput('')
+    setStaffBlockedHours([])
+    setBhDate(getLocalDateIso())
+    setBhStart('02:00 PM')
+    setBhEnd('05:00 PM')
+    setBhError('')
     setIsStaffModalOpen(true)
   }
 
@@ -273,6 +286,11 @@ export default function CommissionsView({
     setStaffDaysOff(Array.isArray(st.days_off) ? st.days_off : [])
     setStaffBlockedDates(Array.isArray(st.blocked_dates) ? st.blocked_dates : [])
     setBlockedDateInput('')
+    setStaffBlockedHours(Array.isArray(st.blocked_hours) ? st.blocked_hours : [])
+    setBhDate(getLocalDateIso())
+    setBhStart('02:00 PM')
+    setBhEnd('05:00 PM')
+    setBhError('')
     setIsStaffModalOpen(true)
   }
 
@@ -305,7 +323,12 @@ export default function CommissionsView({
       avatar,
       service_commissions: isCashier ? {} : finalServiceCommissions,
       days_off: isCashier ? [] : staffDaysOff,
-      blocked_dates: isCashier ? [] : Array.from(new Set(staffBlockedDates.filter(Boolean))).sort()
+      blocked_dates: isCashier ? [] : Array.from(new Set(staffBlockedDates.filter(Boolean))).sort(),
+      blocked_hours: isCashier
+        ? []
+        : staffBlockedHours
+            .filter(b => b && b.date && b.start && b.end && timeToMinutes(b.end) > timeToMinutes(b.start))
+            .sort((a, b) => (a.date || '').localeCompare(b.date || '') || timeToMinutes(a.start) - timeToMinutes(b.start))
     }
 
     if (editingStaff) {
@@ -755,6 +778,16 @@ export default function CommissionsView({
                                   🚫 Hoy libre
                                 </span>
                               )}
+                              {!st.isCashier && Array.isArray(st.blocked_hours) && st.blocked_hours
+                                .filter(b => b && b.date === getLocalDateIso())
+                                .map(b => (
+                                  <span
+                                    key={b.id || `${b.date}-${b.start}`}
+                                    className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold"
+                                  >
+                                    ⏱️ {b.start}–{b.end} libre
+                                  </span>
+                                ))}
                             </div>
                           </div>
                         </div>
@@ -1761,6 +1794,146 @@ export default function CommissionsView({
                         </div>
                       )}
                     </div>
+
+                    {/* Bloqueo por tramos de hora (ausencia parcial sin cerrar el día completo) */}
+                    {(() => {
+                      const activeHours = staffBlockedHours.filter(b => b && b.date && b.date >= todayIso)
+                      const handleAddHourBlock = () => {
+                        setBhError('')
+                        if (!bhDate) {
+                          setBhError('Elige una fecha para el bloqueo parcial.')
+                          return
+                        }
+                        if (timeToMinutes(bhEnd) <= timeToMinutes(bhStart)) {
+                          setBhError('La hora "Hasta" debe ser posterior a la hora "Desde".')
+                          return
+                        }
+                        const dup = staffBlockedHours.some(
+                          b => b.date === bhDate && b.start === bhStart && b.end === bhEnd
+                        )
+                        if (dup) {
+                          setBhError('Ese tramo ya está bloqueado.')
+                          return
+                        }
+                        setStaffBlockedHours(prev => [
+                          ...prev,
+                          {
+                            id: 'bh_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                            date: bhDate,
+                            start: bhStart,
+                            end: bhEnd
+                          }
+                        ])
+                      }
+                      return (
+                        <div className="p-2.5 rounded-xl bg-dark-950/80 border border-amber-500/20 space-y-2">
+                          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold text-amber-300">
+                              ⏱️ Bloqueo por tramos de hora (ausencia parcial):
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setBhDate(todayIso)}
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
+                                  bhDate === todayIso
+                                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                                    : 'bg-dark-850 border-dark-700 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                Hoy
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setBhDate(tomorrowIso)}
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
+                                  bhDate === tomorrowIso
+                                    ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                                    : 'bg-dark-850 border-dark-700 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                Mañana
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div>
+                              <label className="block text-[9px] text-slate-400 font-bold mb-0.5">Fecha</label>
+                              <input
+                                type="date"
+                                min={todayIso}
+                                value={bhDate}
+                                onChange={(e) => { setBhDate(e.target.value); setBhError('') }}
+                                className="w-full px-2 py-1.5 rounded-lg bg-dark-900 border border-dark-700 text-[10px] font-mono text-white focus:outline-none focus:border-amber-400"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] text-slate-400 font-bold mb-0.5">Desde</label>
+                              <select
+                                value={bhStart}
+                                onChange={(e) => { setBhStart(e.target.value); setBhError('') }}
+                                className="w-full px-1.5 py-1.5 rounded-lg bg-dark-900 border border-dark-700 text-[10px] font-mono text-white focus:outline-none focus:border-amber-400"
+                              >
+                                {HOUR_BLOCK_SLOTS.slice(0, -1).map(s => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[9px] text-slate-400 font-bold mb-0.5">Hasta</label>
+                              <select
+                                value={bhEnd}
+                                onChange={(e) => { setBhEnd(e.target.value); setBhError('') }}
+                                className="w-full px-1.5 py-1.5 rounded-lg bg-dark-900 border border-dark-700 text-[10px] font-mono text-white focus:outline-none focus:border-amber-400"
+                              >
+                                {HOUR_BLOCK_SLOTS.slice(1).map(s => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2">
+                            {bhError ? (
+                              <span className="text-[10px] text-rose-400 font-semibold">{bhError}</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500">El resto del día sigue disponible para citas.</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleAddHourBlock}
+                              className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/35 text-[10px] font-black shrink-0"
+                            >
+                              + Bloquear tramo
+                            </button>
+                          </div>
+
+                          {activeHours.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {activeHours.map(blk => (
+                                <span
+                                  key={blk.id || `${blk.date}-${blk.start}-${blk.end}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/35 text-amber-300 text-[10px] font-mono font-bold"
+                                >
+                                  <span>
+                                    {blk.date === todayIso ? 'Hoy' : blk.date === tomorrowIso ? 'Mañana' : blk.date}: {blk.start}–{blk.end}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setStaffBlockedHours(prev => prev.filter(x => x !== blk && x.id !== blk.id))}
+                                    className="hover:text-white font-sans"
+                                    title="Quitar tramo bloqueado"
+                                  >
+                                    ✕
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })()}

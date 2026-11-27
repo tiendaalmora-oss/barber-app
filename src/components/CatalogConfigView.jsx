@@ -36,7 +36,7 @@ export default function CatalogConfigView({
   const [editingSvcId, setEditingSvcId] = useState(null)
 
   const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
-  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}`
+  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}${isAr ? '&pais=ar' : ''}`
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(publicUrl)
