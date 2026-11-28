@@ -7,6 +7,7 @@ import PhoneCountryInput from './PhoneCountryInput'
 export default function DebtsClientsView({
   clients = [],
   exchangeRate = 889.26,
+  businessProfile = {},
   onAddClient,
   onUpdateClient,
   onDeleteClient,
@@ -24,7 +25,7 @@ export default function DebtsClientsView({
   const [plan, setPlan] = useState('Cliente Regular')
   const [planRenueva, setPlanRenueva] = useState('15 de cada mes')
 
-  const isAr = isArgentina()
+  const isAr = isArgentina(null, businessProfile)
   const fmt = (val) => formatCurrency(val, isAr)
   const currTag = isAr ? 'ARS' : 'USD'
   const totalDebtUSD = clients.reduce((sum, c) => sum + (c.debt_usd || 0), 0)
@@ -131,7 +132,7 @@ export default function DebtsClientsView({
   }
 
   const openWhatsAppReminder = (client) => {
-    const cleanPhone = normalizeWhatsAppPhone(client.phone || '')
+    const cleanPhone = normalizeWhatsAppPhone(client.phone || '', isAr ? 'AR' : 'VE')
     if (!cleanPhone || cleanPhone.length < 9) {
       alert(`El cliente ${client.name} no tiene un teléfono válido registrado para enviarle WhatsApp.`)
       return
@@ -146,7 +147,7 @@ export default function DebtsClientsView({
   }
 
   const openWhatsAppVipRenewal = (client) => {
-    const cleanPhone = normalizeWhatsAppPhone(client.phone || '')
+    const cleanPhone = normalizeWhatsAppPhone(client.phone || '', isAr ? 'AR' : 'VE')
     if (!cleanPhone || cleanPhone.length < 9) {
       alert(`El cliente ${client.name} no tiene un teléfono válido registrado para enviarle WhatsApp.`)
       return
@@ -520,6 +521,7 @@ export default function DebtsClientsView({
                 <PhoneCountryInput
                   value={phone}
                   onChange={setPhone}
+                  isAr={isAr}
                   required
                 />
               </div>

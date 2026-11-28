@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import Navbar from './components/Navbar'
 import DashboardView from './components/DashboardView'
 import CommissionsView from './components/CommissionsView'
@@ -37,7 +37,7 @@ import { supabase, isSupabaseConfigured } from './lib/supabase'
 import { TrendingUp, Users, Calendar, AlertCircle, Package, BarChart3, Globe, BellRing, Crown, Trash2, Sparkles, Settings, Calculator, WifiOff, ShieldCheck, MessageSquare } from 'lucide-react'
 import { getLocalDateIso, isDateToday, getTxMethodCollectedUSD } from './lib/dateUtils'
 import { isPureProductTx, isDebtSettlementTx } from './lib/bookingUtils'
-import { getActiveBrand, isArgentina } from './lib/brandConfig'
+import { getActiveBrand, isArgentina, normalizeCountryCode, resolveTenantCountry } from './lib/brandConfig'
 import {
   getSecurityConfig,
   createAuditEntry,
@@ -104,14 +104,22 @@ export default function App() {
   const isDirectRegisterLink = searchParams.includes('registro=1')
   const isDirectLoginLink = searchParams.includes('login=1')
 
-  // Clean URL query parameters (?registro=1, ?login=1) so refreshes don't re-trigger registration
+  // Clean URL query parameters (?registro=1, ?login=1, ?pais=...) so refreshes and account switches stay isolated
   const cleanUrlAuthParams = () => {
     if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
       try {
         const url = new URL(window.location.href)
-        if (url.searchParams.has('registro') || url.searchParams.has('login')) {
+        const hasAuthParam =
+          url.searchParams.has('registro') ||
+          url.searchParams.has('login') ||
+          (!url.searchParams.has('reserva') && (url.searchParams.has('pais') || url.searchParams.has('country')))
+        if (hasAuthParam) {
           url.searchParams.delete('registro')
           url.searchParams.delete('login')
+          if (!url.searchParams.has('reserva')) {
+            url.searchParams.delete('pais')
+            url.searchParams.delete('country')
+          }
           const cleanSearch = url.searchParams.toString() ? `?${url.searchParams.toString()}` : ''
           window.history.replaceState({}, document.title, url.pathname + cleanSearch)
         }
@@ -369,6 +377,28 @@ export default function App() {
       return INITIAL_BUSINESS_PROFILE
     }
   })
+
+  // Canonical single source of truth for the logged-in tenant's country ('VE' | 'AR')
+  const resolvedTenantCountry = resolveTenantCountry(activeTenant, businessProfile)
+  const effectiveBusinessProfile = useMemo(
+    () => (
+      businessProfile?.country === resolvedTenantCountry
+        ? businessProfile
+        : { ...businessProfile, country: resolvedTenantCountry }
+    ),
+    [businessProfile, resolvedTenantCountry]
+  )
+
+  useEffect(() => {
+    if (!activeTenant) return
+    const authoritativeCountry =
+      normalizeCountryCode(activeTenant.country) ||
+      normalizeCountryCode(businessProfile?.country) ||
+      'VE'
+    if (businessProfile?.country !== authoritativeCountry) {
+      setBusinessProfile(prev => ({ ...prev, country: authoritativeCountry }))
+    }
+  }, [activeTenant?.id, activeTenant?.country, businessProfile?.country])
 
   const [retargetingConfig, setRetargetingConfig] = useState(() => {
     try {
@@ -739,7 +769,13 @@ export default function App() {
             const shouldHydrateConfig = syncedTenantIdRef.current !== activeTenantId || serverConfigTs > localConfigTs
 
             if (shouldHydrateConfig) {
-              if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
+              if (ws.businessProfile) {
+                const authCountry =
+                  normalizeCountryCode(activeTenant?.country) ||
+                  normalizeCountryCode(ws.businessProfile.country) ||
+                  'VE'
+                setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile, country: authCountry }))
+              }
               if (ws.staffByNiche) setStaffByNiche(filterDeletedByNiche(ws.staffByNiche, mergedDel.staff))
               if (ws.servicesByNiche) setServicesByNiche(filterDeletedByNiche(ws.servicesByNiche, mergedDel.services))
               if (ws.productsByNiche) setProductsByNiche(filterDeletedByNiche(ws.productsByNiche, mergedDel.products))
@@ -1125,7 +1161,14 @@ export default function App() {
 
   const handleSaveBusinessProfile = (updater) => {
     configUpdatedAtRef.current = Date.now()
-    setBusinessProfile(updater)
+    setBusinessProfile(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      const authCountry =
+        normalizeCountryCode(activeTenant?.country) ||
+        normalizeCountryCode(next?.country) ||
+        'VE'
+      return { ...next, country: authCountry }
+    })
   }
 
   const handleSelectNiche = (nextNiche) => {
@@ -1308,7 +1351,14 @@ export default function App() {
               return [...ws.auditLogs, ...localOnly].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
             })
           }
-          if (ws.businessProfile) setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile }))
+          if (ws.businessProfile) {
+            const matchedT = tenants.find(t => t && t.id === tid)
+            const authCountry =
+              normalizeCountryCode(matchedT?.country) ||
+              normalizeCountryCode(ws.businessProfile.country) ||
+              'VE'
+            setBusinessProfile(prev => ({ ...prev, ...ws.businessProfile, country: authCountry }))
+          }
           if (ws.staffByNiche) setStaffByNiche(filterDeletedByNiche(ws.staffByNiche, mergedDel.staff))
           if (ws.servicesByNiche) setServicesByNiche(filterDeletedByNiche(ws.servicesByNiche, mergedDel.services))
           if (ws.productsByNiche) setProductsByNiche(filterDeletedByNiche(ws.productsByNiche, mergedDel.products))
@@ -1353,13 +1403,7 @@ export default function App() {
     cleanUrlAuthParams()
 
     try {
-      const params = new URLSearchParams(window.location.search)
-      const hasParam = params.has('pais') || params.has('country')
-      const host = window.location.hostname.toLowerCase()
-      const isArHost = host.startsWith('ar.') || host.includes('-ar.') || host.includes('.ar.') || host.includes('argentina')
-      if (!hasParam && !isArHost) {
-        localStorage.setItem('barber_preferred_country', tenant.country === 'AR' ? 'AR' : 'VE')
-      }
+      localStorage.setItem('barber_preferred_country', normalizeCountryCode(tenant.country) || 'VE')
     } catch (e) {}
     if (options?.niche && NICHES[options.niche]) {
       setCurrentNiche(options.niche)
@@ -1393,7 +1437,13 @@ export default function App() {
           setAppointments(Array.isArray(parsed.appointments) ? parsed.appointments.filter(a => a && !delAptSet.has(a.id)) : [])
           setDailyClosings(Array.isArray(parsed.dailyClosings) ? parsed.dailyClosings : [])
           setAuditLogs(Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [])
-          if (parsed.businessProfile) setBusinessProfile(parsed.businessProfile)
+          if (parsed.businessProfile) {
+            const targetCountry =
+              normalizeCountryCode(tenant.country) ||
+              normalizeCountryCode(parsed.businessProfile?.country) ||
+              'VE'
+            setBusinessProfile({ ...parsed.businessProfile, country: targetCountry })
+          }
           ownerUnlockedThisSessionRef.current = false
           const parsedSec = getSecurityConfig(parsed.businessProfile || {})
           if (cashierOp) {
@@ -1436,10 +1486,15 @@ export default function App() {
           ownerUnlockedThisSessionRef.current = false
           setIsCashierMode(Boolean(cashierOp))
           setActiveOperator(cashierOp || null)
+          const targetCountry = normalizeCountryCode(tenant.country) || 'VE'
           setBusinessProfile({
             ...INITIAL_BUSINESS_PROFILE,
+            country: targetCountry,
             businessName: tenant.businessName,
-            whatsapp: tenant.phone || ''
+            whatsapp: tenant.phone || '',
+            paymentMethods: targetCountry === 'AR'
+              ? ['Efectivo', 'Mercado Pago', 'Transferencia', 'Tarjeta / Point']
+              : INITIAL_BUSINESS_PROFILE.paymentMethods
           })
           fetchTenantWorkspace(tenant.id)
         }
@@ -1611,8 +1666,29 @@ export default function App() {
   }
 
   const handleUpdateTenant = async (updated) => {
-    setTenants(prev => prev.map(t => t.id === updated.id ? updated : t))
-    await pushTenantUpsertToServer(updated)
+    const normalized = {
+      ...updated,
+      country: normalizeCountryCode(updated.country) || 'VE'
+    }
+    setTenants(prev => prev.map(t => t.id === normalized.id ? normalized : t))
+    if (activeTenantId === normalized.id) {
+      setCachedActiveTenant(normalized)
+      try { localStorage.setItem('barber_logged_tenant', JSON.stringify(normalized)) } catch (e) {}
+      try { localStorage.setItem('barber_preferred_country', normalized.country) } catch (e) {}
+      setBusinessProfile(prev => ({ ...prev, country: normalized.country }))
+    }
+    try {
+      const wsKey = `barber_ws_${normalized.id}`
+      const localWs = localStorage.getItem(wsKey)
+      if (localWs) {
+        const parsed = JSON.parse(localWs)
+        if (parsed && typeof parsed === 'object') {
+          parsed.businessProfile = { ...(parsed.businessProfile || {}), country: normalized.country }
+          localStorage.setItem(wsKey, JSON.stringify(parsed))
+        }
+      }
+    } catch (e) {}
+    await pushTenantUpsertToServer(normalized)
   }
 
   const handleDeleteTenant = async (tenantId) => {
@@ -2188,7 +2264,10 @@ export default function App() {
       (matchedPublicTenant?.niche && NICHES[matchedPublicTenant.niche] ? matchedPublicTenant.niche : null) ||
       currentNiche
     const rawBookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || (isDirectClientLink && publicTenantParam ? INITIAL_BUSINESS_PROFILE : businessProfile)
-    const resolvedBookingCountry = matchedPublicTenant?.country || rawBookingProfile?.country
+    const resolvedBookingCountry =
+      normalizeCountryCode(matchedPublicTenant?.country) ||
+      normalizeCountryCode(rawBookingProfile?.country) ||
+      ((publicTenantWs || matchedPublicTenant) ? 'VE' : null)
     const bookingProfile = (resolvedBookingCountry && rawBookingProfile?.country !== resolvedBookingCountry)
       ? { ...rawBookingProfile, country: resolvedBookingCountry }
       : rawBookingProfile
@@ -2323,7 +2402,7 @@ export default function App() {
         onLogout={handleLogout}
         onUpdateTenant={handleUpdateTenant}
         activeTenant={activeTenant}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         isOnline={isOnline}
@@ -2496,7 +2575,7 @@ export default function App() {
             <DashboardView
               transactions={transactions}
               exchangeRate={exchangeRate}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
               onOpenCashModal={() => setIsCashModalOpen(true)}
               onOpenExpenseModal={() => setIsExpenseModalOpen(true)}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
@@ -2512,7 +2591,7 @@ export default function App() {
           {activeTab === 'catalogo' && (
             <CatalogConfigView
               tenantId={activeTenantId}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
               onSaveProfile={handleSaveBusinessProfile}
               services={currentServices}
               onAddService={handleAddService}
@@ -2532,7 +2611,7 @@ export default function App() {
               onDeleteClient={isCashierMode ? null : handleDeleteClient}
               retargetingConfig={retargetingConfig}
               onSaveRetargetingConfig={setRetargetingConfig}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
             />
           )}
 
@@ -2544,7 +2623,7 @@ export default function App() {
               roleName={nicheData.roleName}
               transactions={transactions}
               exchangeRate={exchangeRate}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
               onAddStaff={handleAddStaff}
               onUpdateStaff={handleUpdateStaff}
               onDeleteStaff={handleDeleteStaff}
@@ -2563,7 +2642,7 @@ export default function App() {
               onToggleAppointmentStatus={handleToggleAppointmentStatus}
               onDeleteAppointment={isCashierMode ? null : handleDeleteAppointment}
               clients={clients}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
               onOpenSettings={isCashierMode ? null : () => setIsSettingsModalOpen(true)}
               onChargeAppointment={handleChargeAppointment}
             />
@@ -2573,6 +2652,7 @@ export default function App() {
             <DebtsClientsView
               clients={clients}
               exchangeRate={exchangeRate}
+              businessProfile={effectiveBusinessProfile}
               onAddClient={handleAddClient}
               onUpdateClient={handleUpdateClient}
               onDeleteClient={isCashierMode ? null : handleDeleteClient}
@@ -2584,6 +2664,7 @@ export default function App() {
             <InventoryView
               products={currentProducts}
               exchangeRate={exchangeRate}
+              businessProfile={effectiveBusinessProfile}
               onAddProduct={handleAddProduct}
               onUpdateProduct={handleUpdateProduct}
               onDeleteProduct={handleDeleteProduct}
@@ -2596,7 +2677,7 @@ export default function App() {
               transactions={transactions}
               exchangeRate={exchangeRate}
               dailyClosings={dailyClosings}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
               staffList={currentStaff}
               onDeleteTransaction={handleDeleteTransaction}
               onRequestVoidTransaction={(tx) => setVoidingTx(tx)}
@@ -2606,7 +2687,7 @@ export default function App() {
           {activeTab === 'audit' && !isCashierMode && (
             <AuditLogView
               auditLogs={auditLogs}
-              businessProfile={businessProfile}
+              businessProfile={effectiveBusinessProfile}
               onOpenSettingsModal={() => setIsSettingsModalOpen(true)}
             />
           )}
@@ -2622,7 +2703,7 @@ export default function App() {
         }}
         nicheData={nicheData}
         exchangeRate={exchangeRate}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
         onRegisterTransaction={handleRegisterTransaction}
         clients={clients}
         onAddClient={handleAddClient}
@@ -2636,7 +2717,7 @@ export default function App() {
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
         exchangeRate={exchangeRate}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
         staffList={currentStaff}
         onRegisterExpense={handleRegisterExpense}
       />
@@ -2654,13 +2735,13 @@ export default function App() {
         transactions={transactions}
         exchangeRate={exchangeRate}
         nicheData={nicheData}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
       />
 
       <BusinessSettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
         onSaveProfile={handleSaveBusinessProfile}
         activeTenant={activeTenant}
         fontScale={fontScale}
@@ -2675,7 +2756,7 @@ export default function App() {
         transactions={transactions}
         exchangeRate={exchangeRate}
         nicheData={nicheData}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
         staffList={currentStaff}
         onSaveDailyClose={handleSaveDailyClose}
         onResetDay={handleSaveDailyClose}
@@ -2739,7 +2820,7 @@ export default function App() {
         }}
         isCashierMode={isCashierMode}
         securityConfig={securityConfig}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
       />
 
       {/* Payment / Subscription Modal (When in 24h trial and clicking "Activar mes completo") */}
@@ -2766,7 +2847,7 @@ export default function App() {
       {/* Floating Tactical AI Copilot Widget */}
       <CopilotChatWidget
         activeTenant={activeTenant}
-        businessProfile={businessProfile}
+        businessProfile={effectiveBusinessProfile}
         transactions={transactions}
         clients={clients}
         appointments={appointments}

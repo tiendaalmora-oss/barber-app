@@ -119,26 +119,66 @@ export const COUNTRY_CONFIGS = {
   }
 }
 
+export function normalizeCountryCode(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  const upper = raw.trim().toUpperCase()
+  if (upper === 'AR' || upper === 'ARGENTINA') return 'AR'
+  if (upper === 'VE' || upper === 'VENEZUELA') return 'VE'
+  return null
+}
+
+/**
+ * Authoritative country resolution for an authenticated tenant or business profile.
+ * Never reads URL query params or localStorage so accounts never cross-contaminate.
+ */
+export function resolveTenantCountry(activeTenant = null, businessProfile = null) {
+  return (
+    normalizeCountryCode(activeTenant?.country) ||
+    normalizeCountryCode(businessProfile?.country) ||
+    'VE'
+  )
+}
+
 /**
  * Detects active country ('VE' | 'AR').
- * Priority:
- * 1. Explicit URL query param (?pais=ar | ?country=ar | ?pais=ve | ?country=ve) -> persisted to localStorage
- * 2. Subdomain / hostname (ar.barber..., barber-ar..., ar.glamos..., glamos-ar..., .ar., argentina)
- * 3. Active Tenant or Business Profile country property
- * 4. Persisted localStorage preference ('barber_preferred_country')
- * 5. Fallback: 'VE' (zero disruption to existing Venezuelan tenants)
+ * Strictly separates Context A (authenticated tenant / businessProfile) from Context B (pre-auth landing/login/register):
+ * - Context A: Tenant/businessProfile always wins and falls back to 'VE' (never poisoned by URL ?pais=ar or localStorage).
+ * - Context B (no tenant or businessProfile): Reads URL (?pais=ar), hostname (ar.), and localStorage ('barber_preferred_country').
  */
 export function getActiveCountry(activeTenant = null, businessProfile = null) {
+  // 1. Authoritative explicit country on activeTenant or businessProfile
+  const explicitTenantCountry = normalizeCountryCode(activeTenant?.country)
+  if (explicitTenantCountry) return explicitTenantCountry
+
+  const explicitProfileCountry = normalizeCountryCode(businessProfile?.country)
+  if (explicitProfileCountry) return explicitProfileCountry
+
+  // 2. Context A guard: authenticated tenant or loaded business profile without explicit country
+  //    MUST default strictly to legacy 'VE' and never read URL params or localStorage.
+  const hasTenantContext = Boolean(
+    (activeTenant && (activeTenant.id || activeTenant.email || activeTenant.businessName)) ||
+    (businessProfile && (businessProfile.businessName || businessProfile.whatsapp || Array.isArray(businessProfile.paymentMethods)))
+  )
+  if (hasTenantContext) {
+    return 'VE'
+  }
+
+  // 3. Context B (pre-auth Landing / Register / Login or standalone helper call without tenant context)
   if (typeof window !== 'undefined') {
     try {
       const params = new URLSearchParams(window.location.search)
+      const isPublicBookingUrl = params.get('reserva') === '1'
       const paramCountry = (params.get('pais') || params.get('country') || '').trim().toLowerCase()
       if (paramCountry === 'ar' || paramCountry === 'argentina') {
-        localStorage.setItem('barber_preferred_country', 'AR')
+        if (!isPublicBookingUrl) {
+          localStorage.setItem('barber_preferred_country', 'AR')
+        }
         return 'AR'
       }
       if (paramCountry === 've' || paramCountry === 'venezuela') {
-        localStorage.setItem('barber_preferred_country', 'VE')
+        if (!isPublicBookingUrl) {
+          localStorage.setItem('barber_preferred_country', 'VE')
+        }
         return 'VE'
       }
 
@@ -151,15 +191,7 @@ export function getActiveCountry(activeTenant = null, businessProfile = null) {
       ) {
         return 'AR'
       }
-    } catch (e) {}
-  }
 
-  const tenantCountry = (activeTenant?.country || businessProfile?.country || '').toUpperCase()
-  if (tenantCountry === 'AR') return 'AR'
-  if (tenantCountry === 'VE') return 'VE'
-
-  if (typeof window !== 'undefined') {
-    try {
       const saved = localStorage.getItem('barber_preferred_country')
       if (saved === 'AR') return 'AR'
     } catch (e) {}

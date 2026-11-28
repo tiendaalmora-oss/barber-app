@@ -305,6 +305,29 @@ export default function BusinessSettingsModal({
           {/* TAB 1: DATOS DEL LOCAL */}
           {activeTab === 'perfil' && (
             <div className="space-y-3">
+              {/* Indicador transparente del Mercado / Moneda activo (solo lectura) */}
+              <div
+                className={`p-3 rounded-xl border flex items-center justify-between gap-2 ${
+                  isAr
+                    ? 'bg-sky-500/10 border-sky-500/30 text-sky-200'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="text-xs font-black flex items-center gap-1.5">
+                    <span>{isAr ? '🇦🇷' : '🇻🇪'}</span>
+                    <span>
+                      {isAr
+                        ? 'Mercado: Argentina · Pesos Argentinos ($ ARS)'
+                        : 'Mercado: Venezuela · Dólares ($ USD) + Bolívares (BCV)'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] opacity-80 mt-0.5">
+                    Aislamiento de moneda activo para tu caja y tu link público.
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
                   Nombre de tu Barbería / Salón

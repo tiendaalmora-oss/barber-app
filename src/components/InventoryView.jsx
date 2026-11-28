@@ -6,11 +6,16 @@ import { isArgentina, formatCurrency } from '../lib/brandConfig'
 export default function InventoryView({
   products,
   exchangeRate,
+  businessProfile = {},
   onAddProduct,
   onUpdateProduct,
   onDeleteProduct,
   isCashierMode = false
 }) {
+  const isAr = isArgentina(null, businessProfile)
+  const fmt = (val) => formatCurrency(val, isAr)
+  const currTag = isAr ? 'ARS' : 'USD'
+
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProd, setEditingProd] = useState(null)
 
@@ -27,8 +32,8 @@ export default function InventoryView({
   const openCreateModal = () => {
     setEditingProd(null)
     setName('')
-    setCostUsd(isArgentina() ? '3500' : '3')
-    setPriceUsd(isArgentina() ? '8000' : '7')
+    setCostUsd(isAr ? '3500' : '3')
+    setPriceUsd(isAr ? '8000' : '7')
     setStock('10')
     setMinStock('4')
     setCategory('Productos')
@@ -123,10 +128,6 @@ export default function InventoryView({
     const newStock = Math.max(0, (prod.stock || 0) + delta)
     onUpdateProduct({ ...prod, stock: newStock })
   }
-
-  const isAr = isArgentina()
-  const fmt = (val) => formatCurrency(val, isAr)
-  const currTag = isAr ? 'ARS' : 'USD'
 
   const totalInventoryCostUSD = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.cost_usd || 0)), 0)
   const totalPotentialSaleUSD = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.price_usd || 0)), 0)

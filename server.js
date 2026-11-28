@@ -88,6 +88,14 @@ const DEFAULT_TENANTS = [
   }
 ]
 
+function normalizeCountry(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  const upper = raw.trim().toUpperCase()
+  if (upper === 'AR' || upper === 'ARGENTINA') return 'AR'
+  if (upper === 'VE' || upper === 'VENEZUELA') return 'VE'
+  return null
+}
+
 function createDailyBackupIfNeeded(data = db) {
   try {
     const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD
@@ -125,9 +133,14 @@ function loadDb() {
           : []
         const rawTenants = Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS
         // Strict prune against tombstone blacklist so deleted accounts never resurrect from disk
-        const cleanTenants = rawTenants.filter(
-          t => !deletedIds.includes(t.id) && (!t.email || !deletedEmails.includes((t.email || '').toLowerCase().trim()))
-        )
+        const cleanTenants = rawTenants
+          .filter(
+            t => !deletedIds.includes(t.id) && (!t.email || !deletedEmails.includes((t.email || '').toLowerCase().trim()))
+          )
+          .map(t => ({
+            ...t,
+            country: normalizeCountry(t.country) || 'VE'
+          }))
         return {
           saasConfig: { ...DEFAULT_SAAS_CONFIG, ...(parsed.saasConfig || {}) },
           tenants: cleanTenants,
@@ -155,9 +168,14 @@ function loadDb() {
             ? parsed.deletedTenantEmails.map(e => (e || '').toLowerCase().trim())
             : []
           const rawTenants = Array.isArray(parsed.tenants) && parsed.tenants.length > 0 ? parsed.tenants : DEFAULT_TENANTS
-          const cleanTenants = rawTenants.filter(
-            t => !deletedIds.includes(t.id) && (!t.email || !deletedEmails.includes((t.email || '').toLowerCase().trim()))
-          )
+          const cleanTenants = rawTenants
+            .filter(
+              t => !deletedIds.includes(t.id) && (!t.email || !deletedEmails.includes((t.email || '').toLowerCase().trim()))
+            )
+            .map(t => ({
+              ...t,
+              country: normalizeCountry(t.country) || 'VE'
+            }))
           const recovered = {
             saasConfig: { ...DEFAULT_SAAS_CONFIG, ...(parsed.saasConfig || {}) },
             tenants: cleanTenants,
@@ -391,18 +409,33 @@ const server = http.createServer(async (req, res) => {
       const idx = db.tenants.findIndex(
         t => t.id === tenant.id || (lowerEmail && (t.email || '').toLowerCase().trim() === lowerEmail)
       )
+      const existingTenant = idx >= 0 ? db.tenants[idx] : null
+      const resolvedCountry =
+        normalizeCountry(tenant.country) ||
+        normalizeCountry(existingTenant?.country) ||
+        'VE'
+      const mergedTenant = { ...(existingTenant || {}), ...tenant, country: resolvedCountry }
       if (idx >= 0) {
-        db.tenants[idx] = { ...db.tenants[idx], ...tenant }
+        db.tenants[idx] = mergedTenant
       } else {
-        db.tenants.unshift(tenant)
+        db.tenants.unshift(mergedTenant)
+      }
+      if (db.workspaces[mergedTenant.id]) {
+        db.workspaces[mergedTenant.id] = {
+          ...db.workspaces[mergedTenant.id],
+          businessProfile: {
+            ...(db.workspaces[mergedTenant.id].businessProfile || {}),
+            country: resolvedCountry
+          }
+        }
       }
       saveDb()
 
       // Sincronización automática no-invasiva con el CRM
       if (body.isNewRegistration) {
-        notifyCrmSaasEvent('REGISTRATION', tenant);
-      } else if (body.isActivation30d || tenant.isActivation30d || (tenant.status === 'activo' && tenant.subscriptionType === 'mes_30d')) {
-        notifyCrmSaasEvent('ACTIVATION_30D', tenant);
+        notifyCrmSaasEvent('REGISTRATION', mergedTenant);
+      } else if (body.isActivation30d || mergedTenant.isActivation30d || (mergedTenant.status === 'activo' && mergedTenant.subscriptionType === 'mes_30d')) {
+        notifyCrmSaasEvent('ACTIVATION_30D', mergedTenant);
       }
     }
     return sendJson(res, 200, {
@@ -455,7 +488,10 @@ const server = http.createServer(async (req, res) => {
       }
       const exists = db.tenants.find(t => (t.email || '').toLowerCase().trim() === lowerEmail || t.id === lt.id)
       if (!exists) {
-        db.tenants.unshift(lt)
+        db.tenants.unshift({
+          ...lt,
+          country: normalizeCountry(lt.country) || 'VE'
+        })
         changed = true
       }
     }
@@ -629,12 +665,16 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       let ws = db.workspaces[tenantId] || null
       if (ws) {
         const tenantRec = Array.isArray(db.tenants) ? db.tenants.find(t => t && t.id === tenantId) : null
-        if (tenantRec?.country && (!ws.businessProfile || !ws.businessProfile.country)) {
+        const authoritativeCountry =
+          normalizeCountry(tenantRec?.country) ||
+          normalizeCountry(ws.businessProfile?.country) ||
+          'VE'
+        if (!ws.businessProfile || ws.businessProfile.country !== authoritativeCountry) {
           ws = {
             ...ws,
             businessProfile: {
               ...(ws.businessProfile || {}),
-              country: tenantRec.country
+              country: authoritativeCountry
             }
           }
         }
