@@ -422,6 +422,30 @@ export default function App() {
   })
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false)
   const [voidingTx, setVoidingTx] = useState(null)
+  const [fontScale, setFontScale] = useState(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('barber_font_scale') : null
+      return saved === 'large' || saved === 'xlarge' ? saved : 'normal'
+    } catch (e) {
+      return 'normal'
+    }
+  })
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (fontScale === 'normal') {
+      delete document.documentElement.dataset.fontScale
+    } else {
+      document.documentElement.dataset.fontScale = fontScale
+    }
+    try {
+      localStorage.setItem('barber_font_scale', fontScale)
+    } catch (e) {}
+  }, [fontScale])
+
+  const handleCycleFontScale = () => {
+    setFontScale(prev => (prev === 'normal' ? 'large' : prev === 'large' ? 'xlarge' : 'normal'))
+  }
 
   // Modals
   const [isCashModalOpen, setIsCashModalOpen] = useState(false)
@@ -640,119 +664,9 @@ export default function App() {
     return () => clearTimeout(timeout)
   }, [activeTenantId, currentNiche, transactions, deletedIds, clients, appointments, businessProfile, staffByNiche, servicesByNiche, productsByNiche, exchangeRate, dailyClosings, auditLogs])
 
-  // Auto-reconstruct historical transactions from client visit history if wiped by legacy reset button
-  useEffect(() => {
-    if (!activeTenantId || activeTenantId === 'ten_1' || !Array.isArray(clients) || clients.length === 0) return
-
-    const delSet = new Set(Array.isArray(deletedIds?.transactions) ? deletedIds.transactions : [])
-    const delClientSet = new Set(Array.isArray(deletedIds?.clients) ? deletedIds.clients : [])
-    const rate = Number(exchangeRate) || 889.26
-    const allServices = [
-      ...((servicesByNiche && servicesByNiche.barberia) || []),
-      ...((servicesByNiche && servicesByNiche.estetica) || []),
-      ...((servicesByNiche && servicesByNiche.mixto) || [])
-    ]
-    const allStaff = [
-      ...((staffByNiche && staffByNiche.barberia) || []),
-      ...((staffByNiche && staffByNiche.estetica) || []),
-      ...((staffByNiche && staffByNiche.mixto) || [])
-    ]
-
-    setTransactions(prev => {
-      const existingTxs = Array.isArray(prev) ? prev : []
-      const recoveredTxs = []
-
-      for (const c of clients) {
-        if (!c || delClientSet.has(c.id) || !c.last_visit || !c.last_service || c.last_service === 'Registro Directo') continue
-        if (activeTenantId === 'ten_1793499033884' && c.last_staff === 'Agenda Web') continue
-
-        const recId = 'rec_' + c.id
-        if (delSet.has(recId)) continue
-
-        const alreadyExists = existingTxs.some(
-          t => t && (t.id === recId || (t.client_name === c.name && getLocalDateIso(t.fecha) === c.last_visit))
-        )
-        if (alreadyExists) continue
-
-        let qty = 1
-        let cleanSvcName = c.last_service || 'Corte Clásico'
-        const qtyMatch = cleanSvcName.match(/^(\d+)x\s+(.+)$/i)
-        if (qtyMatch) {
-          qty = Number(qtyMatch[1]) || 1
-          cleanSvcName = qtyMatch[2].trim()
-        }
-
-        const svcObj =
-          allServices.find(s => s && s.name && s.name.toLowerCase() === cleanSvcName.toLowerCase()) ||
-          allServices.find(s => s && s.name && cleanSvcName.toLowerCase().includes(s.name.toLowerCase())) ||
-          allServices[0] ||
-          { id: 's1', name: cleanSvcName, price_usd: 7.5, category: 'Cortes' }
-
-        const staffObj =
-          allStaff.find(st => st && st.name && st.name.toLowerCase() === (c.last_staff || '').toLowerCase()) ||
-          allStaff[0] ||
-          { id: 'e1', name: c.last_staff || 'Barbero', commission_pct: 50 }
-
-        const unitPrice = Number(svcObj.price_usd) || 7.5
-        const totalUsd = unitPrice * qty
-        const totalBs = Math.round(totalUsd * rate * 100) / 100
-        const commPct =
-          svcObj.commission_pct !== undefined && svcObj.commission_pct !== null && svcObj.commission_pct !== ''
-            ? Number(svcObj.commission_pct)
-            : Number(staffObj.commission_pct) || 50
-        const commUsd = Math.round(totalUsd * (commPct / 100) * 100) / 100
-        const netUsd = Math.round((totalUsd - commUsd) * 100) / 100
-
-        const tsNum = Number((c.id || '').replace(/\D+/g, ''))
-        let horaStr = '03:00 p.m.'
-        if (tsNum > 1700000000000 && tsNum < 1900000000000) {
-          horaStr = new Date(tsNum).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
-        }
-
-        recoveredTxs.push({
-          id: recId,
-          type: 'ingreso',
-          item_name: c.last_service,
-          product_id: null,
-          product_items: [],
-          items: [
-            {
-              id: svcObj.id || 's1',
-              name: cleanSvcName,
-              price_usd: unitPrice,
-              commission_pct: commPct,
-              isProduct: false,
-              qty
-            }
-          ],
-          category: svcObj.category || 'Cortes',
-          staff_name: staffObj.name,
-          staff_id: staffObj.id,
-          client_name: c.name,
-          client_phone: c.phone || '',
-          monto_usd: totalUsd,
-          monto_bs: totalBs,
-          propina_usd: 0,
-          propina_bs: 0,
-          propina_moneda_origen: 'USD',
-          total_cobrado_usd: totalUsd,
-          total_cobrado_bs: totalBs,
-          propina_staff_id: null,
-          propina_staff_name: null,
-          tasa_bcv: rate,
-          metodo_pago: 'pago_movil',
-          comision_usd: commUsd,
-          ganancia_negocio_usd: netUsd,
-          comision_pagada: true,
-          hora: horaStr,
-          fecha: c.last_visit + 'T15:30:00.000Z'
-        })
-      }
-
-      if (recoveredTxs.length === 0) return prev
-      return [...existingTxs, ...recoveredTxs].sort((a, b) => new Date(b.fecha || 0) - new Date(a.fecha || 0))
-    })
-  }, [activeTenantId, clients, deletedIds, servicesByNiche, staffByNiche, exchangeRate])
+  // Legacy client-to-transaction auto-reconstruction (rec_c_*) removed:
+  // Rebuilding transactions from client.last_visit created phantom duplicate tickets
+  // whenever a client name was edited or crossed UTC midnight. All real sales live in ws.transactions.
 
   const isSameRefList = (merged, prevList) =>
     Array.isArray(prevList) &&
@@ -832,7 +746,7 @@ export default function App() {
               if (ws.exchangeRate && !isNaN(Number(ws.exchangeRate))) {
                 setExchangeRate(Number(ws.exchangeRate))
               }
-              if (syncedTenantIdRef.current !== activeTenantId && ws.currentNiche && NICHES[ws.currentNiche] && !getCashierLoginSession(activeTenantId)) {
+              if (ws.currentNiche && NICHES[ws.currentNiche]) {
                 setCurrentNiche(ws.currentNiche)
               }
               if (serverConfigTs > localConfigTs) {
@@ -1214,6 +1128,15 @@ export default function App() {
     setBusinessProfile(updater)
   }
 
+  const handleSelectNiche = (nextNiche) => {
+    if (!NICHES[nextNiche] || nextNiche === currentNiche) return
+    configUpdatedAtRef.current = Date.now()
+    setCurrentNiche(nextNiche)
+    if (activeTenant && activeTenant.niche !== nextNiche) {
+      handleUpdateTenant({ ...activeTenant, niche: nextNiche })
+    }
+  }
+
   // Staff CRUD
   const handleAddStaff = (newSt) => {
     const nowTs = Date.now()
@@ -1569,13 +1492,32 @@ export default function App() {
     localStorage.setItem('barber_deleted_tenant_ids', JSON.stringify(nextDelIds))
     localStorage.setItem('barber_deleted_tenant_emails', JSON.stringify(nextDelEmails))
 
-    const isArTenant = newTenant.country === 'AR' || isArgentina(newTenant)
+    const cleanRegPhone = String(newTenant.phone || '').replace(/[\s()-]/g, '')
+    const phoneLooksAr = cleanRegPhone.startsWith('+54') || cleanRegPhone.startsWith('549')
+    const isArTenant = newTenant.country === 'AR' || phoneLooksAr || isArgentina(newTenant)
     const sourceNiches = isArTenant ? NICHES_AR : NICHES
-    const normalizedTenant = { ...newTenant, country: isArTenant ? 'AR' : 'VE' }
+    const resolvedNiche = (newTenant.niche && NICHES[newTenant.niche]) ? newTenant.niche : 'barberia'
+    const normalizedTenant = { ...newTenant, country: isArTenant ? 'AR' : 'VE', niche: resolvedNiche }
+
+    const nicheProfileDefaults = resolvedNiche === 'estetica'
+      ? {
+          slogan: 'Uñas, pestañas, cejas y estética con atención VIP sin esperas.',
+          promoBanner: isArTenant ? '✨ Reservá tu turno online y asegurá tu horario' : '✨ Reserva tu cita online y asegura tu horario VIP'
+        }
+      : resolvedNiche === 'mixto'
+      ? {
+          slogan: 'Barbería, estética y cuidado personal en un solo lugar, sin hacer cola.',
+          promoBanner: isArTenant ? '✨ Reservá tu turno online en segundos' : '✨ Reserva tu cita online en segundos'
+        }
+      : {
+          slogan: 'Cortes clásicos y degradé de primera, barba con toalla caliente y atención VIP sin esperar.',
+          promoBanner: isArTenant ? '🔥 Reservá tu turno online sin esperar' : INITIAL_BUSINESS_PROFILE.promoBanner
+        }
 
     // Brand new account starts clean for this tenantId
     const freshConfigTs = Date.now()
     const freshWorkspace = {
+      currentNiche: resolvedNiche,
       transactions: [],
       deletedIds: createEmptyDeletedIds(),
       deletedTxIds: [],
@@ -1588,9 +1530,11 @@ export default function App() {
         ...INITIAL_BUSINESS_PROFILE,
         country: isArTenant ? 'AR' : 'VE',
         businessName: newTenant.businessName,
+        slogan: nicheProfileDefaults.slogan,
+        instagram: '',
         whatsapp: newTenant.phone || '',
         paymentMethods: isArTenant ? ['Efectivo', 'Mercado Pago', 'Transferencia', 'Tarjeta / Point'] : INITIAL_BUSINESS_PROFILE.paymentMethods,
-        promoBanner: isArTenant ? '🔥 Promo de la Semana: Corte + Barba a precio especial' : INITIAL_BUSINESS_PROFILE.promoBanner
+        promoBanner: nicheProfileDefaults.promoBanner
       },
       staffByNiche: {
         barberia: sourceNiches.barberia.staff,
@@ -1899,14 +1843,22 @@ export default function App() {
     }))
   }
 
+  const isActiveIncomeTx = (tx) =>
+    Boolean(tx && tx.type !== 'egreso' && tx.type !== 'vale' && tx.type !== 'liquidacion' && Number(tx.total_cobrado_usd ?? tx.monto_usd ?? 0) > 0)
+
   const handleChargeAppointment = (apt) => {
+    if (apt?.id && (transactions || []).some(t => isActiveIncomeTx(t) && t.appointment_id === apt.id)) {
+      alert('⚠️ Este turno ya fue cobrado en Caja. Si necesitas corregirlo, anula primero el cobro anterior desde Caja del Día.')
+      return
+    }
     setCashModalPrefill({
       appointmentId: apt.id,
       clientName: apt.client_name,
       clientPhone: apt.client_phone || '',
       staffId: apt.staff_id,
       serviceName: apt.service,
-      servicesList: Array.isArray(apt.services_list) && apt.services_list.length > 0 ? apt.services_list : null
+      servicesList: Array.isArray(apt.services_list) && apt.services_list.length > 0 ? apt.services_list : null,
+      totalPriceUsd: apt.total_price_usd ?? null
     })
     setIsCashModalOpen(true)
   }
@@ -1919,6 +1871,44 @@ export default function App() {
   // Transactions CRUD
   const handleRegisterTransaction = async (newTx) => {
     const nowTs = Date.now()
+    const currentTxs = transactions || []
+
+    // Candado 1: evitar doble cobro sobre la misma cita (multi-dispositivo / botones)
+    if (newTx?.appointment_id && currentTxs.some(t => isActiveIncomeTx(t) && t.appointment_id === newTx.appointment_id)) {
+      alert('⚠️ Este turno ya tiene un cobro registrado en Caja. Se bloqueó el cobro duplicado.')
+      return false
+    }
+
+    // Candado 2: evitar doble envío idéntico accidental en menos de 60 segundos
+    if (isActiveIncomeTx(newTx)) {
+      const newAmt = Math.round(Number(newTx.total_cobrado_usd ?? newTx.monto_usd ?? 0) * 100)
+      const newClient = String(newTx.client_name || '').trim().toLowerCase()
+      const newItem = String(newTx.item_name || '').trim().toLowerCase()
+      const recentDup = currentTxs.find(t => {
+        if (!isActiveIncomeTx(t)) return false
+        const tTs = new Date(t.fecha || 0).getTime()
+        if (!Number.isFinite(tTs) || Math.abs(nowTs - tTs) >= 60000) return false
+        return (
+          String(t.client_name || '').trim().toLowerCase() === newClient &&
+          (t.staff_id || null) === (newTx.staff_id || null) &&
+          String(t.item_name || '').trim().toLowerCase() === newItem &&
+          Math.round(Number(t.total_cobrado_usd ?? t.monto_usd ?? 0) * 100) === newAmt
+        )
+      })
+      if (recentDup) {
+        const diffMs = Math.abs(nowTs - new Date(recentDup.fecha || 0).getTime())
+        if (diffMs < 8000) {
+          return false
+        }
+        const confirmDup = window.confirm(
+          `⚠️ Acabas de registrar un cobro idéntico hace menos de 1 minuto para ${newTx.client_name || 'este cliente'}. ¿Seguro deseas registrarlo otra vez?`
+        )
+        if (!confirmDup) {
+          return false
+        }
+      }
+    }
+
     const stampedTx = { ...newTx, updatedAt: nowTs }
     setTransactions(prev => [stampedTx, ...prev])
 
@@ -2015,6 +2005,7 @@ export default function App() {
     } else {
       setSyncStatus('local')
     }
+    return true
   }
 
   const handleRegisterExpense = async (newExpense) => {
@@ -2192,16 +2183,30 @@ export default function App() {
       ? (Array.isArray(tenants) ? tenants.find(t => t && t.id === publicTenantParam) : null)
       : activeTenant
 
-    const bookingNiche = (publicTenantWs && publicTenantWs.currentNiche) || currentNiche
-    const baseNicheObj = NICHES[bookingNiche] || nicheData
-    const rawBookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || businessProfile
-    const bookingProfile = (matchedPublicTenant?.country && !rawBookingProfile?.country)
-      ? { ...rawBookingProfile, country: matchedPublicTenant.country }
+    const bookingNiche =
+      (publicTenantWs?.currentNiche && NICHES[publicTenantWs.currentNiche] ? publicTenantWs.currentNiche : null) ||
+      (matchedPublicTenant?.niche && NICHES[matchedPublicTenant.niche] ? matchedPublicTenant.niche : null) ||
+      currentNiche
+    const rawBookingProfile = (publicTenantWs && publicTenantWs.businessProfile) || (isDirectClientLink && publicTenantParam ? INITIAL_BUSINESS_PROFILE : businessProfile)
+    const resolvedBookingCountry = matchedPublicTenant?.country || rawBookingProfile?.country
+    const bookingProfile = (resolvedBookingCountry && rawBookingProfile?.country !== resolvedBookingCountry)
+      ? { ...rawBookingProfile, country: resolvedBookingCountry }
       : rawBookingProfile
-    const bookingServices = (publicTenantWs && publicTenantWs.servicesByNiche && publicTenantWs.servicesByNiche[bookingNiche]) || (servicesByNiche[bookingNiche] || currentServices)
-    const bookingStaff = (publicTenantWs && publicTenantWs.staffByNiche && publicTenantWs.staffByNiche[bookingNiche]) || (staffByNiche[bookingNiche] || currentStaff)
-    const bookingProducts = (publicTenantWs && publicTenantWs.productsByNiche && publicTenantWs.productsByNiche[bookingNiche]) || (productsByNiche[bookingNiche] || currentProducts)
-    const bookingAppointments = (publicTenantWs && publicTenantWs.appointments) || appointments
+    const countryNiches = bookingProfile?.country === 'AR' ? NICHES_AR : NICHES
+    const baseNicheObj = countryNiches[bookingNiche] || NICHES[bookingNiche] || nicheData
+    const isolateDirectPublic = Boolean(isDirectClientLink && publicTenantParam)
+    const bookingServices =
+      (publicTenantWs?.servicesByNiche && publicTenantWs.servicesByNiche[bookingNiche]) ||
+      (isolateDirectPublic ? baseNicheObj.services : (servicesByNiche[bookingNiche] || currentServices))
+    const bookingStaff =
+      (publicTenantWs?.staffByNiche && publicTenantWs.staffByNiche[bookingNiche]) ||
+      (isolateDirectPublic ? baseNicheObj.staff : (staffByNiche[bookingNiche] || currentStaff))
+    const bookingProducts =
+      (publicTenantWs?.productsByNiche && publicTenantWs.productsByNiche[bookingNiche]) ||
+      (isolateDirectPublic ? baseNicheObj.products : (productsByNiche[bookingNiche] || currentProducts))
+    const bookingAppointments =
+      (publicTenantWs && publicTenantWs.appointments) ||
+      (isolateDirectPublic ? [] : appointments)
     const bookingExchangeRate = (publicTenantWs && publicTenantWs.exchangeRate && !isNaN(Number(publicTenantWs.exchangeRate)))
       ? Number(publicTenantWs.exchangeRate)
       : exchangeRate
@@ -2306,7 +2311,7 @@ export default function App() {
       {/* Top Navigation */}
       <Navbar
         currentNiche={currentNiche}
-        onSelectNiche={setCurrentNiche}
+        onSelectNiche={handleSelectNiche}
         exchangeRate={exchangeRate}
         onOpenRateModal={() => setIsRateModalOpen(true)}
         onOpenCashModal={() => setIsCashModalOpen(true)}
@@ -2336,6 +2341,9 @@ export default function App() {
         }}
         hasCashierStaff={allCashiersAcrossNiches.length > 0}
         todayAuditAlertCount={todayAuditAlertCount}
+        fontScale={fontScale}
+        onChangeFontScale={setFontScale}
+        onCycleFontScale={handleCycleFontScale}
       />
 
       {/* Top Banner: Período de Prueba de 24 Horas Activo */}
@@ -2370,36 +2378,6 @@ export default function App() {
         
         {/* Desktop Sidebar Tabs */}
         <aside className="hidden md:flex flex-col w-56 shrink-0 space-y-1">
-          {/* Compact Niche Switcher on md-lg screens (moves out of top bar to prevent header overflow) */}
-          {!isCashierMode && (
-            <div className="xl:hidden pb-2 mb-1 border-b border-dark-800">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 px-1 pb-1.5">
-                Rubro del Local
-              </div>
-              <div className="grid grid-cols-3 gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750">
-                {[
-                  { id: 'barberia', icon: '💈', label: 'Barber' },
-                  { id: 'estetica', icon: '💅', label: 'Salón' },
-                  { id: 'mixto', icon: '🏬', label: 'Mixto' }
-                ].map(n => (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => setCurrentNiche(n.id)}
-                    className={`py-1.5 px-1 rounded-lg text-[10px] font-bold flex flex-col items-center justify-center transition-all ${
-                      currentNiche === n.id
-                        ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30 shadow-sm'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <span className="text-xs leading-none mb-0.5">{n.icon}</span>
-                    <span>{n.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500 px-3 pb-1">
             Módulos de Tu Negocio
           </div>
@@ -2533,6 +2511,7 @@ export default function App() {
 
           {activeTab === 'catalogo' && (
             <CatalogConfigView
+              tenantId={activeTenantId}
               businessProfile={businessProfile}
               onSaveProfile={handleSaveBusinessProfile}
               services={currentServices}
@@ -2578,6 +2557,7 @@ export default function App() {
           {activeTab === 'appointments' && (
             <AppointmentsView
               appointments={appointments}
+              transactions={transactions}
               nicheData={nicheData}
               onAddAppointment={handleAddAppointment}
               onToggleAppointmentStatus={handleToggleAppointmentStatus}
@@ -2683,6 +2663,10 @@ export default function App() {
         businessProfile={businessProfile}
         onSaveProfile={handleSaveBusinessProfile}
         activeTenant={activeTenant}
+        fontScale={fontScale}
+        onChangeFontScale={setFontScale}
+        currentNiche={currentNiche}
+        onSelectNiche={handleSelectNiche}
       />
 
       <DailyCloseModal

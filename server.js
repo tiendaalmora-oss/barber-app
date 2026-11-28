@@ -730,10 +730,29 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
       )
 
       // 3. Transactions: merge by updatedAt + enforce deletedIds.transactions tombstones
+      // Plus block stale-client rec_c_* phantom reconstruction & concurrent double-billing by appointment_id
       const existingTxs = Array.isArray(currentWs.transactions) ? currentWs.transactions : []
-      const incomingTxs = Array.isArray(body.transactions) ? body.transactions : existingTxs
+      const existingTxIds = new Set(existingTxs.map(t => t && t.id).filter(Boolean))
+      const existingDeletedTxSet = new Set(mergedDeleted.transactions || [])
+      const isServerIncomeTx = (tx) =>
+        Boolean(tx && tx.type !== 'egreso' && tx.type !== 'vale' && tx.type !== 'liquidacion' && Number(tx.total_cobrado_usd ?? tx.monto_usd ?? 0) > 0)
+      const existingBilledAptMap = new Map()
+      for (const t of existingTxs) {
+        if (isServerIncomeTx(t) && t.appointment_id && !existingDeletedTxSet.has(t.id)) {
+          existingBilledAptMap.set(t.appointment_id, t.id)
+        }
+      }
+      const sanitizedIncomingTxs = (Array.isArray(body.transactions) ? body.transactions : existingTxs).filter(t => {
+        if (!t || !t.id) return false
+        if (String(t.id).startsWith('rec_c_') && !existingTxIds.has(t.id)) return false
+        if (isServerIncomeTx(t) && t.appointment_id && !existingDeletedTxSet.has(t.id)) {
+          const ownerTxId = existingBilledAptMap.get(t.appointment_id)
+          if (ownerTxId && ownerTxId !== t.id) return false
+        }
+        return true
+      })
       const finalTransactions = mergeEntityList(
-        incomingTxs,
+        sanitizedIncomingTxs,
         existingTxs,
         mergedDeleted.transactions,
         {
@@ -809,9 +828,19 @@ function reconstructWorkspaceTransactions(tenantId, ws) {
           ? currentWs.exchangeRate
           : (body.exchangeRate || currentWs.exchangeRate)
 
+      const VALID_NICHES = new Set(['barberia', 'estetica', 'mixto'])
+      const incomingNiche = VALID_NICHES.has(body.currentNiche) ? body.currentNiche : null
+      const existingNiche = VALID_NICHES.has(currentWs.currentNiche) ? currentWs.currentNiche : null
+      const finalCurrentNiche =
+        (isOlderConfigFromStaleDevice && existingNiche) ||
+        (isStaleEmptyPayload && existingNiche)
+          ? existingNiche
+          : (incomingNiche || existingNiche || 'barberia')
+
       const mergedWs = reconstructWorkspaceTransactions(tenantId, {
         ...currentWs,
         ...(body || {}),
+        currentNiche: finalCurrentNiche,
         businessProfile: finalBusinessProfile,
         staffByNiche: finalStaffByNiche,
         servicesByNiche: finalServicesByNiche,

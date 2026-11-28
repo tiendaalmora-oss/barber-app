@@ -19,7 +19,11 @@ export default function BusinessSettingsModal({
   onClose,
   businessProfile,
   onSaveProfile,
-  activeTenant
+  activeTenant,
+  fontScale = 'normal',
+  onChangeFontScale,
+  currentNiche = 'barberia',
+  onSelectNiche
 }) {
   const brand = getActiveBrand(activeTenant)
   const isGlam = brand?.code === 'glamos'
@@ -426,6 +430,69 @@ export default function BusinessSettingsModal({
                   </button>
                 </div>
               </div>
+
+              {/* Tamaño de Letra en este Dispositivo */}
+              {onChangeFontScale && (
+                <div className="pt-3 border-t border-dark-800 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    Tamaño de Letra (en este dispositivo)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'normal', title: 'Normal (A)' },
+                      { id: 'large', title: 'Grande (A+)' },
+                      { id: 'xlarge', title: 'Extra Grande (A++)' }
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => onChangeFontScale(opt.id)}
+                        className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          fontScale === opt.id
+                            ? (isGlam ? 'bg-pink-500/20 border-pink-500 text-pink-300 shadow-sm' : 'bg-gold-500/20 border-gold-500 text-gold-300 shadow-sm')
+                            : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {opt.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Rubro / Tipo de Negocio (Caja y Link) */}
+              {onSelectNiche && (
+                <div className="pt-3 border-t border-dark-800 space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    Rubro / Tipo de Negocio (Caja y Link)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'barberia', label: '💈 Barbería' },
+                      { id: 'estetica', label: '💅 Salón & Uñas' },
+                      { id: 'mixto', label: '🏬 Mixto' }
+                    ].map(n => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => {
+                          if (n.id === currentNiche) return
+                          if (window.confirm('¿Cambiar el rubro del local? Esto actualizará los servicios que se muestran en Caja y en tu Link Público.')) {
+                            onSelectNiche(n.id)
+                          }
+                        }}
+                        className={`py-2 px-2 rounded-xl border text-xs font-bold transition-all ${
+                          currentNiche === n.id
+                            ? (isGlam ? 'bg-pink-500/20 border-pink-500 text-pink-300 shadow-sm' : 'bg-gold-500/20 border-gold-500 text-gold-300 shadow-sm')
+                            : 'bg-dark-850 border-dark-750 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {n.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Selector de Horas de Agenda y Turnos Disponibles por Día */}
               <div className="pt-3 border-t border-dark-800 space-y-2.5">

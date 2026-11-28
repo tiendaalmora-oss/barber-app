@@ -58,6 +58,7 @@ export default function QuickCashModal({
   const [tipCurrency, setTipCurrency] = useState('USD') // 'USD' | 'Bs'
   const [customTip, setCustomTip] = useState('')
   const [completedTx, setCompletedTx] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const submitLockRef = useRef(false)
 
   // Split / Mixed Payment state ('mixto')
@@ -110,6 +111,7 @@ export default function QuickCashModal({
     if (!isOpen) return
 
     submitLockRef.current = false
+    setIsSubmitting(false)
     setTipUSD(0)
     setCustomTip('')
     setCardType('debito')
@@ -144,7 +146,7 @@ export default function QuickCashModal({
             nextCart.push({
               id: resolvedId,
               name: matched?.name || spec.name,
-              price_usd: matched?.price_usd ?? (Number(spec.price_usd) || 5),
+              price_usd: matched?.price_usd ?? (Number(spec.price_usd) || 0),
               commission_pct: itemComm,
               isProduct: false,
               qty: 1
@@ -158,8 +160,11 @@ export default function QuickCashModal({
         setCart(buildCartFromSpecs(prefillData.servicesList))
       } else {
         const svcMatch = catalogServices.find(s =>
-          s.name.toLowerCase() === (prefillData.serviceName || '').toLowerCase()
+          s.name.toLowerCase() === (prefillData.serviceName || '').trim().toLowerCase()
         )
+        const fallbackPrice = prefillData.totalPriceUsd != null && !isNaN(Number(prefillData.totalPriceUsd))
+          ? Number(prefillData.totalPriceUsd)
+          : 0
         if (svcMatch) {
           const itemComm = resolveItemCommission(svcMatch, targetStaffObj)
           setCart([{
@@ -172,14 +177,14 @@ export default function QuickCashModal({
           }])
         } else if ((prefillData.serviceName || '').includes(' + ')) {
           const pieces = prefillData.serviceName.split(' + ').map(p => p.trim()).filter(Boolean)
-          const hasAnyMatch = pieces.some(p => catalogServices.some(s => s.name.toLowerCase() === p.toLowerCase()))
-          if (hasAnyMatch) {
+          const matchedPieces = pieces.filter(p => catalogServices.some(s => s.name.toLowerCase() === p.toLowerCase()))
+          if (matchedPieces.length >= 2) {
             setCart(buildCartFromSpecs(pieces.map(p => ({ name: p }))))
           } else {
             setCart([{
               id: 'svc_' + Date.now(),
               name: prefillData.serviceName,
-              price_usd: 5,
+              price_usd: fallbackPrice,
               commission_pct: targetStaffObj?.commission_pct || 50,
               isProduct: false,
               qty: 1
@@ -189,7 +194,7 @@ export default function QuickCashModal({
           setCart([{
             id: 'svc_' + Date.now(),
             name: prefillData.serviceName,
-            price_usd: 5,
+            price_usd: fallbackPrice,
             commission_pct: targetStaffObj?.commission_pct || 50,
             isProduct: false,
             qty: 1
@@ -354,9 +359,9 @@ export default function QuickCashModal({
     splitMethod1 !== splitMethod2
   )
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (submitLockRef.current) return
+    if (submitLockRef.current || isSubmitting) return
     if (totalUSD <= 0 || cart.length === 0) {
       alert('Por favor agrega al menos un servicio o producto para registrar el cobro.')
       return
@@ -448,8 +453,20 @@ export default function QuickCashModal({
     }
 
     submitLockRef.current = true
-    onRegisterTransaction(transaction)
-    setCompletedTx(transaction)
+    setIsSubmitting(true)
+    try {
+      const accepted = await onRegisterTransaction(transaction)
+      if (accepted === false) {
+        submitLockRef.current = false
+        setIsSubmitting(false)
+        return
+      }
+      setCompletedTx(transaction)
+    } catch (err) {
+      submitLockRef.current = false
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // If completedTx is active, show the Digital Invoice screen!
@@ -590,6 +607,7 @@ export default function QuickCashModal({
             <button
               onClick={() => {
                 submitLockRef.current = false
+                setIsSubmitting(false)
                 setCompletedTx(null)
                 onClose()
               }}
@@ -1395,15 +1413,15 @@ export default function QuickCashModal({
           {/* Submit CTA */}
           <button
             type="submit"
-            disabled={totalUSD <= 0}
+            disabled={totalUSD <= 0 || isSubmitting}
             className={`w-full py-3.5 rounded-xl font-black text-xs uppercase tracking-wide flex items-center justify-center gap-2 shadow-xl transition-all ${
-              totalUSD > 0
+              totalUSD > 0 && !isSubmitting
                 ? 'bg-gradient-to-r from-gold-500 to-amber-600 hover:from-gold-400 hover:to-amber-500 text-black shadow-gold-500/25 active:scale-[0.99]'
                 : 'bg-dark-800 text-slate-500 cursor-not-allowed border border-dark-750'
             }`}
           >
             <Check className="w-5 h-5 stroke-[3]" />
-            <span>GUARDAR COBRO (${fmt(grandTotalUSD)}) Y DIVIDIR PLATA</span>
+            <span>{isSubmitting ? 'GUARDANDO COBRO...' : `GUARDAR COBRO ($${fmt(grandTotalUSD)}) Y DIVIDIR PLATA`}</span>
           </button>
 
         </form>

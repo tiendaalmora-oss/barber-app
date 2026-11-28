@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Calendar as CalendarIcon, Clock, User, Plus, CheckCircle2, ChevronLeft, ChevronRight, MessageSquare, Trash2, Settings, DollarSign, Sparkles, AlertCircle, Clock3 } from 'lucide-react'
 import { getLocalDateIso, normalizeWhatsAppPhone, normalizeTimeSlot, inferServiceDuration, formatDurationLabel, getScheduleForDate, isTimeSlotInPast, timeToMinutes, isStaffAvailableOnDate, isStaffAvailableForSlot } from '../lib/dateUtils'
 import { isArgentina } from '../lib/brandConfig'
@@ -6,6 +6,7 @@ import { getOperativeStaff } from '../lib/securityUtils'
 
 export default function AppointmentsView({ 
   appointments = [], 
+  transactions = [],
   nicheData = { staff: [], services: [], roleName: 'Barbero', rolePlural: 'Barberos' }, 
   onAddAppointment, 
   onToggleAppointmentStatus, 
@@ -16,6 +17,16 @@ export default function AppointmentsView({
   onChargeAppointment 
 }) {
   const isAr = isArgentina(null, businessProfile)
+
+  const billedAppointmentIds = useMemo(() => {
+    const set = new Set()
+    ;(transactions || []).forEach(t => {
+      if (t && t.appointment_id && t.type !== 'egreso' && t.type !== 'vale' && t.type !== 'liquidacion' && Number(t.total_cobrado_usd ?? t.monto_usd ?? 0) > 0) {
+        set.add(t.appointment_id)
+      }
+    })
+    return set
+  }, [transactions])
 
   // Today's ISO date string strictly in local timezone
   const getTodayStr = () => getLocalDateIso()
@@ -481,8 +492,9 @@ export default function AppointmentsView({
           {filteredList.map((apt) => {
             const staffObj = (nicheData?.staff || []).find(s => s.id === apt.staff_id) ||
               (apt.staff_name ? (nicheData?.staff || []).find(s => s.name === apt.staff_name) : null)
-            const isCompleted = apt.status === 'completada'
-            const isInChair = apt.status === 'en_atencion'
+            const isBilled = billedAppointmentIds.has(apt.id)
+            const isCompleted = apt.status === 'completada' || isBilled
+            const isInChair = !isBilled && apt.status === 'en_atencion'
             const durLabel = formatDurationLabel(apt.duration_min || inferServiceDuration(apt.service))
 
             return (
@@ -527,15 +539,15 @@ export default function AppointmentsView({
                       )}
                       <button
                         type="button"
-                        onClick={() => toggleStatus(apt.id)}
+                        onClick={() => { if (!isBilled) toggleStatus(apt.id) }}
                         className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all inline-flex items-center gap-1 ${
                           isCompleted
                             ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                             : isInChair
                             ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
                             : 'bg-amber-500/10 text-amber-300 border-amber-500/25 hover:border-amber-400/60'
-                        }`}
-                        title="Tocar para cambiar estado (Esperando → En silla → Listo)"
+                        } ${isBilled ? 'cursor-default' : ''}`}
+                        title={isBilled ? 'Turno ya cobrado en Caja' : 'Tocar para cambiar estado (Esperando → En silla → Listo)'}
                       >
                         {isCompleted ? (
                           <>
@@ -571,7 +583,15 @@ export default function AppointmentsView({
 
                 {/* Acciones Derecha */}
                 <div className="flex items-center gap-1.5 pl-1.5 sm:pl-0 shrink-0 justify-end">
-                  {!isCompleted && onChargeAppointment && (
+                  {isBilled ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/35 text-xs font-black"
+                      title="Este turno ya tiene su cobro registrado en Caja"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Cobrado</span>
+                    </span>
+                  ) : !isCompleted && onChargeAppointment && (
                     <button
                       type="button"
                       onClick={() => onChargeAppointment(apt)}

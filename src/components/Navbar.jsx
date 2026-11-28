@@ -35,7 +35,10 @@ export default function Navbar({
   onOpenRoleModal,
   onQuickLockCashier,
   hasCashierStaff = false,
-  todayAuditAlertCount = 0
+  todayAuditAlertCount = 0,
+  fontScale = 'normal',
+  onChangeFontScale,
+  onCycleFontScale
 }) {
   const [bioSupported, setBioSupported] = useState(false)
   const isAr = isArgentina(activeTenant, businessProfile)
@@ -138,34 +141,6 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Center: Desktop Niche Switcher (xl+ in header; md-lg in left sidebar to prevent overflow) */}
-          {!isCashierMode && (
-          <div className="hidden xl:flex items-center gap-1 bg-dark-850 p-1 rounded-xl border border-dark-750 shrink-0">
-            {[
-              { id: 'barberia', icon: Scissors, label: 'Barbería' },
-              { id: 'estetica', icon: Sparkles, label: 'Salón & Uñas' },
-              { id: 'mixto', icon: Store, label: 'Mixto' }
-            ].map(n => {
-              const NIcon = n.icon
-              const isSel = currentNiche === n.id
-              return (
-                <button
-                  key={n.id}
-                  onClick={() => onSelectNiche(n.id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all ${
-                    isSel 
-                      ? 'bg-gold-500/15 text-gold-400 border border-gold-500/30 shadow-sm' 
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <NIcon className="w-3.5 h-3.5 shrink-0" />
-                  <span>{n.label}</span>
-                </button>
-              )
-            })}
-          </div>
-          )}
-
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5 lg:gap-2 shrink-0">
             {/* Owner / Cashier Role Switch Pill */}
@@ -195,6 +170,22 @@ export default function Navbar({
                   </button>
                 )}
               </div>
+            )}
+
+            {/* Font Scale Toggle Pill (Normal → Grande → Extra Grande) */}
+            {onCycleFontScale && (
+              <button
+                type="button"
+                onClick={onCycleFontScale}
+                className={`flex items-center justify-center px-2 py-1.5 rounded-xl border text-xs font-black whitespace-nowrap shrink-0 transition-all ${
+                  fontScale !== 'normal'
+                    ? 'bg-gold-500/20 border-gold-500/40 text-gold-300'
+                    : 'bg-dark-800/80 hover:bg-dark-750 border-dark-700/80 text-slate-300 hover:text-white'
+                }`}
+                title="Cambiar tamaño de letra (Normal → Grande → Extra Grande)"
+              >
+                {fontScale === 'xlarge' ? 'A++' : fontScale === 'large' ? 'A+' : 'Aa'}
+              </button>
             )}
 
             {/* Currency / Tasa BCV Pill */}
@@ -468,36 +459,34 @@ export default function Navbar({
                 </button>
               </div>
 
-              {/* Selector de Nicho (Solo Dueño) */}
-              {!isCashierMode && (
-              <div>
-                <label className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1.5">
-                  Tipo de Negocio
-                </label>
-                <div className="grid grid-cols-3 gap-1.5 bg-dark-850 p-1 rounded-xl border border-dark-750 text-xs">
-                  {[
-                    { id: 'barberia', icon: '💈', label: 'Barber' },
-                    { id: 'estetica', icon: '💅', label: 'Salón' },
-                    { id: 'mixto', icon: '🏬', label: 'Mixto' }
-                  ].map(n => (
-                    <button
-                      key={n.id}
-                      onClick={() => {
-                        onSelectNiche(n.id)
-                        setIsMobileMenuOpen(false)
-                      }}
-                      className={`py-1.5 rounded-lg text-center font-bold transition-all ${
-                        currentNiche === n.id
-                          ? 'bg-gold-500/20 text-gold-400 border border-gold-500/40 shadow-sm'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <div className="text-base">{n.icon}</div>
-                      <div className="text-[10px]">{n.label}</div>
-                    </button>
-                  ))}
+              {/* Tamaño de Letra en este Dispositivo (Dueño y Cajero) */}
+              {onChangeFontScale && (
+                <div>
+                  <label className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-1.5">
+                    Tamaño de Letra
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5 bg-dark-850 p-1 rounded-xl border border-dark-750 text-xs">
+                    {[
+                      { id: 'normal', short: 'A', label: 'Normal' },
+                      { id: 'large', short: 'A+', label: 'Grande' },
+                      { id: 'xlarge', short: 'A++', label: 'Extra' }
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => onChangeFontScale(opt.id)}
+                        className={`py-1.5 rounded-lg text-center font-bold transition-all ${
+                          fontScale === opt.id
+                            ? 'bg-gold-500/20 text-gold-300 border border-gold-500/40 shadow-sm'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{opt.short}</div>
+                        <div className="text-[10px]">{opt.label}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
               )}
 
               {/* Opciones del Local */}

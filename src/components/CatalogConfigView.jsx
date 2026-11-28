@@ -5,6 +5,7 @@ import { isArgentina, formatCurrency } from '../lib/brandConfig'
 import { inferServiceDuration, formatDurationLabel, DAYS_OF_WEEK } from '../lib/dateUtils'
 
 export default function CatalogConfigView({
+  tenantId = '',
   businessProfile,
   onSaveProfile,
   services,
@@ -35,7 +36,7 @@ export default function CatalogConfigView({
   const [newSvcIsAddon, setNewSvcIsAddon] = useState(false)
   const [editingSvcId, setEditingSvcId] = useState(null)
 
-  const tenantSlug = (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
+  const tenantSlug = tenantId || (typeof window !== 'undefined' ? localStorage.getItem('barber_logged_tenant_id') : '') || ''
   const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/?reserva=1${tenantSlug ? `&b=${encodeURIComponent(tenantSlug)}` : ''}${isAr ? '&pais=ar' : ''}`
 
   const handleCopyLink = () => {
@@ -260,6 +261,12 @@ export default function CatalogConfigView({
             </button>
           </div>
         </div>
+
+        {!tenantSlug && (
+          <div className="mt-3 p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-xs text-amber-200 font-semibold">
+            ⚠️ No se detectó el identificador único de tu local en esta sesión. Recarga la página o vuelve a iniciar sesión antes de compartir este enlace para que cargue exactamente tu catálogo.
+          </div>
+        )}
       </div>
 
       {isCashierMode && (

@@ -258,11 +258,13 @@ export default function AuthPortalModal({
     const nowMs = Date.now()
     const trialExpiresIso = new Date(nowMs + 24 * 60 * 60 * 1000).toISOString()
     const nowIso = new Date(nowMs).toISOString()
+    const cleanRegPhone = regPhone.trim().replace(/[\s()-]/g, '')
+    const resolvedCountry = (regCountry === 'AR' || cleanRegPhone.startsWith('+54') || cleanRegPhone.startsWith('549')) ? 'AR' : regCountry
 
     const newTenant = {
       id: tenantId,
       saasProduct: isGlam ? 'glamos_saas' : 'barberia_saas',
-      country: regCountry,
+      country: resolvedCountry,
       businessName: regBusiness.trim(),
       ownerName: regOwner.trim(),
       email: cleanEmail,
